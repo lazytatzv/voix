@@ -6,11 +6,15 @@ import { Timeline } from './components/Timeline';
 import { CharacterModal } from './components/CharacterModal';
 import { TtsModal } from './components/TtsModal';
 import { ExportModal } from './components/ExportModal';
+import { AiVideoGeneratorModal } from './components/AiVideoGeneratorModal';
+import { TachieImportModal } from './components/TachieImportModal';
 import { Character, TimelineItem, VoiceItem } from './types';
 import { defaultCharacters } from './utils/defaultCharacters';
 import { ttsManager } from './services/tts/TTSManager';
 import { exportProjectToJson, importProjectFromJson } from './utils/projectStorage';
 import { detectSpeechFromVideo } from './services/exportService';
+import { TachieImportResult } from './services/tachieService';
+import { ScriptLinePrompt } from './services/aiService';
 
 const STORAGE_KEY = 'voix_project_autosave';
 
@@ -48,7 +52,10 @@ export function App() {
   const [isCharModalOpen, setIsCharModalOpen] = useState(false);
   const [isTtsModalOpen, setIsTtsModalOpen] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isAiVideoModalOpen, setIsAiVideoModalOpen] = useState(false);
+  const [isTachieModalOpen, setIsTachieModalOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
 
   // 再生制御タイマー
   const playTimerRef = useRef<number | null>(null);
@@ -351,6 +358,110 @@ export function App() {
     }
   };
 
+  // AIによる動画全体の台本・音声一括自動生成
+  const handleGenerateFullAiVideo = async (scriptLines: ScriptLinePrompt[]) => {
+    setIsGeneratingAiVideo(true);
+    try {
+      let currentStart = 0.5;
+      const newItems: VoiceItem[] = [];
+
+      for (let i = 0; i < scriptLines.length; i++) {
+        const line = scriptLines[i];
+        const char = characters.find((c) => c.id === line.characterId) || characters[0];
+        const newItemId = `voice_${Date.now()}_${i}`;
+
+        try {
+          const result = await ttsManager.synthesize(
+            char.ttsProviderId,
+            char.speakerId,
+            line.text,
+            { speedScale: 1.0, pitchScale: 0.0 }
+          );
+          const audioBlobUrl = URL.createObjectURL(result.audioBlob);
+          const duration = Math.max(result.duration, 0.6);
+
+          newItems.push({
+            id: newItemId,
+            type: 'voice',
+            layer: 2,
+            name: `${char.name}: ${line.text.slice(0, 10)}`,
+            characterId: char.id,
+            text: line.text,
+            startTime: currentStart,
+            duration,
+            speedScale: 1.0,
+            pitchScale: 0.0,
+            audioBlob: result.audioBlob,
+            audioBlobUrl,
+            phonemes: result.phonemes,
+            isSynthesizing: false,
+          });
+
+          // Pacing: add small 0.15s gap between dialogue lines
+          currentStart += duration + 0.15;
+        } catch (err) {
+          console.warn('Synthesis error for line:', line.text, err);
+        }
+      }
+
+      if (newItems.length > 0) {
+        setItems(newItems);
+        setCurrentTime(0);
+        setIsPlaying(true);
+      }
+    } finally {
+      setIsGeneratingAiVideo(false);
+    }
+  };
+
+  // 立ち絵 (ZIP / PSD / PNG) のインポート成功ハンドラー
+  const handleTachieImportSuccess = (result: TachieImportResult) => {
+    const existingIndex = characters.findIndex(
+      (c) =>
+        c.name.toLowerCase().includes(result.character_name.toLowerCase()) ||
+        c.speakerId === result.speaker_id
+    );
+
+    const newChar: Character = {
+      id: existingIndex >= 0 ? characters[existingIndex].id : `char_${Date.now()}`,
+      name: result.character_name,
+      ttsProviderId: 'voicevox',
+      speakerId: result.speaker_id,
+      position:
+        existingIndex >= 0
+          ? characters[existingIndex].position
+          : characters.length % 2 === 0
+          ? 'left'
+          : 'right',
+      avatar: {
+        idle: result.avatar_data_url,
+      },
+      subtitleStyle: {
+        textColor: '#ffffff',
+        fontSize: 42,
+        fontFamily: "'Noto Sans JP', 'Google Sans', sans-serif",
+        fontWeight: '900',
+        strokeColor: '#0a0a0c',
+        strokeWidth: 8,
+        outerStrokeColor: result.theme_color,
+        outerStrokeWidth: 14,
+        hasShadow: true,
+        shadowColor: 'rgba(0, 0, 0, 0.85)',
+        shadowBlur: 10,
+        shadowOffsetY: 4,
+        bgStyle: 'none',
+        yOffsetPercent: 12,
+        rubyDisplay: 'above',
+      },
+    };
+
+    if (existingIndex >= 0) {
+      setCharacters((prev) => prev.map((c, idx) => (idx === existingIndex ? newChar : c)));
+    } else {
+      setCharacters((prev) => [...prev, newChar]);
+    }
+  };
+
   const voiceItems = items.filter((it): it is VoiceItem => it.type === 'voice');
 
   return (
@@ -365,6 +476,8 @@ export function App() {
         onExportVideo={() => setIsExportModalOpen(true)}
         onSaveProject={handleSaveProject}
         onLoadProject={handleLoadProject}
+        onOpenAiVideoGenerator={() => setIsAiVideoModalOpen(true)}
+        onOpenTachieImport={() => setIsTachieModalOpen(true)}
         hasVideo={!!videoSrc}
         itemCount={items.length}
         isTranscribing={isTranscribing}
@@ -424,6 +537,21 @@ export function App() {
         onUpdateCharacter={handleUpdateCharacter}
         onAddCharacter={(c) => setCharacters((prev) => [...prev, c])}
         onDeleteCharacter={(id) => setCharacters((prev) => prev.filter((c) => c.id !== id))}
+        onOpenTachieImport={() => setIsTachieModalOpen(true)}
+      />
+
+      <AiVideoGeneratorModal
+        isOpen={isAiVideoModalOpen}
+        onClose={() => setIsAiVideoModalOpen(false)}
+        characters={characters}
+        onGenerateVideo={handleGenerateFullAiVideo}
+        isGenerating={isGeneratingAiVideo}
+      />
+
+      <TachieImportModal
+        isOpen={isTachieModalOpen}
+        onClose={() => setIsTachieModalOpen(false)}
+        onImportSuccess={handleTachieImportSuccess}
       />
 
       <TtsModal

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Sparkles, Type } from 'lucide-react';
+import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Sparkles, Type, FileArchive } from 'lucide-react';
 import { Character, Speaker } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
 import { CustomSelect } from './CustomSelect';
@@ -12,6 +12,7 @@ interface CharacterModalProps {
   onUpdateCharacter: (id: string, updates: Partial<Character>) => void;
   onAddCharacter: (character: Character) => void;
   onDeleteCharacter: (id: string) => void;
+  onOpenTachieImport?: () => void;
 }
 
 export const CharacterModal: React.FC<CharacterModalProps> = ({
@@ -21,6 +22,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   onUpdateCharacter,
   onAddCharacter,
   onDeleteCharacter,
+  onOpenTachieImport,
 }) => {
   const [selectedCharId, setSelectedCharId] = useState<string>(characters[0]?.id || '');
   const [speakers, setSpeakers] = useState<Speaker[]>([]);
@@ -153,6 +155,18 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
               <Plus className="w-3.5 h-3.5" />
               Add Speaker
             </button>
+
+            {onOpenTachieImport && (
+              <button
+                type="button"
+                onClick={onOpenTachieImport}
+                className="mt-2 w-full py-2 px-3 rounded-xl bg-[#004a77]/30 hover:bg-[#004a77]/50 text-[#c2e7ff] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#004a77] transition"
+                title="Extract tachie from ZIP or PSD"
+              >
+                <FileArchive className="w-3.5 h-3.5 text-[#34d399]" />
+                Import ZIP / PSD
+              </button>
+            )}
           </div>
 
           {/* Right: Speaker Config */}
@@ -228,16 +242,28 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                   <div className="flex-1 space-y-1">
                     <p className="text-xs text-[#e3e3e3] font-medium">{char.name}'s visual avatar</p>
                     <p className="text-[11px] text-[#8e918f]">Transparent PNG or WebP</p>
-                    <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#282a2c] hover:bg-[#333538] text-[#8ab4f8] text-xs font-medium rounded-full cursor-pointer transition">
-                      <Upload className="w-3 h-3" />
-                      Choose Image File
-                      <input
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handleAvatarFile}
-                      />
-                    </label>
+                    <div className="flex items-center gap-2 pt-1">
+                      <label className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#282a2c] hover:bg-[#333538] text-[#8ab4f8] text-xs font-medium rounded-full cursor-pointer transition">
+                        <Upload className="w-3 h-3" />
+                        Choose Image
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleAvatarFile}
+                        />
+                      </label>
+                      {onOpenTachieImport && (
+                        <button
+                          type="button"
+                          onClick={onOpenTachieImport}
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#004a77]/40 hover:bg-[#004a77]/60 text-[#c2e7ff] text-xs font-medium rounded-full border border-[#004a77] transition"
+                        >
+                          <FileArchive className="w-3 h-3 text-[#34d399]" />
+                          From ZIP / PSD
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

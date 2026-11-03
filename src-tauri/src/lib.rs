@@ -9,6 +9,40 @@ pub struct SystemStatus {
     pub ffmpeg_version: String,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TachieImportResult {
+    pub character_name: String,
+    pub speaker_id: i32,
+    pub theme_color: String,
+    pub avatar_data_url: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+static PROCESS_TACHIE_SCRIPT: &str = include_str!("../scripts/process_tachie.py");
+
+#[tauri::command]
+fn import_tachie_archive(file_path: String, filename_hint: Option<String>) -> Result<TachieImportResult, String> {
+    let mut cmd = Command::new("python3");
+    cmd.arg("-c").arg(PROCESS_TACHIE_SCRIPT).arg(&file_path);
+    if let Some(hint) = filename_hint {
+        cmd.arg(hint);
+    }
+
+    let output = cmd.output().map_err(|e| format!("Python実行エラー: {}", e))?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("立ち絵抽出エラー: {}", err.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let result: TachieImportResult = serde_json::from_str(&stdout)
+        .map_err(|e| format!("JSONパースエラー: {} (出力: {})", e, stdout))?;
+
+    Ok(result)
+}
+
 #[tauri::command]
 fn check_system_environment() -> SystemStatus {
     let ffmpeg_res = Command::new("ffmpeg").arg("-version").output();
@@ -220,7 +254,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             check_system_environment,
             detect_speech_segments,
-            export_full_video
+            export_full_video,
+            import_tachie_archive
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

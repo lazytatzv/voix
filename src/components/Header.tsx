@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Upload, Sparkles, SlidersHorizontal, Download, PlaySquare, FolderOpen, Save, Video } from 'lucide-react';
+import { Upload, Sparkles, SlidersHorizontal, Download, PlaySquare, FolderOpen, Save, Video, Wand2, FileArchive } from 'lucide-react';
 
 interface HeaderProps {
   projectName: string;
@@ -11,6 +11,8 @@ interface HeaderProps {
   onExportVideo: () => void;
   onSaveProject: () => void;
   onLoadProject: (file: File) => void;
+  onOpenAiVideoGenerator: () => void;
+  onOpenTachieImport: () => void;
   hasVideo: boolean;
   itemCount: number;
   isTranscribing: boolean;
@@ -25,6 +27,8 @@ export const Header: React.FC<HeaderProps> = ({
   onExportVideo,
   onSaveProject,
   onLoadProject,
+  onOpenAiVideoGenerator,
+  onOpenTachieImport,
   hasVideo,
   itemCount,
   isTranscribing,
@@ -96,7 +100,29 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2.5">
+        {/* ✨ AI Video Generator */}
+        <button
+          onClick={onOpenAiVideoGenerator}
+          className="px-4 py-2 bg-gradient-to-r from-[#8ab4f8]/20 to-[#c2e7ff]/20 hover:from-[#8ab4f8]/30 hover:to-[#c2e7ff]/30 text-[#c2e7ff] text-xs font-semibold rounded-full border border-[#8ab4f8]/50 flex items-center gap-1.5 transition active:scale-95 shadow-sm"
+          title="Generate full multi-character video from topic"
+        >
+          <Wand2 className="w-3.5 h-3.5 text-[#8ab4f8]" />
+          <span>✨ AI Video Creator</span>
+        </button>
+
+        {/* 📦 Import Tachie */}
+        <button
+          onClick={onOpenTachieImport}
+          className="px-3.5 py-2 bg-[#1e1f20] hover:bg-[#282a2c] text-[#e3e3e3] text-xs font-medium rounded-full border border-[#3c4043] flex items-center gap-1.5 transition active:scale-95"
+          title="Import character tachie from .zip or .psd"
+        >
+          <FileArchive className="w-3.5 h-3.5 text-[#34d399]" />
+          <span>Tachie ZIP/PSD</span>
+        </button>
+
+        <div className="h-5 w-px bg-[#333538] mx-0.5" />
+
         {/* Import Video */}
         <input
           ref={videoInputRef}
@@ -107,29 +133,29 @@ export const Header: React.FC<HeaderProps> = ({
         />
         <button
           onClick={() => videoInputRef.current?.click()}
-          className="px-4 py-2 bg-[#1e1f20] hover:bg-[#282a2c] text-[#e3e3e3] text-xs font-medium rounded-full border border-[#3c4043] flex items-center gap-2 transition active:scale-95"
+          className="px-3.5 py-2 bg-[#1e1f20] hover:bg-[#282a2c] text-[#e3e3e3] text-xs font-medium rounded-full border border-[#3c4043] flex items-center gap-1.5 transition active:scale-95"
         >
-          {hasVideo ? <Video className="w-4 h-4 text-[#8ab4f8]" /> : <Upload className="w-4 h-4 text-[#8ab4f8]" />}
-          {hasVideo ? 'Change Video' : 'Import Video'}
+          {hasVideo ? <Video className="w-3.5 h-3.5 text-[#8ab4f8]" /> : <Upload className="w-3.5 h-3.5 text-[#8ab4f8]" />}
+          {hasVideo ? 'Video' : 'Import Video'}
         </button>
 
         {/* Auto Captions */}
         <button
           onClick={onAutoTranscribe}
           disabled={!hasVideo || isTranscribing}
-          className="px-4 py-2 bg-[#004a77] hover:bg-[#005c94] text-[#c2e7ff] text-xs font-medium rounded-full flex items-center gap-2 transition active:scale-95 disabled:opacity-40"
+          className="px-3.5 py-2 bg-[#004a77] hover:bg-[#005c94] text-[#c2e7ff] text-xs font-medium rounded-full flex items-center gap-1.5 transition active:scale-95 disabled:opacity-40"
           title="Auto-detect speech segments and generate captions"
         >
           <Sparkles className={`w-3.5 h-3.5 ${isTranscribing ? 'animate-spin' : ''}`} />
           {isTranscribing ? 'Transcribing...' : 'Auto Captions'}
         </button>
 
-        <div className="h-5 w-px bg-[#333538] mx-1" />
+        <div className="h-5 w-px bg-[#333538] mx-0.5" />
 
         {/* Speakers / Avatars Settings */}
         <button
           onClick={onOpenCharacterSettings}
-          className="p-2.5 rounded-full hover:bg-[#1e1f20] text-[#c4c7c5] hover:text-white transition"
+          className="p-2 rounded-full hover:bg-[#1e1f20] text-[#c4c7c5] hover:text-white transition"
           title="Speakers & Avatars"
         >
           <SlidersHorizontal className="w-4 h-4" />
@@ -139,7 +165,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onExportVideo}
           disabled={itemCount === 0}
-          className="px-5 py-2 bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] text-xs font-semibold rounded-full shadow-sm transition active:scale-95 flex items-center gap-1.5 disabled:opacity-40"
+          className="px-4 py-2 bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] text-xs font-semibold rounded-full shadow-sm transition active:scale-95 flex items-center gap-1.5 disabled:opacity-40"
         >
           <Download className="w-3.5 h-3.5" />
           Export
