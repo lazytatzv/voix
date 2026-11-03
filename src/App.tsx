@@ -47,8 +47,8 @@ export function App() {
                   avatar: {
                     ...def.avatar,
                     ...c.avatar,
-                    speaking: def.avatar.speaking || c.avatar.speaking,
-                    expressions: def.avatar.expressions || c.avatar.expressions,
+                    speaking: c.avatar.speaking || def.avatar.speaking,
+                    expressions: c.avatar.expressions || def.avatar.expressions,
                   },
                   subtitleStyle: {
                     ...def.subtitleStyle,

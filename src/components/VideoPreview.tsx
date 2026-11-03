@@ -87,19 +87,21 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [showAvatar, setShowAvatar] = useState(true);
   const [imagesLoaded, setImagesLoaded] = useState<Record<string, HTMLImageElement>>({});
+  const activeSlotCharIdRef = useRef<Record<string, string>>({});
 
   useEffect(() => {
-    const loaded: Record<string, HTMLImageElement> = {};
     characters.forEach((char) => {
       const loadImg = (key: string, src?: string) => {
         if (!src) return;
         resolveImageToDataUrl(src).then((resolved) => {
           const img = new Image();
           img.onload = () => {
-            setImagesLoaded((prev) => ({ ...prev, [key]: img }));
+            setImagesLoaded((prev) => {
+              if (prev[key]?.src === img.src) return prev;
+              return { ...prev, [key]: img };
+            });
           };
           img.src = resolved;
-          loaded[key] = img;
         });
       };
 
@@ -113,7 +115,6 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         });
       }
     });
-    setImagesLoaded(loaded);
   }, [characters]);
 
   // 1. 再生・一時停止の動画同期
@@ -268,25 +269,50 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         const charsInPos = slots[pos];
         if (charsInPos.length === 0) return;
 
-        // 1. 発話中のキャラクターがいれば最優先で選出
-        // 2. 誰も発話していなければ代表キャラ（スロット内の最初の1名）を選出
+        // 1. 発話中のキャラクターがいれば最優先で選出 & 記憶
+        // 2. 誰も発話していなければ直前に発話していたキャラ、またはスロットの先頭キャラを選出
         const speakingChar = charsInPos.find((c) => c.id === currentVoiceItem?.characterId);
-        const char = speakingChar || charsInPos[0];
+        if (speakingChar) {
+          activeSlotCharIdRef.current[pos] = speakingChar.id;
+        }
+        const lastActiveId = activeSlotCharIdRef.current[pos];
+        const rememberedChar = charsInPos.find((c) => c.id === lastActiveId);
+        const char = speakingChar || rememberedChar || charsInPos[0];
         if (!char) return;
 
         const isSpeaking = currentVoiceItem?.characterId === char.id;
         const expr = (isSpeaking && currentVoiceItem?.expression) || 'default';
         const exprImg = expr !== 'default' ? imagesLoaded[`${char.id}_expr_${expr}`] : null;
 
-        // 口パク判定: 発話中、7〜8Hzの周期で口を開閉
-        const isMouthOpen = isSpeaking && Math.floor(currentTime * 7.5) % 2 === 0;
-
         const speakingImg = imagesLoaded[`${char.id}_speaking`];
-        const idleImg = exprImg || imagesLoaded[char.id];
+        const baseIdleImg = exprImg || imagesLoaded[char.id];
+
+        // 口開け画像が待機画像と互換性があるか検証
+        // 異なるキャラクター（例: デフォルト素材とカスタム立ち絵）やアスペクト比が大きく異なる画像間の切り替えによるチカチカを防止
+        const isMouthOpenCompatible = (() => {
+          if (!speakingImg || !speakingImg.complete || !baseIdleImg || !baseIdleImg.complete) return false;
+          // アスペクト比チェック (±15%以内でなければ別素材と判断)
+          const idleRatio = baseIdleImg.width / baseIdleImg.height;
+          const speakRatio = speakingImg.width / speakingImg.height;
+          if (Math.abs(idleRatio - speakRatio) > 0.15) return false;
+
+          // ソース元（デフォルトサンプル /characters/ か、カスタムパス/Data URLか）の不一致チェック
+          const idleSrc = char.avatar.idle || '';
+          const speakSrc = char.avatar.speaking || '';
+          const isIdleDefault = idleSrc.startsWith('/characters/');
+          const isSpeakDefault = speakSrc.startsWith('/characters/');
+          if (isIdleDefault !== isSpeakDefault) return false;
+
+          return true;
+        })();
+
+        // 口パク判定: 発話中かつ互換性のある口開け画像がある場合のみ開閉
+        const isMouthOpen = isSpeaking && isMouthOpenCompatible && Math.floor(currentTime * 7.5) % 2 === 0;
+
         const activeImg =
-          isMouthOpen && speakingImg && speakingImg.complete
+          isMouthOpen && speakingImg
             ? speakingImg
-            : (idleImg || imagesLoaded[char.id]);
+            : (baseIdleImg || imagesLoaded[char.id]);
 
         if (activeImg && activeImg.complete) {
           ctx.save();
@@ -301,7 +327,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           }
 
           const charHeight = height * 0.54;
-          const charWidth = (activeImg.width / activeImg.height) * charHeight;
+          // アンカーとなる基準アスペクト比（待機画像基準で安定化し、口パク時の伸縮・ブレを防止）
+          const baseRatio = (baseIdleImg?.width && baseIdleImg?.height)
+            ? (baseIdleImg.width / baseIdleImg.height)
+            : (activeImg.width / activeImg.height);
+          const charWidth = baseRatio * charHeight;
+
+          // 口パク専用画像がない場合の微細トークバウンス（チカチカしない自然な上下2px）
+          const bounceY = (isSpeaking && !isMouthOpenCompatible && Math.floor(currentTime * 7.5) % 2 === 0) ? -2 : 0;
 
           let charX = 80;
           if (char.position === 'right') {
@@ -310,7 +343,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             charX = (width - charWidth) / 2;
           }
 
-          const charY = height - charHeight;
+          const charY = height - charHeight + bounceY;
           ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
 
           ctx.restore();
