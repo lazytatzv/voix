@@ -1,3 +1,4 @@
+import YAML from 'yaml';
 import { Character, VoiceItem } from '../types';
 
 export interface ParsedScriptLine {
@@ -6,12 +7,13 @@ export interface ParsedScriptLine {
   text: string;
   startTime?: number;
   speed?: number;
+  pitch?: number;
 }
 
-export type RawScriptFormat = 'markdown' | 'yaml' | 'short' | 'json';
+export type RawScriptFormat = 'yaml';
 
 /**
- * キャラクターの短縮記号（ず:, め:, z:, m: 等）を取得
+ * キャラクターの短縮記号（ず, め, つ, り 等）を取得
  */
 export function getCharacterShortPrefix(char: Character, index: number): string {
   const name = char.name.trim();
@@ -27,7 +29,7 @@ export function getCharacterShortPrefix(char: Character, index: number): string 
  * 表現タグを標準識別子（smile, shock, trouble, angry, default）に正規化
  */
 export function normalizeExpressionTag(raw: string): string {
-  const clean = raw.trim().toLowerCase();
+  const clean = String(raw).trim().toLowerCase();
   if (['smile', '笑顔', 'にっこり', 'わらい', '笑', '喜', 'happy'].includes(clean)) return 'smile';
   if (['shock', '驚き', 'ショック', 'びっくり', '驚', '目見開き', 'wow'].includes(clean)) return 'shock';
   if (['trouble', '困り', 'こまり', 'あせ', '汗', '困', '不安', 'sad'].includes(clean)) return 'trouble';
@@ -39,7 +41,7 @@ export function normalizeExpressionTag(raw: string): string {
  * 話者文字列（例: "ずんだもん [smile]", "め(笑顔)"）から話者と表情を分離
  */
 export function extractSpeakerAndExpression(rawSpeaker: string): { speaker: string; expression: string } {
-  let speaker = rawSpeaker.trim();
+  let speaker = String(rawSpeaker).trim();
   let expression = 'default';
   const exprMatch = speaker.match(/^(.*?)[\(\[]([^()\[\]]+)[\)\]]$/);
   if (exprMatch) {
@@ -50,262 +52,118 @@ export function extractSpeakerAndExpression(rawSpeaker: string): { speaker: stri
 }
 
 /**
- * タイムラインの音声アイテムを指定されたフォーマットのテキストにシリアライズ
- * - markdown: ### 話者\nセリフ (自然な縦書き・AI出力と互換性最高)
- * - yaml: - speaker: 話者\n  text: セリフ (構造化・エンジニア向け)
- * - short: ず: セリフ (最速タイピング)
- * - json: [{"speaker": "...", "text": "..."}]
+ * タイムラインの音声アイテムをYAMLテキストにシリアライズ
  */
 export function itemsToRawText(
   items: VoiceItem[],
   characters: Character[],
-  format: RawScriptFormat = 'markdown'
+  _format?: string
 ): string {
   if (items.length === 0) {
-    if (format === 'markdown') {
-      return `### ずんだもん
-今回はMarkdown形式で台本を縦に書いていくのだ！
+    return [
+      '# 台本をYAML形式で記述（Ctrl+Enter でタイムラインに反映）',
+      '- speaker: ずんだもん',
+      '  text: 今回はYAML形式で台本を作っていくのだ！',
+      '- speaker: 四国めたん',
+      '  emotion: smile',
+      '  text: パラメータ（話速や感情）も綺麗に構造化できますね。',
+    ].join('\n');
+  }
 
-### 四国めたん [smile]
-Markdownなら見出しの下にセリフを書くだけで、普通の文章のように自然に改行できますわね。
-
-### ずんだもん [shock]
-ChatGPTやClaudeに「台本書いて」って頼んでも、そのままコピペできるのだ！`;
+  const data = items.map((item) => {
+    const char = characters.find((c) => c.id === item.characterId) || characters[0];
+    const speakerName = char ? char.name : 'ずんだもん';
+    const entry: Record<string, unknown> = {
+      speaker: speakerName,
+    };
+    if (item.expression && item.expression !== 'default') {
+      entry.emotion = item.expression;
     }
-    if (format === 'yaml') {
-      return `- speaker: ずんだもん
-  text: 今回はYAML形式で台本を作っていくのだ！
-- speaker: 四国めたん
-  emotion: smile
-  text: パラメータ（話速や感情）も綺麗に構造化できますね。`;
+    if (typeof item.speedScale === 'number' && item.speedScale !== 1.0) {
+      entry.speed = Number(item.speedScale.toFixed(2));
     }
-    if (format === 'json') {
-      return JSON.stringify(
-        [
-          { speaker: 'ずんだもん', text: '今回はJSON形式なのだ！' },
-          { speaker: '四国めたん', emotion: 'smile', text: 'システム連携に向いていますね。' },
-        ],
-        null,
-        2
-      );
+    if (typeof item.pitchScale === 'number' && item.pitchScale !== 0.0) {
+      entry.pitch = Number(item.pitchScale.toFixed(2));
     }
-    return `ず: 今回は短縮形式で爆速入力なのだ！
-め[smile]: 1行1セリフで手軽に書けますね。`;
-  }
+    entry.text = item.text;
+    return entry;
+  });
 
-  // 1. Markdown 形式
-  if (format === 'markdown') {
-    return items
-      .map((item) => {
-        const char = characters.find((c) => c.id === item.characterId) || characters[0];
-        const speakerName = char ? char.name : 'ずんだもん';
-        const expr = item.expression && item.expression !== 'default' ? ` [${item.expression}]` : '';
-        return `### ${speakerName}${expr}\n${item.text}`;
-      })
-      .join('\n\n');
-  }
-
-  // 2. YAML 形式
-  if (format === 'yaml') {
-    return items
-      .map((item) => {
-        const char = characters.find((c) => c.id === item.characterId) || characters[0];
-        const speakerName = char ? char.name : 'ずんだもん';
-        const lines = [`- speaker: ${speakerName}`];
-        if (item.expression && item.expression !== 'default') {
-          lines.push(`  emotion: ${item.expression}`);
-        }
-        lines.push(`  text: ${item.text}`);
-        return lines.join('\n');
-      })
-      .join('\n');
-  }
-
-  // 3. JSON 形式
-  if (format === 'json') {
-    const list = items.map((item) => {
-      const char = characters.find((c) => c.id === item.characterId) || characters[0];
-      const obj: Record<string, unknown> = {
-        speaker: char ? char.name : 'ずんだもん',
-        text: item.text,
-      };
-      if (item.expression && item.expression !== 'default') {
-        obj.emotion = item.expression;
-      }
-      return obj;
-    });
-    return JSON.stringify(list, null, 2);
-  }
-
-  // 4. Short / Simple コロン形式
-  return items
-    .map((item) => {
-      const charIndex = characters.findIndex((c) => c.id === item.characterId);
-      const char = characters[charIndex];
-      const speakerPrefix = char ? getCharacterShortPrefix(char, charIndex) : 'ず';
-      const expr = item.expression && item.expression !== 'default' ? `[${item.expression}]` : '';
-      return `${speakerPrefix}${expr}: ${item.text}`;
-    })
-    .join('\n');
+  return YAML.stringify(data, { indent: 2, lineWidth: 0 });
 }
 
 /**
- * あらゆるスクリプト文字列を自動判別して構造化データに解析
- * 1. JSON (`[...]`)
- * 2. Markdown 見出し (`### 話者 [smile]\nセリフ`)
- * 3. YAML リスト (`- speaker: ...\n  text: ...`) または (`- 話者: セリフ`)
- * 4. Markdown リスト (`- **話者**: セリフ`)
- * 5. カギ括弧記法 (`ずんだもん「セリフ」`)
- * 6. コロン記法 (`ず: セリフ`, `め: セリフ`)
- * 7. タブ区切り TSV
+ * YAMLデータオブジェクトからParsedScriptLineのリストを抽出
  */
-export function parseRawScript(rawText: string): ParsedScriptLine[] {
-  const trimmed = rawText.trim();
-  if (!trimmed) return [];
+function extractLinesFromYaml(data: unknown): ParsedScriptLine[] {
+  if (!data) return [];
+  let list: unknown[] | null = Array.isArray(data) ? data : null;
 
-  // 1. JSON 形式の自動判定
-  if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
-    try {
-      const parsedJson = JSON.parse(trimmed);
-      if (Array.isArray(parsedJson)) {
-        const result: ParsedScriptLine[] = [];
-        for (const item of parsedJson) {
-          if (typeof item === 'object' && item !== null) {
-            const rawSpeaker = String(item.speaker || item.char || item.character || item.name || 'ず');
-            const { speaker, expression: exprFromSpeaker } = extractSpeakerAndExpression(rawSpeaker);
-            const expression = item.emotion || item.expression || exprFromSpeaker || 'default';
-            const text = String(item.text || item.dialogue || item.content || '').trim();
-            if (text) {
-              result.push({
-                speaker,
-                expression: normalizeExpressionTag(expression),
-                text,
-                startTime: typeof item.startTime === 'number' ? item.startTime : undefined,
-                speed: typeof item.speed === 'number' ? item.speed : undefined,
-              });
-            }
-          }
-        }
-        if (result.length > 0) return result;
-      }
-    } catch {}
-  }
-
-  // 2. Markdown 見出し形式 (### 話者 または ## 話者) の自動判定
-  if (/(?:^|\n)#{1,6}\s+/.test(trimmed)) {
-    const lines = trimmed.split('\n');
-    const result: ParsedScriptLine[] = [];
-    let currentSpeaker = '';
-    let currentExpr = 'default';
-    let currentTextLines: string[] = [];
-    let currentStartTime: number | undefined;
-
-    const commitCurrent = () => {
-      const text = currentTextLines.join('\n').trim();
-      if (currentSpeaker && text) {
-        result.push({
-          speaker: currentSpeaker,
-          expression: currentExpr,
-          text,
-          startTime: currentStartTime,
-        });
-      }
-      currentTextLines = [];
-    };
-
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      const headingMatch = line.match(/^#{1,6}\s+(.+)$/);
-      if (headingMatch) {
-        commitCurrent();
-        const headingContent = headingMatch[1].trim();
-        const { speaker, expression } = extractSpeakerAndExpression(headingContent);
-        currentSpeaker = speaker;
-        currentExpr = expression;
-        currentStartTime = undefined;
-      } else {
-        if (currentSpeaker) {
-          currentTextLines.push(rawLine);
-        }
+  // トップレベルがオブジェクトの場合（例: script: [...] や dialogue: [...]）
+  if (!list && typeof data === 'object' && data !== null) {
+    const record = data as Record<string, unknown>;
+    for (const key of ['script', 'dialogue', 'lines', 'timeline', 'items']) {
+      if (Array.isArray(record[key])) {
+        list = record[key];
+        break;
       }
     }
-    commitCurrent();
-    if (result.length > 0) return result;
+    if (!list) {
+      const firstArray = Object.values(record).find(Array.isArray);
+      if (firstArray) list = firstArray as unknown[];
+    }
   }
 
-  // 3. YAML 形式の自動判定 (- speaker: xxx または - ず: セリフ)
-  if (/(?:^|\n)-\s+(?:speaker|char|character|\w+|[^\s:]+)\s*:/i.test(trimmed)) {
-    const lines = trimmed.split('\n');
-    const result: ParsedScriptLine[] = [];
-    let currentItem: Partial<ParsedScriptLine> | null = null;
+  if (!list || !Array.isArray(list)) return [];
 
-    for (const rawLine of lines) {
-      const line = rawLine.trim();
-      if (!line || line.startsWith('#')) continue;
+  const result: ParsedScriptLine[] = [];
+  for (const item of list) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Record<string, unknown>;
+    const keys = Object.keys(rec);
 
-      if (line.startsWith('- ')) {
-        if (currentItem && currentItem.speaker && currentItem.text) {
-          result.push({
-            speaker: currentItem.speaker,
-            expression: currentItem.expression || 'default',
-            text: currentItem.text,
-            startTime: currentItem.startTime,
-            speed: currentItem.speed,
-          });
-        }
-        currentItem = {};
-        const content = line.slice(2).trim();
-        const colonIdx = content.search(/[:：]/);
-        if (colonIdx !== -1) {
-          const key = content.slice(0, colonIdx).trim().toLowerCase();
-          const val = content.slice(colonIdx + 1).trim();
-          if (['speaker', 'char', 'character'].includes(key)) {
-            const { speaker, expression } = extractSpeakerAndExpression(val);
-            currentItem.speaker = speaker;
-            currentItem.expression = expression;
-          } else if (['text', 'dialogue'].includes(key)) {
-            currentItem.text = val;
-          } else {
-            const { speaker, expression } = extractSpeakerAndExpression(content.slice(0, colonIdx));
-            currentItem.speaker = speaker;
-            currentItem.expression = expression;
-            currentItem.text = val;
-          }
-        }
-      } else if (currentItem) {
-        const colonIdx = line.search(/[:：]/);
-        if (colonIdx !== -1) {
-          const key = line.slice(0, colonIdx).trim().toLowerCase();
-          const val = line.slice(colonIdx + 1).trim();
-          if (['speaker', 'char', 'character'].includes(key)) {
-            const { speaker, expression } = extractSpeakerAndExpression(val);
-            currentItem.speaker = speaker;
-            if (expression !== 'default') currentItem.expression = expression;
-          } else if (['text', 'dialogue', 'content'].includes(key)) {
-            currentItem.text = val;
-          } else if (['emotion', 'expression'].includes(key)) {
-            currentItem.expression = normalizeExpressionTag(val);
-          } else if (key === 'speed') {
-            currentItem.speed = parseFloat(val);
-          } else if (key === 'start' || key === 'time') {
-            currentItem.startTime = parseFloat(val);
-          }
-        }
-      }
-    }
-    if (currentItem && currentItem.speaker && currentItem.text) {
+    const speakerKey = keys.find((k) => /^(speaker|char|character|name|who)$/i.test(k));
+    const textKey = keys.find((k) => /^(text|dialogue|content|line|say)$/i.test(k));
+
+    if (speakerKey && textKey) {
+      const rawSpk = String(rec[speakerKey] ?? '').trim();
+      const rawText = String(rec[textKey] ?? '').trim();
+      if (!rawSpk && !rawText) continue;
+
+      const { speaker, expression: exprFromSpk } = extractSpeakerAndExpression(rawSpk);
+      const emotion = rec.emotion || rec.expression || exprFromSpk;
+
       result.push({
-        speaker: currentItem.speaker,
-        expression: currentItem.expression || 'default',
-        text: currentItem.text,
-        startTime: currentItem.startTime,
-        speed: currentItem.speed,
+        speaker: speaker || 'ずんだもん',
+        expression: normalizeExpressionTag(String(emotion || 'default')),
+        text: rawText,
+        startTime:
+          typeof rec.startTime === 'number'
+            ? rec.startTime
+            : typeof rec.start === 'number'
+            ? rec.start
+            : undefined,
+        speed: typeof rec.speed === 'number' ? rec.speed : undefined,
+        pitch: typeof rec.pitch === 'number' ? rec.pitch : undefined,
+      });
+    } else if (keys.length === 1 && typeof rec[keys[0]] === 'string') {
+      // 簡易キーバリュー記法: - ずんだもん: セリフ
+      const { speaker, expression } = extractSpeakerAndExpression(keys[0]);
+      result.push({
+        speaker,
+        expression,
+        text: String(rec[keys[0]]).trim(),
       });
     }
-    if (result.length > 0) return result;
   }
 
-  // 4. 行単位フォーマット (Markdown リスト, コロン記法, カギ括弧記法, TSV)
+  return result;
+}
+
+/**
+ * 行単位のフォールバックパーサー（文法崩れ・簡易コロン・カギ括弧等にも柔軟対応）
+ */
+function parseFallbackLines(trimmed: string): ParsedScriptLine[] {
   const lines = trimmed.split('\n');
   const result: ParsedScriptLine[] = [];
   let lastSpeaker = '';
@@ -316,89 +174,82 @@ export function parseRawScript(rawText: string): ParsedScriptLine[] {
       continue;
     }
 
-    // Markdown リスト `- **話者**: セリフ` や `* **話者**: セリフ`
-    const mdListMatch = line.match(/^[-*+]\s+(?:\*\*(.*?)\*\*|__(.*?)__|(.*?))[:：]\s*(.*)$/);
-    if (mdListMatch) {
-      const rawSpk = (mdListMatch[1] || mdListMatch[2] || mdListMatch[3] || '').trim();
-      const text = mdListMatch[4].trim();
-      if (rawSpk && text) {
-        const { speaker, expression } = extractSpeakerAndExpression(rawSpk);
-        lastSpeaker = speaker;
-        result.push({ speaker, expression, text });
-        continue;
-      }
+    // 先頭のリスト記号 `- ` や `* ` を除去
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      line = line.slice(2).trim();
     }
 
-    // [12.5s] や [12.5] タイムスタンプ指定
-    let startTime: number | undefined;
-    const timeMatch = line.match(/^\[(\d+(?:\.\d+)?)\s*s?\]\s*(.*)$/i);
-    if (timeMatch) {
-      startTime = parseFloat(timeMatch[1]);
-      line = timeMatch[2].trim();
-    }
-
-    // 1. カギ括弧記法: ずんだもん「セリフ」 / ず「セリフ」
+    // カギ括弧記法: ずんだもん「セリフ」
     const bracketMatch = line.match(/^(.*?)[「『](.*?)[」』](.*)$/);
     if (bracketMatch) {
       const speakerPart = bracketMatch[1].trim();
       const textPart = bracketMatch[2].trim();
-      const extraTag = bracketMatch[3].trim();
-
-      let speaker = speakerPart || lastSpeaker || 'ず';
-      let expression = 'default';
-
-      const exprMatch = speaker.match(/^(.*?)[\(\[]([^()\[\]]+)[\)\]]$/);
-      if (exprMatch) {
-        speaker = exprMatch[1].trim();
-        expression = normalizeExpressionTag(exprMatch[2]);
-      } else if (extraTag) {
-        const extraMatch = extraTag.match(/[\(\[]([^()\[\]]+)[\)\]]/);
-        if (extraMatch) expression = normalizeExpressionTag(extraMatch[1]);
-      }
-
-      if (textPart) {
-        lastSpeaker = speaker;
-        result.push({ speaker, expression, text: textPart, startTime });
-        continue;
-      }
+      const { speaker, expression } = extractSpeakerAndExpression(speakerPart || lastSpeaker || 'ずんだもん');
+      lastSpeaker = speaker;
+      result.push({ speaker, expression, text: textPart });
+      continue;
     }
 
-    // 2. タブ区切り記法: 話者\tセリフ
-    if (line.includes('\t')) {
-      const parts = line.split('\t').map((p) => p.trim()).filter(Boolean);
-      if (parts.length >= 2) {
-        const { speaker, expression } = extractSpeakerAndExpression(parts[0]);
-        const text = parts.slice(1).join(' ');
-        lastSpeaker = speaker;
-        result.push({ speaker, expression, text, startTime });
-        continue;
-      }
-    }
-
-    // 3. コロン記法: 話者: セリフ / z: セリフ / 1: セリフ
+    // コロン記法: speaker: text
     const colonIdx = line.search(/[:：]/);
     if (colonIdx !== -1) {
-      const speakerPart = line.slice(0, colonIdx).trim();
-      const textPart = line.slice(colonIdx + 1).trim();
-      const { speaker, expression } = extractSpeakerAndExpression(speakerPart);
+      const leftPart = line.slice(0, colonIdx).trim();
+      const rightPart = line.slice(colonIdx + 1).trim();
 
-      if (textPart) {
+      if (/^(speaker|char|character)$/i.test(leftPart)) {
+        lastSpeaker = rightPart;
+        continue;
+      }
+      if (/^(text|dialogue|content)$/i.test(leftPart)) {
+        if (rightPart) {
+          result.push({ speaker: lastSpeaker || 'ずんだもん', expression: 'default', text: rightPart });
+        }
+        continue;
+      }
+
+      const { speaker, expression } = extractSpeakerAndExpression(leftPart);
+      if (rightPart) {
         lastSpeaker = speaker;
-        result.push({ speaker, expression, text: textPart, startTime });
+        result.push({ speaker, expression, text: rightPart });
         continue;
       }
     }
 
-    // 4. コロンなし行: 前の話者のセリフ継続または単独セリフ
-    result.push({
-      speaker: lastSpeaker || 'ず',
-      expression: 'default',
-      text: line,
-      startTime,
-    });
+    // 単独行: 前の話者のセリフ
+    if (lastSpeaker && line) {
+      result.push({
+        speaker: lastSpeaker,
+        expression: 'default',
+        text: line,
+      });
+    }
   }
 
   return result;
+}
+
+/**
+ * スクリプト文字列を解析して構造化データ（ParsedScriptLine[]）に変換
+ * 1. YAML として解析
+ * 2. 構文エラーやインデント崩れ等の場合は行単位フォールバックパーサーで解析
+ */
+export function parseRawScript(rawText: string): ParsedScriptLine[] {
+  const trimmed = rawText.trim();
+  if (!trimmed) return [];
+
+  // 1. YAML パース試行
+  try {
+    const yamlData = YAML.parse(trimmed);
+    const parsedFromYaml = extractLinesFromYaml(yamlData);
+    if (parsedFromYaml.length > 0) {
+      return parsedFromYaml;
+    }
+  } catch {
+    // YAML解析エラー時はフォールバックパーサーへ
+  }
+
+  // 2. フォールバックパーサー
+  return parseFallbackLines(trimmed);
 }
 
 /**

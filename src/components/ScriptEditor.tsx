@@ -25,8 +25,6 @@ import {
   itemsToRawText,
   parseRawScript,
   ParsedScriptLine,
-  RawScriptFormat,
-  getCharacterShortPrefix,
 } from '../utils/scriptParser';
 
 interface ScriptEditorProps {
@@ -77,21 +75,11 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     ? selectedCharacterId
     : characters[0]?.id || '';
 
-  const [rawFormat, setRawFormat] = useState<RawScriptFormat>(() => {
-    return (localStorage.getItem('voix_raw_format') as RawScriptFormat) || 'markdown';
-  });
-
-  // RAWモード切り替え時にタイムラインの最新状態を反映
-  const handleSwitchToRaw = (fmt: RawScriptFormat = rawFormat) => {
-    setRawText(itemsToRawText(items, characters, fmt));
+  // RAWモード切り替え時にタイムラインの最新状態を反映 (YAML)
+  const handleSwitchToRaw = () => {
+    setRawText(itemsToRawText(items, characters));
     setViewMode('raw');
     setRawStatusMessage(null);
-  };
-
-  const handleSelectRawFormat = (newFmt: RawScriptFormat) => {
-    setRawFormat(newFmt);
-    localStorage.setItem('voix_raw_format', newFmt);
-    handleSwitchToRaw(newFmt);
   };
 
   const handleSwitchToCards = () => {
@@ -130,27 +118,20 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     }
   };
 
-  // 縦に新しいセリフブロックを末尾へ追記
+  // 縦に新しいセリフブロックを末尾へ追記 (YAML形式)
   const handleAppendNewBlock = (charName?: string, expr?: string) => {
-    const targetChar = charName || (characters.find((c) => c.id === activeCharId) || characters[0])?.name || 'ずんだもん';
-    const exprTag = expr && expr !== 'default' ? ` [${expr}]` : '';
-    let snippet = '';
-
-    if (rawFormat === 'markdown') {
-      snippet = `\n\n### ${targetChar}${exprTag}\n`;
-    } else if (rawFormat === 'yaml') {
-      snippet = `\n- speaker: ${targetChar}${expr && expr !== 'default' ? `\n  emotion: ${expr}` : ''}\n  text: `;
-    } else if (rawFormat === 'json') {
-      snippet = `\n  ,{"speaker": "${targetChar}", "text": ""}`;
-    } else {
-      const charIndex = characters.findIndex((c) => c.name === targetChar);
-      const prefix = charIndex !== -1 ? getCharacterShortPrefix(characters[charIndex], charIndex) : targetChar;
-      snippet = `\n${prefix}${exprTag}: `;
+    const targetChar =
+      charName || (characters.find((c) => c.id === activeCharId) || characters[0])?.name || 'ずんだもん';
+    const lines = [`- speaker: ${targetChar}`];
+    if (expr && expr !== 'default') {
+      lines.push(`  emotion: ${expr}`);
     }
+    lines.push('  text: ');
+    const snippet = lines.join('\n');
 
     setRawText((prev) => {
       const base = prev.trimEnd();
-      return base + snippet;
+      return base ? `${base}\n${snippet}` : snippet;
     });
 
     setTimeout(() => {
@@ -280,7 +261,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               }`}
             >
               <Code2 className="w-3 h-3 text-[#34d399]" />
-              RAW Script
+              RAW (YAML)
             </button>
           </div>
         </div>
@@ -288,37 +269,15 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         {/* View Mode Action Header */}
         {viewMode === 'raw' ? (
           <div className="flex items-center gap-1.5">
-            {/* Format Selector Pills: Markdown | YAML | Simple | JSON */}
-            <div className="flex items-center bg-[#1e2023] p-0.5 rounded-lg border border-[#2e3135]">
-              {(
-                [
-                  { id: 'markdown', label: 'MD' },
-                  { id: 'yaml', label: 'YAML' },
-                  { id: 'short', label: 'Simple' },
-                  { id: 'json', label: 'JSON' },
-                ] as const
-              ).map((f) => (
-                <button
-                  key={f.id}
-                  type="button"
-                  onClick={() => handleSelectRawFormat(f.id)}
-                  className={`px-2 py-0.5 text-[10px] rounded font-mono transition ${
-                    rawFormat === f.id
-                      ? 'bg-[#2b2d31] text-white font-bold shadow-xs'
-                      : 'text-[#8e918f] hover:text-[#c4c7c5]'
-                  }`}
-                  title={`${f.label} 形式で表示・編集`}
-                >
-                  {f.label}
-                </button>
-              ))}
-            </div>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#202124] text-[#34d399] border border-[#2e3135] font-semibold">
+              YAML
+            </span>
 
             <button
               type="button"
               onClick={handleCopyRaw}
               className="px-2 py-1 rounded-md text-[11px] text-[#8e918f] hover:text-white bg-[#202124] hover:bg-[#282a2e] border border-[#2e3135] transition flex items-center gap-1"
-              title="Copy plain text script"
+              title="Copy YAML script"
             >
               {hasCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               {hasCopied ? 'Copied' : 'Copy'}
@@ -380,7 +339,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               title="末尾に新しいセリフブロックを追記"
             >
               <Sparkles className="w-3 h-3 text-amber-300" />
-              <span>+ 縦にセリフ追記</span>
+              <span>+ セリフ追記</span>
             </button>
 
             <div className="h-3 w-px bg-[#2e3135] mx-1 flex-shrink-0" />
@@ -388,14 +347,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
             <span className="text-[#8e918f] font-mono text-[10px] uppercase flex-shrink-0">
               Insert:
             </span>
-            {characters.map((c, idx) => {
-              const prefix = getCharacterShortPrefix(c, idx);
-              const snippetToInsert =
-                rawFormat === 'markdown'
-                  ? `\n\n### ${c.name}\n`
-                  : rawFormat === 'yaml'
-                  ? `\n- speaker: ${c.name}\n  text: `
-                  : `${prefix}: `;
+            {characters.map((c) => {
+              const snippetToInsert = `\n- speaker: ${c.name}\n  text: `;
 
               return (
                 <button
@@ -403,12 +356,10 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   type="button"
                   onClick={() => handleInsertSnippet(snippetToInsert)}
                   className="px-2 py-0.5 rounded bg-[#202124] hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white border border-[#2e3135] flex items-center gap-1 flex-shrink-0 transition active:scale-95 text-xs font-mono"
-                  title={`${c.name} (${rawFormat === 'markdown' ? `### ${c.name}` : `${prefix}:`})`}
+                  title={`${c.name} のYAMLブロックを挿入`}
                 >
-                  <span className="text-[#8ab4f8] font-bold">
-                    {rawFormat === 'markdown' ? `###` : `+${prefix}:`}
-                  </span>
-                  <span className="text-[10px] opacity-70">{c.name}</span>
+                  <span className="text-[#8ab4f8] font-bold">+</span>
+                  <span className="text-[11px] font-sans">{c.name}</span>
                 </button>
               );
             })}
@@ -417,16 +368,17 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
             {/* Expressions */}
             {[
-              { id: '[smile]', label: '笑顔 [smile]' },
-              { id: '[shock]', label: '驚き [shock]' },
-              { id: '[trouble]', label: '困り [trouble]' },
-              { id: '[angry]', label: '怒り [angry]' },
+              { id: 'smile', label: '笑顔 [smile]' },
+              { id: 'shock', label: '驚き [shock]' },
+              { id: 'trouble', label: '困り [trouble]' },
+              { id: 'angry', label: '怒り [angry]' },
             ].map((expr) => (
               <button
                 key={expr.id}
                 type="button"
-                onClick={() => handleInsertSnippet(expr.id)}
+                onClick={() => handleInsertSnippet(` [${expr.id}]`)}
                 className="px-2 py-0.5 rounded bg-[#202124] hover:bg-[#282a2e] text-[#a8aaa8] hover:text-white border border-[#2e3135] flex-shrink-0 transition active:scale-95 text-[10px]"
+                title={`話者に表情タグ [${expr.id}] を付与`}
               >
                 {expr.label}
               </button>
@@ -452,13 +404,12 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   handleInsertSnippet('  ');
                 }
               }}
-              placeholder={
-                rawFormat === 'markdown'
-                  ? `### ずんだもん\n今回はMarkdown形式で台本を縦に書いていくのだ！\n普通の文章のように自然に改行できます。\n\n### 四国めたん [smile]\n見出しで話者を指定するだけなので、ChatGPTやClaudeの出力もそのままペーストできますわ。`
-                  : rawFormat === 'yaml'
-                  ? `- speaker: ずんだもん\n  text: 今回はYAML形式で台本を作っていくのだ！\n- speaker: 四国めたん\n  emotion: smile\n  text: パラメータも綺麗に構造化できますね。`
-                  : `ず: 今回は短縮形式で爆速入力なのだ！\nめ[smile]: 1行1セリフで手軽に書けますね。`
-              }
+              placeholder={`# YAML形式で台本を入力・編集できます (Ctrl+Enterで反映)
+- speaker: ずんだもん
+  text: 今回はYAML形式で台本を作っていくのだ！
+- speaker: 四国めたん
+  emotion: smile
+  text: パラメータ（話速や感情）も綺麗に構造化できますね。`}
               className="w-full h-full bg-transparent text-[#e3e3e3] font-mono text-xs leading-relaxed resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266]"
               spellCheck={false}
             />

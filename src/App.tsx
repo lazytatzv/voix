@@ -695,11 +695,13 @@ export function App() {
       } else {
         // 新規テキストをVOICEVOXで合成
         try {
+          const speedScale = typeof line.speed === 'number' ? line.speed : 1.0;
+          const pitchScale = typeof line.pitch === 'number' ? line.pitch : 0.0;
           const result = await ttsManager.synthesize(
             char.ttsProviderId,
             char.speakerId,
             line.text,
-            { speedScale: 1.0, pitchScale: 0.0 }
+            { speedScale, pitchScale }
           );
           const audioBlobUrl = URL.createObjectURL(result.audioBlob);
           const duration = Math.max(result.duration, 0.6);
@@ -714,8 +716,8 @@ export function App() {
             expression: line.expression || 'default',
             startTime,
             duration,
-            speedScale: 1.0,
-            pitchScale: 0.0,
+            speedScale,
+            pitchScale,
             audioBlob: result.audioBlob,
             audioBlobUrl,
             phonemes: result.phonemes,
