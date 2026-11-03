@@ -38,11 +38,15 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   useEffect(() => {
     const loaded: Record<string, HTMLImageElement> = {};
     characters.forEach((char) => {
-      const src = char.avatar.idle;
-      if (src) {
+      if (char.avatar.idle) {
         const img = new Image();
-        img.src = src;
+        img.src = char.avatar.idle;
         loaded[char.id] = img;
+      }
+      if (char.avatar.speaking) {
+        const imgSpeak = new Image();
+        imgSpeak.src = char.avatar.speaking;
+        loaded[`${char.id}_speaking`] = imgSpeak;
       }
     });
     setImagesLoaded(loaded);
@@ -163,19 +167,36 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       }
     }
 
-    // 2. 立ち絵キャラクター描画
+    // 2. 立ち絵キャラクター描画 (透過バグ解消 & リアル口パクアニメーション)
     if (showAvatar) {
       characters.forEach((char) => {
         if (char.position === 'hidden') return;
 
         const isSpeaking = currentVoiceItem?.characterId === char.id;
-        const img = imagesLoaded[char.id];
 
-        if (img && img.complete) {
+        // 口パク判定: 発話中、7〜8Hzの周期で口を開閉
+        const isMouthOpen = isSpeaking && Math.floor(currentTime * 7.5) % 2 === 0;
+
+        // 口開き画像があれば口開き画像、なければ口閉じ画像
+        const speakingImg = imagesLoaded[`${char.id}_speaking`];
+        const idleImg = imagesLoaded[char.id];
+        const activeImg = (isMouthOpen && speakingImg && speakingImg.complete) ? speakingImg : idleImg;
+
+        if (activeImg && activeImg.complete) {
           ctx.save();
-          const bounceOffset = isSpeaking ? Math.sin(currentTime * 16) * 5 : 0;
-          const charHeight = height * 0.52;
-          const charWidth = (img.width / img.height) * charHeight;
+
+          // 透過バグ修正: キャラクターは常に100%不透明！(動画が透けるのを防止)
+          ctx.globalAlpha = 1.0;
+
+          // 発話していないキャラクターは透過させず、わずかにトーンを落とす
+          if (!isSpeaking) {
+            ctx.filter = 'brightness(0.88)';
+          } else {
+            ctx.filter = 'none';
+          }
+
+          const charHeight = height * 0.54;
+          const charWidth = (activeImg.width / activeImg.height) * charHeight;
 
           // 位置設定 (left, right, center) に応じたX座標の計算
           let charX = 80; // デフォルト: 左側
@@ -185,12 +206,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             charX = (width - charWidth) / 2;
           }
 
-          const charY = height - charHeight + bounceOffset;
+          const charY = height - charHeight;
 
-          if (!isSpeaking) {
-            ctx.globalAlpha = 0.75;
-          }
-          ctx.drawImage(img, charX, charY, charWidth, charHeight);
+          // 上下の飛び跳ねは撤廃し、自然に描画
+          ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
+
           ctx.restore();
         }
       });

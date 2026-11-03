@@ -443,6 +443,7 @@ export function App() {
           : 'right',
       avatar: {
         idle: result.avatar_data_url,
+        speaking: result.speaking_data_url || result.avatar_data_url,
       },
       subtitleStyle: {
         textColor: '#ffffff',

@@ -5,6 +5,7 @@ export interface TachieImportResult {
   speaker_id: number;
   theme_color: string;
   avatar_data_url: string;
+  speaking_data_url?: string;
   width: number;
   height: number;
 }

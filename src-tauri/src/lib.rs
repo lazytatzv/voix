@@ -15,6 +15,7 @@ pub struct TachieImportResult {
     pub speaker_id: i32,
     pub theme_color: String,
     pub avatar_data_url: String,
+    pub speaking_data_url: Option<String>,
     pub width: u32,
     pub height: u32,
 }

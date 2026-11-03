@@ -9,7 +9,7 @@ export const defaultCharacters: Character[] = [
     styleId: 3,
     avatar: {
       idle: '/characters/zundamon.png',
-      speaking: '/characters/zundamon.png',
+      speaking: '/characters/zundamon_talking.png',
       blinking: '/characters/zundamon.png',
     },
     // プロYouTube動画仕様の極太二重縁取り
