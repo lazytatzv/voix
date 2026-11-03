@@ -13,6 +13,7 @@ interface VideoPreviewProps {
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
   onVideoDurationLoaded?: (duration: number) => void;
+  onVideoDrop?: (file: File) => void;
   activeAudioUrl?: string | null;
 }
 
@@ -26,13 +27,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   onTogglePlay,
   onSeek,
   onVideoDurationLoaded,
+  onVideoDrop,
   activeAudioUrl,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  const [showAvatar, setShowAvatar] = useState(true); // 立ち絵表示
+  const [showAvatar, setShowAvatar] = useState(true);
   const [imagesLoaded, setImagesLoaded] = useState<Record<string, HTMLImageElement>>({});
 
   useEffect(() => {
@@ -70,29 +72,40 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, [isPlaying, videoSrc]);
 
-  // 2. シーク位置 (currentTime) と動画の同期 (0.15秒以上のズレがある場合)
+  // 2. シーク位置 (currentTime) と動画の同期: 停止中のみシークを行う (再生中のスタッター防止)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
 
-    if (Math.abs(video.currentTime - currentTime) > 0.15) {
-      video.currentTime = currentTime;
+    if (!isPlaying && video.readyState >= 1) {
+      if (Math.abs(video.currentTime - currentTime) > 0.05) {
+        try {
+          video.currentTime = currentTime;
+        } catch {}
+      }
     }
-  }, [currentTime, videoSrc]);
+  }, [currentTime, videoSrc, isPlaying]);
 
-  // 3. 動画ソース変更時に読み込み直し & シーク
+  // 3. 動画ソース変更時に読み込み直し (currentTimeはloadedmetadata後に安全に同期)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
 
     video.load();
-    video.currentTime = currentTime;
   }, [videoSrc]);
 
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
-    if (video && video.duration && !isNaN(video.duration) && video.duration > 0) {
-      onVideoDurationLoaded?.(video.duration);
+    if (video) {
+      if (video.duration && !isNaN(video.duration) && video.duration > 0) {
+        onVideoDurationLoaded?.(video.duration);
+      }
+      if (currentTime > 0) {
+        try {
+          video.currentTime = currentTime;
+        } catch {}
+      }
+      renderCanvas();
     }
   };
 
@@ -126,7 +139,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const height = canvas.height;
 
     // 1. 背景描画 (動画アスペクト比を完全維持して歪みを防止)
-    if (videoRef.current && videoSrc && (videoRef.current.readyState >= 1 || videoRef.current.currentTime > 0)) {
+    if (
+      videoRef.current &&
+      videoSrc &&
+      (videoRef.current.readyState >= 1 || videoRef.current.currentTime > 0)
+    ) {
       const vWidth = videoRef.current.videoWidth || 1920;
       const vHeight = videoRef.current.videoHeight || 1080;
       const vAspect = vWidth / vHeight;
@@ -149,21 +166,25 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
       ctx.fillStyle = '#0a0a0c';
       ctx.fillRect(0, 0, width, height);
-      ctx.drawImage(videoRef.current, drawX, drawY, drawWidth, drawHeight);
+      try {
+        ctx.drawImage(videoRef.current, drawX, drawY, drawWidth, drawHeight);
+      } catch {
+        // Safe catch while frame buffer prepares
+      }
     } else {
-      ctx.fillStyle = '#0f0f11';
+      ctx.fillStyle = '#101113';
       ctx.fillRect(0, 0, width, height);
 
       if (!videoSrc) {
-        ctx.fillStyle = '#8e918f';
-        ctx.font = '500 22px "Google Sans", sans-serif';
+        ctx.fillStyle = '#5f6368';
+        ctx.font = '500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('Drop video file here or click "Video"', width / 2, height / 2 - 15);
+        ctx.fillText('Drop video file here or select from toolbar', width / 2, height / 2 - 12);
 
-        ctx.fillStyle = '#565958';
-        ctx.font = '400 15px "Google Sans", sans-serif';
-        ctx.fillText('Supports MP4, MKV, WebM, QuickTime', width / 2, height / 2 + 18);
+        ctx.fillStyle = '#3c4043';
+        ctx.font = '400 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+        ctx.fillText('Supports MP4, MKV, WebM, MOV', width / 2, height / 2 + 18);
       }
     }
 
@@ -180,7 +201,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         // 口開き画像があれば口開き画像、なければ口閉じ画像
         const speakingImg = imagesLoaded[`${char.id}_speaking`];
         const idleImg = imagesLoaded[char.id];
-        const activeImg = (isMouthOpen && speakingImg && speakingImg.complete) ? speakingImg : idleImg;
+        const activeImg =
+          isMouthOpen && speakingImg && speakingImg.complete ? speakingImg : idleImg;
 
         if (activeImg && activeImg.complete) {
           ctx.save();
@@ -218,57 +240,57 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
     // 3. プロフェッショナル字幕テロップ描画 (二重縁取り・ドロップシャドウ対応)
     if (currentVoiceItem && currentVoiceItem.text) {
-      const char = characters.find((c) => c.id === currentVoiceItem.characterId);
-      const style = char?.subtitleStyle || {
-        textColor: '#ffffff',
-        strokeColor: '#0a0a0c',
+      const speaker = characters.find((c) => c.id === currentVoiceItem.characterId);
+      const style = speaker?.subtitleStyle || {
+        fontSize: 52,
+        fontFamily: 'sans-serif',
+        fontWeight: '900' as const,
+        textColor: '#FFFFFF',
+        strokeColor: '#000000',
         strokeWidth: 8,
         outerStrokeColor: '#10b981',
         outerStrokeWidth: 14,
-        fontSize: 42,
-        fontFamily: "'Google Sans', 'Noto Sans JP', sans-serif",
-        fontWeight: '900' as const,
+        yOffsetPercent: 12,
         hasShadow: true,
         shadowColor: 'rgba(0, 0, 0, 0.85)',
         shadowBlur: 8,
         shadowOffsetY: 4,
         bgStyle: 'none' as const,
-        yOffsetPercent: 12,
       };
 
       ctx.save();
-      const weight = style.fontWeight || '900';
-      const mainFont = `${weight} ${style.fontSize}px ${style.fontFamily}`;
-      const rubyFontSize = Math.max(14, Math.round(style.fontSize * 0.42));
-      const rubyFont = `${weight} ${rubyFontSize}px ${style.fontFamily}`;
+
+      const x = width / 2;
+      const y = (height * (100 - (style.yOffsetPercent ?? 12))) / 100;
+      const rawText = currentVoiceItem.text;
+
+      // ルビ解析 (e.g. France(フランス) -> ルビトークンに分割)
+      const tokens = parsePronunciationTokens(rawText);
+      const hasRuby = tokens.some((t) => !!t.reading);
+
+      const mainFont = `900 ${style.fontSize}px "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif`;
+      const rubyFontSize = Math.max(14, Math.round(style.fontSize * 0.36));
+      const rubyFont = `700 ${rubyFontSize}px "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif`;
+
       ctx.font = mainFont;
-      ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
 
-      const x = width / 2;
-      const y = height - (height * (style.yOffsetPercent / 100));
-
-      const rawText = currentVoiceItem.text;
-      const rubyMode = style.rubyDisplay || 'above';
-      const tokens = parsePronunciationTokens(rawText);
-      const hasRuby = tokens.some((t) => t.reading) && rubyMode === 'above';
-
       if (!hasRuby) {
-        // 通常の単一テキスト描画 (ルビ非表示モード または ルビ指定なし)
-        const displayText = rubyMode === 'inline' ? rawText : getSubtitleDisplayText(rawText);
+        // 通常字幕 (ルビなし)
+        const displayText = getSubtitleDisplayText(rawText);
 
         // 背景ピル
         if (style.bgStyle === 'pill') {
-          const textMetrics = ctx.measureText(displayText);
-          const bgPaddingX = 32;
-          const bgPaddingY = 16;
+          const metrics = ctx.measureText(displayText);
+          const bgPaddingX = 28;
+          const bgPaddingY = 14;
           ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
           ctx.beginPath();
           ctx.roundRect?.(
-            x - textMetrics.width / 2 - bgPaddingX,
+            x - metrics.width / 2 - bgPaddingX,
             y - style.fontSize / 2 - bgPaddingY,
-            textMetrics.width + bgPaddingX * 2,
+            metrics.width + bgPaddingX * 2,
             style.fontSize + bgPaddingY * 2,
             14
           );
@@ -276,8 +298,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         }
 
         ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
 
-        // ドロップシャドウ
+        // ドロップシャドウ設定
         if (style.hasShadow) {
           ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
           ctx.shadowBlur = style.shadowBlur ?? 8;
@@ -413,9 +436,23 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   }, [renderCanvas]);
 
   return (
-    <div className="flex flex-col bg-[#1e1f20] rounded-2xl overflow-hidden border border-[#282a2c] shadow-lg">
+    <div className="flex flex-col bg-[#141517] rounded-xl overflow-hidden border border-[#282a2c] shadow-lg">
       {/* プレビューモニター */}
-      <div className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden">
+      <div
+        className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const file = e.dataTransfer.files?.[0];
+          if (file) {
+            onVideoDrop?.(file);
+          }
+        }}
+      >
         {videoSrc && (
           <video
             ref={videoRef}
@@ -426,7 +463,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             preload="auto"
             onLoadedMetadata={handleLoadedMetadata}
             onCanPlay={() => renderCanvas()}
-            onTimeUpdate={() => renderCanvas()}
+            onSeeked={() => renderCanvas()}
+            onTimeUpdate={() => {
+              renderCanvas();
+              if (isPlaying && videoRef.current) {
+                onSeek(videoRef.current.currentTime);
+              }
+            }}
           />
         )}
         <audio ref={audioRef} className="hidden" />
@@ -441,30 +484,30 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       </div>
 
       {/* Controls */}
-      <div className="px-5 py-3 bg-[#1e1f20] flex items-center justify-between gap-4 border-t border-[#282a2c]">
+      <div className="px-4 py-2.5 bg-[#18191b] flex items-center justify-between gap-3 border-t border-[#282a2c]">
         {/* Left: Play / Rewind */}
         <div className="flex items-center gap-2">
           <button
             onClick={onTogglePlay}
-            className="p-2.5 rounded-full bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] shadow-sm transition active:scale-95"
+            className="p-2 rounded-lg bg-[#3b82f6] hover:bg-[#2563eb] text-white shadow-sm transition active:scale-95"
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
-            {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+            {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
           </button>
           <button
             onClick={() => onSeek(0)}
-            className="p-2 rounded-full hover:bg-[#282a2c] text-[#c4c7c5] hover:text-white transition"
+            className="p-2 rounded-lg bg-[#202124] hover:bg-[#282a2c] text-[#c4c7c5] hover:text-white border border-[#333538] transition"
             title="Rewind to start"
           >
-            <RotateCcw className="w-4 h-4" />
+            <RotateCcw className="w-3.5 h-3.5" />
           </button>
-          <span className="text-xs font-mono text-[#c4c7c5] ml-2">
+          <span className="text-xs font-mono text-[#a8aaa8] ml-1">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
         </div>
 
-        {/* 中央: スライダー */}
-        <div className="flex-1 flex items-center px-4">
+        {/* Center: Slider */}
+        <div className="flex-1 flex items-center px-2">
           <input
             type="range"
             min={0}
@@ -472,18 +515,18 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             step={0.05}
             value={currentTime}
             onChange={(e) => onSeek(parseFloat(e.target.value))}
-            className="w-full h-1 bg-[#444746] rounded-full appearance-none cursor-pointer accent-[#8ab4f8] hover:h-1.5 transition-all"
+            className="w-full h-1 bg-[#2e3135] rounded-lg appearance-none cursor-pointer accent-[#3b82f6] hover:h-1.5 transition-all"
           />
         </div>
 
-        {/* 右: オプション（立ち絵表示トグル、音量、最大化） */}
+        {/* Right: Options */}
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => setShowAvatar(!showAvatar)}
-            className={`px-3 py-1.5 rounded-full text-xs font-medium border flex items-center gap-1.5 transition ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition ${
               showAvatar
-                ? 'bg-[#004a77] text-[#c2e7ff] border-[#004a77]'
-                : 'bg-transparent text-[#8e918f] border-[#444746] hover:text-white hover:border-[#8e918f]'
+                ? 'bg-[#202124] text-[#10b981] border-[#3c4043]'
+                : 'bg-transparent text-[#8e918f] border-[#333538] hover:text-white'
             }`}
             title="Toggle character avatar on screen"
           >
@@ -493,6 +536,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           <button
             onClick={() => setIsMuted(!isMuted)}
+            className="p-1.5 rounded-lg hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition"
             title={isMuted ? 'Unmute' : 'Mute'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
@@ -504,7 +548,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
                 canvasRef.current.requestFullscreen();
               }
             }}
-            className="p-2 rounded-full hover:bg-[#282a2c] text-[#c4c7c5] hover:text-white transition"
+            className="p-1.5 rounded-lg hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition"
             title="Fullscreen"
           >
             <Maximize2 className="w-4 h-4" />

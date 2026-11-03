@@ -27,8 +27,54 @@ fn import_tachie_archive(
     file_path: String,
     filename_hint: Option<String>,
 ) -> Result<TachieImportResult, String> {
+    let is_data = file_path.starts_with("data:")
+        || (!std::path::Path::new(&file_path).exists() && file_path.len() > 255);
+
+    let (arg_path, temp_file_guard) = if is_data {
+        let clean = if let Some(idx) = file_path.find("base64,") {
+            &file_path[idx + 7..]
+        } else {
+            &file_path
+        };
+        use base64::Engine;
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(clean.trim())
+            .map_err(|e| format!("Base64デコードエラー: {}", e))?;
+
+        let ext = if let Some(ref hint) = filename_hint {
+            let lower = hint.to_lowercase();
+            if lower.ends_with(".zip") {
+                ".zip"
+            } else if lower.ends_with(".psd") {
+                ".psd"
+            } else if lower.ends_with(".png") {
+                ".png"
+            } else {
+                ".zip"
+            }
+        } else {
+            ".zip"
+        };
+
+        let tmp_path = std::env::temp_dir().join(format!(
+            "voix_tachie_{}{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis())
+                .unwrap_or(0),
+            ext
+        ));
+        let mut f = File::create(&tmp_path).map_err(|e| format!("一時ファイル作成失敗: {}", e))?;
+        f.write_all(&bytes)
+            .map_err(|e| format!("一時ファイル書き込み失敗: {}", e))?;
+        let p_str = tmp_path.to_string_lossy().to_string();
+        (p_str, Some(tmp_path))
+    } else {
+        (file_path, None)
+    };
+
     let mut cmd = Command::new("python3");
-    cmd.arg("-c").arg(PROCESS_TACHIE_SCRIPT).arg(&file_path);
+    cmd.arg("-c").arg(PROCESS_TACHIE_SCRIPT).arg(&arg_path);
     if let Some(hint) = filename_hint {
         cmd.arg(hint);
     }
@@ -36,6 +82,10 @@ fn import_tachie_archive(
     let output = cmd
         .output()
         .map_err(|e| format!("Python実行エラー: {}", e))?;
+
+    if let Some(tmp) = temp_file_guard {
+        let _ = fs::remove_file(tmp);
+    }
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);

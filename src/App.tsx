@@ -15,7 +15,6 @@ import { exportProjectToJson, importProjectFromJson } from './utils/projectStora
 import { detectSpeechFromVideo } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
 import { ScriptLinePrompt } from './services/aiService';
-import { convertFileSrc } from '@tauri-apps/api/core';
 
 const STORAGE_KEY = 'voix_project_autosave';
 
@@ -167,23 +166,20 @@ export function App() {
     });
   };
 
-  // 動画読み込み (ファイルパス または Fileオブジェクトに対応)
+  // 動画読み込み (Fileオブジェクト または ファイルパスに対応)
   const handleVideoSelect = (fileOrPath: File | string) => {
     if (typeof fileOrPath === 'string') {
       setRawVideoPath(fileOrPath);
-      // Tauriのアセットプロトコルで安全かつ大容量動画もHTTPレンジストリーミング
-      const assetUrl = convertFileSrc(fileOrPath);
-      setVideoSrc(assetUrl);
+      setVideoSrc(`file://${fileOrPath}`);
     } else {
-      // HTML input file fallback
+      // File object from file picker or drag-and-drop
       const path = (fileOrPath as unknown as { path?: string }).path;
       if (path && typeof path === 'string') {
         setRawVideoPath(path);
-        setVideoSrc(convertFileSrc(path));
-      } else {
-        const url = URL.createObjectURL(fileOrPath);
-        setVideoSrc(url);
       }
+      // blob: URL is 100% natively supported by Linux WebKitGTK and GStreamer
+      const url = URL.createObjectURL(fileOrPath);
+      setVideoSrc(url);
     }
   };
 
@@ -504,6 +500,7 @@ export function App() {
             onTogglePlay={handleTogglePlay}
             onSeek={handleSeek}
             onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
+            onVideoDrop={handleVideoSelect}
             activeAudioUrl={activeAudioUrl}
           />
         </div>

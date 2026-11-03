@@ -1,6 +1,5 @@
 import React, { useRef } from 'react';
-import { Upload, Sparkles, SlidersHorizontal, Download, PlaySquare, FolderOpen, Save, Video, Wand2, FileArchive } from 'lucide-react';
-import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { Upload, SlidersHorizontal, Download, PlaySquare, FolderOpen, Save, Video, FileArchive, Bot, Layers } from 'lucide-react';
 
 interface HeaderProps {
   projectName: string;
@@ -8,7 +7,7 @@ interface HeaderProps {
   onVideoSelect: (fileOrPath: File | string) => void;
   onAutoTranscribe: () => void;
   onOpenCharacterSettings: () => void;
-  onOpenTtsSettings: () => void;
+  onOpenTtsSettings?: () => void;
   onExportVideo: () => void;
   onSaveProject: () => void;
   onLoadProject: (file: File) => void;
@@ -37,65 +36,53 @@ export const Header: React.FC<HeaderProps> = ({
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handlePickVideo = async () => {
-    try {
-      const selected = await openDialog({
-        multiple: false,
-        filters: [
-          {
-            name: 'Video',
-            extensions: ['mp4', 'mkv', 'webm', 'mov', 'avi'],
-          },
-        ],
-      });
-      if (selected && typeof selected === 'string') {
-        onVideoSelect(selected);
-        return;
-      }
-    } catch (e) {
-      console.warn('Native dialog error or cancelled:', e);
-    }
-    // Fallback to HTML input
+  const handlePickVideo = () => {
     videoInputRef.current?.click();
   };
 
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) onVideoSelect(file);
+    if (file) {
+      onVideoSelect(file);
+      e.target.value = '';
+    }
   };
 
   const handleProjectFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) onLoadProject(file);
+    if (file) {
+      onLoadProject(file);
+      e.target.value = '';
+    }
   };
 
   return (
-    <header className="h-16 bg-[#131314] border-b border-[#282a2c] px-6 flex items-center justify-between select-none">
+    <header className="h-14 bg-[#121314] border-b border-[#242628] px-5 flex items-center justify-between select-none">
       {/* Left: Brand & Project Name */}
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2.5">
-          <div className="w-9 h-9 rounded-full bg-[#1e1f20] border border-[#3c4043] flex items-center justify-center text-[#8ab4f8] shadow-sm">
+          <div className="w-8 h-8 rounded-lg bg-[#1c1d1f] border border-[#2e3135] flex items-center justify-center text-[#8ab4f8]">
             <PlaySquare className="w-4 h-4" />
           </div>
-          <div className="flex flex-col">
-            <span className="font-semibold text-sm tracking-tight text-[#e3e3e3] flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm tracking-tight text-[#e3e3e3]">
               Voix
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-[#004a77] text-[#c2e7ff] font-medium">
-                Studio
-              </span>
+            </span>
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1e2022] border border-[#333538] text-[#8e918f]">
+              Workstation
             </span>
             <input
               type="text"
               value={projectName}
               onChange={(e) => onProjectNameChange(e.target.value)}
-              className="bg-transparent text-xs text-[#a8aaa8] hover:text-[#e3e3e3] focus:text-[#e3e3e3] focus:bg-[#1e1f20] rounded-md px-1.5 py-0.5 outline-none transition w-44 font-normal"
+              className="bg-transparent text-xs text-[#a8aaa8] hover:text-[#e3e3e3] focus:text-[#e3e3e3] focus:bg-[#1a1b1d] rounded px-2 py-1 outline-none transition w-44 border border-transparent focus:border-[#3c4043]"
               placeholder="Untitled Project"
             />
           </div>
         </div>
 
         {/* Project Open / Save */}
-        <div className="flex items-center bg-[#1e1f20] p-1 rounded-full border border-[#333538] ml-2">
+        <div className="flex items-center bg-[#18191b] p-0.5 rounded-lg border border-[#282a2c] ml-1">
           <input
             ref={projectInputRef}
             type="file"
@@ -105,7 +92,7 @@ export const Header: React.FC<HeaderProps> = ({
           />
           <button
             onClick={() => projectInputRef.current?.click()}
-            className="px-3 py-1 text-xs text-[#c4c7c5] hover:text-white hover:bg-[#282a2c] rounded-full flex items-center gap-1.5 transition"
+            className="px-2.5 py-1 text-xs text-[#a8aaa8] hover:text-white hover:bg-[#25272a] rounded flex items-center gap-1.5 transition"
             title="Open project file (.voix)"
           >
             <FolderOpen className="w-3.5 h-3.5" />
@@ -113,7 +100,7 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
           <button
             onClick={onSaveProject}
-            className="px-3 py-1 text-xs text-[#c4c7c5] hover:text-white hover:bg-[#282a2c] rounded-full flex items-center gap-1.5 transition"
+            className="px-2.5 py-1 text-xs text-[#a8aaa8] hover:text-white hover:bg-[#25272a] rounded flex items-center gap-1.5 transition"
             title="Save project (.voix)"
           >
             <Save className="w-3.5 h-3.5" />
@@ -123,62 +110,62 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* Right: Actions */}
-      <div className="flex items-center gap-2.5">
-        {/* ✨ AI Video Generator */}
+      <div className="flex items-center gap-2">
+        {/* AI Script Generator */}
         <button
           onClick={onOpenAiVideoGenerator}
-          className="px-4 py-2 bg-gradient-to-r from-[#8ab4f8]/20 to-[#c2e7ff]/20 hover:from-[#8ab4f8]/30 hover:to-[#c2e7ff]/30 text-[#c2e7ff] text-xs font-semibold rounded-full border border-[#8ab4f8]/50 flex items-center gap-1.5 transition active:scale-95 shadow-sm"
-          title="Generate full multi-character video from topic"
+          className="px-3 py-1.5 bg-[#1a1b1d] hover:bg-[#242629] text-[#e3e3e3] text-xs font-medium rounded-lg border border-[#333639] flex items-center gap-1.5 transition active:scale-95"
+          title="Generate full multi-character dialogue script from topic"
         >
-          <Wand2 className="w-3.5 h-3.5 text-[#8ab4f8]" />
-          <span>✨ AI Video Creator</span>
+          <Bot className="w-3.5 h-3.5 text-[#8ab4f8]" />
+          <span>AI Script</span>
         </button>
 
-        {/* 📦 Import Tachie */}
+        {/* Import Tachie */}
         <button
           onClick={onOpenTachieImport}
-          className="px-3.5 py-2 bg-[#1e1f20] hover:bg-[#282a2c] text-[#e3e3e3] text-xs font-medium rounded-full border border-[#3c4043] flex items-center gap-1.5 transition active:scale-95"
+          className="px-3 py-1.5 bg-[#1a1b1d] hover:bg-[#242629] text-[#e3e3e3] text-xs font-medium rounded-lg border border-[#333639] flex items-center gap-1.5 transition active:scale-95"
           title="Import character tachie from .zip or .psd"
         >
-          <FileArchive className="w-3.5 h-3.5 text-[#34d399]" />
-          <span>Tachie ZIP/PSD</span>
+          <FileArchive className="w-3.5 h-3.5 text-[#10b981]" />
+          <span>Import Tachie</span>
         </button>
 
-        <div className="h-5 w-px bg-[#333538] mx-0.5" />
+        <div className="h-4 w-px bg-[#282a2c] mx-0.5" />
 
         {/* Import Video */}
         <input
           ref={videoInputRef}
           type="file"
-          accept="video/mp4,video/webm,video/quicktime,video/mkv"
+          accept="video/mp4,video/webm,video/quicktime,video/mkv,video/*"
           className="hidden"
           onChange={handleVideoChange}
         />
         <button
           onClick={handlePickVideo}
-          className="px-3.5 py-2 bg-[#1e1f20] hover:bg-[#282a2c] text-[#e3e3e3] text-xs font-medium rounded-full border border-[#3c4043] flex items-center gap-1.5 transition active:scale-95"
+          className="px-3 py-1.5 bg-[#1a1b1d] hover:bg-[#242629] text-[#e3e3e3] text-xs font-medium rounded-lg border border-[#333639] flex items-center gap-1.5 transition active:scale-95"
         >
           {hasVideo ? <Video className="w-3.5 h-3.5 text-[#8ab4f8]" /> : <Upload className="w-3.5 h-3.5 text-[#8ab4f8]" />}
-          {hasVideo ? 'Video' : 'Import Video'}
+          {hasVideo ? 'Change Video' : 'Add Video'}
         </button>
 
         {/* Auto Captions */}
         <button
           onClick={onAutoTranscribe}
           disabled={!hasVideo || isTranscribing}
-          className="px-3.5 py-2 bg-[#004a77] hover:bg-[#005c94] text-[#c2e7ff] text-xs font-medium rounded-full flex items-center gap-1.5 transition active:scale-95 disabled:opacity-40"
+          className="px-3 py-1.5 bg-[#1e293b] hover:bg-[#283548] text-[#93c5fd] text-xs font-medium rounded-lg border border-[#3b82f6]/30 flex items-center gap-1.5 transition active:scale-95 disabled:opacity-30"
           title="Auto-detect speech segments and generate captions"
         >
-          <Sparkles className={`w-3.5 h-3.5 ${isTranscribing ? 'animate-spin' : ''}`} />
+          <Layers className={`w-3.5 h-3.5 ${isTranscribing ? 'animate-spin' : ''}`} />
           {isTranscribing ? 'Transcribing...' : 'Auto Captions'}
         </button>
 
-        <div className="h-5 w-px bg-[#333538] mx-0.5" />
+        <div className="h-4 w-px bg-[#282a2c] mx-0.5" />
 
         {/* Speakers / Avatars Settings */}
         <button
           onClick={onOpenCharacterSettings}
-          className="p-2 rounded-full hover:bg-[#1e1f20] text-[#c4c7c5] hover:text-white transition"
+          className="p-1.5 rounded-lg bg-[#1a1b1d] hover:bg-[#242629] text-[#a8aaa8] hover:text-white border border-[#333639] transition"
           title="Speakers & Avatars"
         >
           <SlidersHorizontal className="w-4 h-4" />
@@ -188,7 +175,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           onClick={onExportVideo}
           disabled={itemCount === 0}
-          className="px-4 py-2 bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] text-xs font-semibold rounded-full shadow-sm transition active:scale-95 flex items-center gap-1.5 disabled:opacity-40"
+          className="px-3.5 py-1.5 bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs font-semibold rounded-lg shadow-sm transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
         >
           <Download className="w-3.5 h-3.5" />
           Export

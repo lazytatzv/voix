@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Sparkles, Type, FileArchive } from 'lucide-react';
+import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Type, FileArchive } from 'lucide-react';
 import { Character, Speaker } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
 import { CustomSelect } from './CustomSelect';
@@ -271,7 +271,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
               {/* Caption Presets (ワンクリックで極上テロップに) */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-[#8e918f] block flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-[#8ab4f8]" /> Quick Caption Presets
+                  <Type className="w-3.5 h-3.5 text-[#8ab4f8]" /> Quick Caption Presets
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {SUBTITLE_PRESETS.map((preset) => (

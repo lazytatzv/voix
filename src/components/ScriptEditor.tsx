@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Volume2, Loader2, Send, Sliders, Copy, Scissors, Sparkles, Languages, Wand2, Tag } from 'lucide-react';
+import { Trash2, Volume2, Loader2, Send, Sliders, Copy, Scissors, Languages, Wand2, Tag } from 'lucide-react';
 import { Character, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
 import { processAiAction, AiAction } from '../services/aiService';
@@ -317,13 +317,13 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               type="button"
               onClick={() => setIsAiMenuOpen(!isAiMenuOpen)}
               disabled={isAiProcessing}
-              className="p-1.5 rounded-full bg-[#282a2c] hover:bg-[#333538] text-[#8ab4f8] border border-[#3c4043] transition flex items-center gap-1 text-[11px] font-medium"
-              title="AI Assistant Tools"
+              className="p-1.5 rounded-lg bg-[#242629] hover:bg-[#2e3135] text-[#8ab4f8] border border-[#3c4043] transition flex items-center gap-1 text-[11px] font-medium"
+              title="AI Script Assistant"
             >
               {isAiProcessing ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
-                <Sparkles className="w-3.5 h-3.5" />
+                <Wand2 className="w-3.5 h-3.5" />
               )}
             </button>
 

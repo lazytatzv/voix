@@ -207,13 +207,19 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
 
 def main():
     if len(sys.argv) < 2:
-        print(json.dumps({"error": "Usage: process_tachie.py <archive_path_or_base64> [filename_hint]"}), file=sys.stderr)
+        print(json.dumps({"error": "Usage: process_tachie.py <archive_path_or_stdin> [filename_hint]"}), file=sys.stderr)
         sys.exit(1)
 
-    filepath = sys.argv[1]
+    arg1 = sys.argv[1]
     filename_hint = sys.argv[2] if len(sys.argv) > 2 else ""
+
+    if arg1 == "-":
+        filepath_or_data = sys.stdin.read().strip()
+    else:
+        filepath_or_data = arg1
+
     try:
-        res = process_file_or_data(filepath, filename_hint)
+        res = process_file_or_data(filepath_or_data, filename_hint)
         print(json.dumps(res))
     except Exception as e:
         print(json.dumps({"error": str(e)}), file=sys.stderr)
