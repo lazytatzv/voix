@@ -62,6 +62,9 @@ export interface Character {
   avatar: CharacterAvatar;
   subtitleStyle: SubtitleStyle;
   position: 'left' | 'right' | 'center' | 'hidden';
+  customX?: number; // 画面X座標 (ピクセル)
+  customY?: number; // 画面Y座標 (ピクセル)
+  scale?: number; // 立ち絵基本拡大率 (1.0 = 標準)
   flipH?: boolean; // 左右反転 (Horizontal Flip)
   flipX?: boolean;
 }
@@ -78,6 +81,14 @@ export interface VoiceItem extends BaseTimelineItem {
   speedScale?: number;
   pitchScale?: number;
   volumeScale?: number;
+  terminal?: {
+    cmd: string;
+    output?: string;
+  };
+  se?: string; // 効果音: 'pop' | 'chime' | 'punch' | 'error' | 'success' | 'laser' | 'typing' または音声パス
+  anim?: 'bounce' | 'pop' | 'slide' | 'fade' | 'none' | string; // 立ち絵アニメーション
+  flipH?: boolean; // セリフ単位の左右反転オーバーライド
+  scale?: number; // 立ち絵の拡大率
 }
 
 export interface VideoItem extends BaseTimelineItem {

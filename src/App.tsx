@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+import { getCurrentWindow } from '@tauri-apps/api/window';
 import { Header } from './components/Header';
 import { VideoPreview } from './components/VideoPreview';
 import { ScriptEditor } from './components/ScriptEditor';
@@ -17,9 +18,10 @@ import { ttsManager } from './services/tts/TTSManager';
 import { exportProjectToJson, importProjectFromJson } from './utils/projectStorage';
 import { detectSpeechFromVideo } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
-import { ScriptLinePrompt } from './services/aiService';
+import { ScriptLinePrompt, formatSpeechWithPersona } from './services/aiService';
 import { loadCharactersFromConfig, saveCharactersToConfig } from './services/configService';
-import { matchCharacter, ParsedScriptLine } from './utils/scriptParser';
+import { matchCharacter, ParsedScriptLine, ParsedYamlConfig } from './utils/scriptParser';
+import { soundEffectManager } from './utils/soundEffects';
 
 const STORAGE_KEY = 'voix_project_autosave';
 
@@ -40,8 +42,8 @@ export function App() {
             if (!seen.has(key)) {
               seen.add(key);
               let resolvedName = c.name;
-              if (isZunda && (c.name === 'zunda' || c.name === 'ずんだもん')) resolvedName = 'Zundamon';
-              if (isMetan && (c.name === 'metan' || c.name === '四国めたん')) resolvedName = 'Shikoku Metan';
+              if (isZunda && (c.name === 'zunda' || c.name === 'ずんだもん' || c.name === 'Zundamon')) resolvedName = 'ずんだもん';
+              if (isMetan && (c.name === 'metan' || c.name === '四国めたん' || c.name === 'Shikoku Metan')) resolvedName = '四国めたん';
               const def = defaultCharacters.find((d) => d.id === (isZunda ? 'zundamon' : isMetan ? 'metan' : c.id));
               if (def) {
                 deduped.push({
@@ -140,6 +142,9 @@ export function App() {
     const startX = e.clientX;
     const startWidth = scriptWidth;
 
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'col-resize';
+
     const onMouseMove = (moveEvent: MouseEvent) => {
       const delta = startX - moveEvent.clientX;
       const newWidth = Math.max(280, Math.min(window.innerWidth - 380, startWidth + delta));
@@ -148,6 +153,8 @@ export function App() {
     };
 
     const onMouseUp = () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -161,6 +168,9 @@ export function App() {
     const startY = e.clientY;
     const startHeight = timelineHeight;
 
+    document.body.style.userSelect = 'none';
+    document.body.style.cursor = 'row-resize';
+
     const onMouseMove = (moveEvent: MouseEvent) => {
       const delta = startY - moveEvent.clientY;
       const newHeight = Math.max(130, Math.min(window.innerHeight - 260, startHeight + delta));
@@ -169,6 +179,8 @@ export function App() {
     };
 
     const onMouseUp = () => {
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
@@ -410,6 +422,11 @@ export function App() {
         ) {
           playedItemIdsRef.current.add(item.id);
 
+          // SE (効果音) 再生
+          if (item.se) {
+            soundEffectManager.play(item.se);
+          }
+
           if (item.audioBlobUrl) {
             // 一人ずつしゃべるため、既存音声を即座に停止
             stopAllAudio();
@@ -508,11 +525,18 @@ export function App() {
     toDelete.forEach((id) => playedItemIdsRef.current.delete(id));
   };
 
-  // 動画読み込み (Fileオブジェクト または ファイルパスに対応)
+  // 動画読み込み (大容量動画でもメモリを消費しないネイティブストリーミング対応)
   const handleVideoSelect = (fileOrPath: File | string) => {
+    // 既存のBlob URLがあれば破棄してメモリリーク・肥大化を完全防止
+    if (videoSrc && videoSrc.startsWith('blob:')) {
+      try {
+        URL.revokeObjectURL(videoSrc);
+      } catch {}
+    }
+
     if (typeof fileOrPath === 'string') {
       setRawVideoPath(fileOrPath);
-      // TauriのアセットプロトコルでLinuxネイティブ動画を再生
+      // TauriのアセットプロトコルでLinuxネイティブ動画をディスクから直接Rangeストリーミング
       setVideoSrc(convertFileSrc(fileOrPath));
     } else {
       const path = (fileOrPath as unknown as { path?: string }).path;
@@ -521,10 +545,63 @@ export function App() {
         setVideoSrc(convertFileSrc(path));
       } else {
         const url = URL.createObjectURL(fileOrPath);
+        setRawVideoPath(null);
         setVideoSrc(url);
       }
     }
   };
+
+  // ネイティブOSドラッグ＆ドロップ対応 (大容量動画・PSD・ZIPをRAM展開せずファイルパスで即座に高速ロード)
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    try {
+      getCurrentWindow()
+        .onDragDropEvent((event) => {
+          if (event.payload.type === 'drop') {
+            const paths = event.payload.paths;
+            if (paths && paths.length > 0) {
+              const filePath = paths[0];
+              const lower = filePath.toLowerCase();
+              if (
+                lower.endsWith('.mp4') ||
+                lower.endsWith('.mkv') ||
+                lower.endsWith('.webm') ||
+                lower.endsWith('.mov') ||
+                lower.endsWith('.avi') ||
+                lower.endsWith('.m4v')
+              ) {
+                handleVideoSelect(filePath);
+              } else if (lower.endsWith('.zip') || lower.endsWith('.psd')) {
+                setTachieTargetCharId(null);
+                setIsTachieModalOpen(true);
+              } else if (lower.endsWith('.json')) {
+                fetch(convertFileSrc(filePath))
+                  .then((res) => res.json())
+                  .then((proj) => {
+                    if (proj.name) setProjectName(proj.name);
+                    if (proj.characters?.length > 0) setCharacters(proj.characters);
+                    if (proj.items) setItems(proj.items);
+                    if (proj.timeline?.duration) setVideoDuration(proj.timeline.duration);
+                  })
+                  .catch(() => {});
+              }
+            }
+          }
+        })
+        .then((un) => {
+          unlisten = un;
+        })
+        .catch((err) => {
+          console.warn('Native DragDrop listener warning:', err);
+        });
+    } catch (e) {
+      console.warn('getCurrentWindow DragDrop error:', e);
+    }
+
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   // セリフ追加 (重複ダブりを完全防止し一人ずつ順番に配置)
   const handleAddVoiceItem = async (characterId: string, text: string, startTime: number, expression: string = 'default') => {
@@ -766,12 +843,12 @@ export function App() {
       if (segments.length === 0) return;
 
       const dialoguePairs = [
-        ['Starting from here!', 'Excited to see what happens.'],
-        ['Watch the screen closely!', 'Stay focused!'],
-        ['Something incredible happened!', 'A must-see highlight!'],
-        ['Watch out! Danger ahead!', 'Stay calm and handle it!'],
-        ['We did it! Huge success!', 'What an amazing outcome!'],
-        ['Still more action to come!', 'Keep cheering us on!'],
+        ['ここからスタートなのだ！', '何が起こるか楽しみですわね。'],
+        ['画面をしっかり見ててほしいのだ！', '油断せず集中していきましょう。'],
+        ['うわっ、すごいことが起きたのだ！', 'これは絶対に見逃せない見どころですわ！'],
+        ['危ない！前方に注意なのだ！', '落ち着いて華麗に対処してくださいまし！'],
+        ['やったー！大成功なのだ！', '素晴らしい結果を残せましたわね！'],
+        ['まだまだ見せ場はこれからなのだ！', '最後まで応援よろしくお願いしますわ！'],
       ];
 
       const newClips: VoiceItem[] = [];
@@ -781,7 +858,8 @@ export function App() {
         const isZunda = i % 2 === 0;
         const char = (isZunda ? characters[0] : characters[1]) || characters[0];
         const pair = dialoguePairs[Math.floor(i / 2) % dialoguePairs.length];
-        const lineText = isZunda ? pair[0] : pair[1];
+        const rawLineText = isZunda ? pair[0] : pair[1];
+        const lineText = formatSpeechWithPersona(char.name, rawLineText);
         const expr = i % 4 === 2 ? 'shock' : i % 4 === 3 ? 'smile' : 'default';
 
         try {
@@ -864,6 +942,9 @@ export function App() {
             audioBlobUrl,
             phonemes: result.phonemes,
             isSynthesizing: false,
+            se: line.se,
+            anim: line.anim,
+            terminal: line.terminal,
           });
 
           // Pacing: add small 0.15s gap between dialogue lines
@@ -883,8 +964,41 @@ export function App() {
     }
   };
 
-  // Cards ↔ YAML 自動同期ハンドラー
-  const handleSyncFromYaml = async (lines: ParsedScriptLine[]): Promise<void> => {
+  // Cards ↔ YAML 自動同期ハンドラー (セリフ行 & YAML全体設定config両対応)
+  const handleSyncFromYaml = async (lines: ParsedScriptLine[], config?: ParsedYamlConfig): Promise<void> => {
+    // 1. YAML 全体設定 (config.characters) の反映
+    if (config?.characters) {
+      let hasCharUpdates = false;
+      const updatedChars = characters.map((c) => {
+        const entryKey = Object.keys(config.characters!).find((k) => {
+          const matched = matchCharacter(k, [c]);
+          return matched && matched.id === c.id;
+        });
+        if (!entryKey) return c;
+
+        const conf = config.characters![entryKey];
+        hasCharUpdates = true;
+
+        const sub = (conf.subtitles || conf.subtitle) as Record<string, unknown> | undefined;
+        const newSubStyle = sub ? { ...c.subtitleStyle, ...sub } : c.subtitleStyle;
+
+        return {
+          ...c,
+          position: conf.position ?? c.position,
+          customX: conf.x ?? c.customX,
+          customY: conf.y ?? c.customY,
+          scale: conf.scale ?? c.scale,
+          flipH: conf.flip ?? conf.flipH ?? c.flipH,
+          subtitleStyle: newSubStyle,
+        };
+      });
+
+      if (hasCharUpdates) {
+        setCharacters(updatedChars);
+        saveCharactersToConfig(updatedChars);
+      }
+    }
+
     if (lines.length === 0) {
       setItems([]);
       return;
@@ -895,6 +1009,13 @@ export function App() {
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+
+      // pause / wait 指定時: 指定秒数だけ時間を空けて次のセリフへ進む
+      if (line.isPauseOnly && line.pauseBefore) {
+        currentStart += line.pauseBefore;
+        continue;
+      }
+
       const char = matchCharacter(line.speaker, characters);
       const speed = typeof line.speed === 'number' ? line.speed : 1.0;
       const pitch = typeof line.pitch === 'number' ? line.pitch : 0.0;
@@ -920,6 +1041,11 @@ export function App() {
           ...existing,
           startTime,
           expression: expr,
+          terminal: line.terminal || existing.terminal,
+          se: line.se !== undefined ? line.se : existing.se,
+          anim: line.anim !== undefined ? line.anim : existing.anim,
+          flipH: line.flipH !== undefined ? line.flipH : existing.flipH,
+          scale: line.scale !== undefined ? line.scale : existing.scale,
         });
         currentStart = startTime + existing.duration + 0.15;
       } else {
@@ -949,6 +1075,11 @@ export function App() {
             audioBlobUrl,
             phonemes: result.phonemes,
             isSynthesizing: false,
+            terminal: line.terminal,
+            se: line.se,
+            anim: line.anim,
+            flipH: line.flipH,
+            scale: line.scale,
           });
 
           currentStart = startTime + duration + 0.15;
@@ -968,6 +1099,11 @@ export function App() {
             speedScale: speed,
             pitchScale: pitch,
             isSynthesizing: false,
+            terminal: line.terminal,
+            se: line.se,
+            anim: line.anim,
+            flipH: line.flipH,
+            scale: line.scale,
           });
           currentStart = startTime + duration + 0.15;
         }
@@ -1092,11 +1228,11 @@ export function App() {
         {!isScriptCollapsed && (
           <div
             onMouseDown={handleStartHorizontalResize}
-            className="w-2 hover:w-2.5 transition-all flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-1 flex-shrink-0"
-            title="Drag to resize Script panel width"
+            className="w-3 flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-0.5 flex-shrink-0 hover:bg-[#8ab4f8]/10 rounded-xs transition-colors"
+            title="Drag to resize Script panel width (Double-click to reset)"
             onDoubleClick={() => setScriptWidth(460)}
           >
-            <div className="w-1 h-12 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+            <div className="w-1 h-12 rounded-xs bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
           </div>
         )}
 
@@ -1128,7 +1264,7 @@ export function App() {
           <button
             type="button"
             onClick={handleToggleScriptCollapsed}
-            className="w-5 h-16 self-center rounded-l-lg bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
+            className="w-5 h-16 self-center rounded-l-xs bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
             title="Expand Script & Captions panel"
           >
             <PanelRightOpen className="w-3.5 h-3.5" />
@@ -1140,11 +1276,11 @@ export function App() {
       {!isTimelineCollapsed && (
         <div
           onMouseDown={handleStartVerticalResize}
-          className="h-1.5 hover:h-2 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0"
+          className="h-3 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0 hover:bg-[#8ab4f8]/10 rounded transition-colors"
           title="Drag to resize Timeline height (Double-click to reset)"
           onDoubleClick={() => setTimelineHeight(200)}
         >
-          <div className="h-1 w-16 rounded-full bg-[#222427] group-hover:bg-[#8ab4f8] transition-colors" />
+          <div className="h-1 w-16 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
         </div>
       )}
 

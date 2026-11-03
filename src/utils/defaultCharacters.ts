@@ -3,7 +3,7 @@ import { Character } from '../types';
 export const defaultCharacters: Character[] = [
   {
     id: 'zundamon',
-    name: 'Zundamon',
+    name: 'ずんだもん',
     ttsProviderId: 'voicevox',
     speakerId: 3,
     styleId: 3,
@@ -39,7 +39,7 @@ export const defaultCharacters: Character[] = [
   },
   {
     id: 'metan',
-    name: 'Shikoku Metan',
+    name: '四国めたん',
     ttsProviderId: 'voicevox',
     speakerId: 2,
     styleId: 2,

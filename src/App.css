@@ -23,19 +23,19 @@
     overflow: hidden;
   }
 
-  /* Google M3 スタイルのスクロールバー */
+  /* Linux Hacker スタイルの角張りスクロールバー */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #3c4043;
-    border-radius: 9999px;
+    background: #2e3135;
+    border-radius: 1px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #5f6368;
+    background: #474b52;
   }
 }

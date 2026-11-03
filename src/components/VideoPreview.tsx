@@ -69,6 +69,110 @@ function splitTextIntoBalancedLines(text: string, maxCharsPerLine = 17): string[
   return [text];
 }
 
+/**
+ * エンジニア向け技術解説動画用: ターミナルウィンドウの Canvas 描画
+ */
+function drawTerminalWindow(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  _height: number,
+  terminal: { cmd: string; output?: string }
+) {
+  ctx.save();
+
+  const termW = Math.min(1240, width * 0.72);
+  const termH = terminal.output ? 360 : 200;
+  const termX = (width - termW) / 2;
+  const termY = 90;
+
+  // Window Shadow
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.7)';
+  ctx.shadowBlur = 32;
+  ctx.shadowOffsetY = 12;
+
+  // Window Background (Sleek dark glass)
+  ctx.fillStyle = 'rgba(15, 17, 21, 0.94)';
+  ctx.beginPath();
+  ctx.roundRect?.(termX, termY, termW, termH, 16);
+  ctx.fill();
+
+  // Reset shadow for inner elements
+  ctx.shadowColor = 'transparent';
+
+  // Window Border
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Title Bar Header
+  const headerH = 42;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.beginPath();
+  ctx.roundRect?.(termX, termY, termW, headerH, [16, 16, 0, 0]);
+  ctx.fill();
+
+  // Title Bar Separator
+  ctx.beginPath();
+  ctx.moveTo(termX, termY + headerH);
+  ctx.lineTo(termX + termW, termY + headerH);
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Mac Window Dots
+  const dotY = termY + headerH / 2;
+  const dots = [
+    { x: termX + 22, color: '#ff5f56' },
+    { x: termX + 42, color: '#ffbd2e' },
+    { x: termX + 62, color: '#27c93f' },
+  ];
+  dots.forEach((dot) => {
+    ctx.beginPath();
+    ctx.arc(dot.x, dotY, 6, 0, Math.PI * 2);
+    ctx.fillStyle = dot.color;
+    ctx.fill();
+  });
+
+  // Terminal Title
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+  ctx.font = '600 13px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('bash ~ terminal', termX + termW / 2, dotY);
+
+  // Terminal Body Content
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+
+  const contentX = termX + 28;
+  const contentY = termY + headerH + 20;
+
+  // Prompt: ❯ in bright emerald
+  ctx.font = '700 24px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.fillStyle = '#10b981';
+  ctx.fillText('❯ ', contentX, contentY);
+
+  const promptWidth = ctx.measureText('❯ ').width;
+
+  // Command in crisp white
+  ctx.fillStyle = '#f8fafc';
+  ctx.font = '600 24px ui-monospace, SFMono-Regular, Menlo, monospace';
+  ctx.fillText(terminal.cmd, contentX + promptWidth, contentY);
+
+  // Terminal Output (if present)
+  if (terminal.output) {
+    const outY = contentY + 36;
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = '500 20px ui-monospace, SFMono-Regular, Menlo, monospace';
+    const outLines = terminal.output.split('\n').slice(0, 7);
+    outLines.forEach((l, idx) => {
+      ctx.fillText(l, contentX, outY + idx * 28);
+    });
+  }
+
+  ctx.restore();
+}
+
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoSrc,
   items,
@@ -315,25 +419,72 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             ctx.filter = 'none';
           }
 
-          const charHeight = height * 0.54;
+          // アニメーション (立ち絵の跳ね・ポップ・うなずき・揺れ)
+          let animOffsetY = 0;
+          let animOffsetX = 0;
+          let animScale = 1.0;
+
+          if (isSpeaking && isPlaying) {
+            const speechProgress = currentTime - (currentVoiceItem?.startTime || 0);
+            const animType = currentVoiceItem?.anim || 'bounce';
+
+            if (animType === 'bounce') {
+              // 最初の0.26秒間にピョコッと上に跳ねる（YMM4定番のポップアニメーション）
+              if (speechProgress >= 0 && speechProgress < 0.26) {
+                const hopRatio = speechProgress / 0.26;
+                animOffsetY = -Math.sin(hopRatio * Math.PI) * 24;
+              }
+            } else if (animType === 'pop') {
+              // 最初の0.2秒間に一瞬拡大して戻る
+              if (speechProgress >= 0 && speechProgress < 0.2) {
+                const popRatio = speechProgress / 0.2;
+                animScale = 1.0 + Math.sin(popRatio * Math.PI) * 0.08;
+              }
+            } else if (animType === 'shake') {
+              // 最初の0.35秒間に激しく揺れる（ツッコミ・驚き・ショック）
+              if (speechProgress >= 0 && speechProgress < 0.35) {
+                const decay = 1.0 - speechProgress / 0.35;
+                animOffsetX = Math.sin(speechProgress * 50) * 10 * decay;
+              }
+            } else if (animType === 'nod') {
+              // 最初の0.24秒間にうなずく
+              if (speechProgress >= 0 && speechProgress < 0.24) {
+                const nodRatio = speechProgress / 0.24;
+                animOffsetY = Math.sin(nodRatio * Math.PI) * 16;
+              }
+            }
+          }
+
+          // キャラクターのスケール適用（セリフ単位のscale または キャラクターデフォルトのscale）
+          const baseScale = (currentVoiceItem?.scale ?? char.scale ?? 1.0) * animScale;
+          const charHeight = height * 0.54 * baseScale;
           // アンカーとなる基準アスペクト比（待機画像基準で安定化し、口パク時の伸縮・ブレを防止）
           const baseRatio = (baseIdleImg?.width && baseIdleImg?.height)
             ? (baseIdleImg.width / baseIdleImg.height)
             : (activeImg.width / activeImg.height);
           const charWidth = baseRatio * charHeight;
 
-          // キャラクター上下の揺れは不要（地面に安定接地）
           let charX = 80;
-          if (char.position === 'right') {
+          if (char.customX !== undefined) {
+            charX = char.customX;
+          } else if (char.position === 'right') {
             charX = width - charWidth - 80;
           } else if (char.position === 'center') {
             charX = (width - charWidth) / 2;
           }
+          charX += animOffsetX;
 
-          const charY = height - charHeight;
+          let charY = height - charHeight;
+          if (char.customY !== undefined) {
+            charY = char.customY;
+          }
+          charY += animOffsetY;
 
-          // 左右反転 (Horizontal Flip) の適用
-          const isFlipped = Boolean(char.flipH || char.flipX);
+          // 左右反転 (Horizontal Flip) の適用 (セリフごとのflipHオーバーライド対応)
+          const isFlipped = currentVoiceItem?.flipH !== undefined
+            ? currentVoiceItem.flipH
+            : Boolean(char.flipH || char.flipX);
+
           if (isFlipped) {
             ctx.save();
             ctx.translate(charX + charWidth, 0);
@@ -347,6 +498,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           ctx.restore();
         }
       });
+    }
+
+    // 2.5 ターミナル・コード解説ウィンドウ描画 (エンジニア向け技術解説動画)
+    if (currentVoiceItem?.terminal?.cmd) {
+      drawTerminalWindow(ctx, width, height, currentVoiceItem.terminal);
     }
 
     // 3. プロフェッショナル字幕テロップ描画 (自動改行・二重縁取り・ルビ対応)
@@ -552,11 +708,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   }, [renderCanvas]);
 
   return (
-    <div className="flex flex-col bg-[#141517] rounded-xl overflow-hidden border border-[#282a2c] shadow-lg">
+    <div className="flex flex-col bg-[#111214] rounded-sm overflow-hidden border border-[#26282c] shadow-xl">
       {/* Video Preview Monitor */}
       <div
         ref={containerRef}
-        className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden"
+        className="relative aspect-video w-full bg-[#0a0a0c] flex items-center justify-center overflow-hidden"
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -577,17 +733,17 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             muted={isMuted}
             playsInline
-            preload="auto"
+            preload="metadata"
             onLoadedMetadata={handleLoadedMetadata}
             onCanPlay={handleCanPlay}
             onSeeked={handleSeeked}
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 select-none pointer-events-none">
-            <p className="text-[#5f6368] font-medium text-base mb-1">
-              Drop video file here or select from toolbar
+            <p className="text-[#5f6368] font-mono text-xs tracking-wider uppercase mb-1">
+              [ Drop video file here or select from toolbar ]
             </p>
-            <p className="text-[#3c4043] text-xs">
+            <p className="text-[#3c4043] font-mono text-[11px]">
               Supports MP4, MKV, WebM, MOV
             </p>
           </div>
@@ -605,24 +761,24 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       </div>
 
       {/* Controls */}
-      <div className="px-4 py-2.5 bg-[#18191b] flex items-center justify-between gap-3 border-t border-[#282a2c]">
+      <div className="px-3.5 py-2 bg-[#141517] flex items-center justify-between gap-3 border-t border-[#222428]">
         {/* Left: Play / Rewind */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
           <button
             onClick={onTogglePlay}
-            className="p-2 rounded-lg bg-[#3b82f6] hover:bg-[#2563eb] text-white shadow-sm transition active:scale-95"
+            className="px-2.5 py-1.5 rounded-sm bg-[#2563eb] hover:bg-[#1d4ed8] text-white shadow-xs transition active:scale-95 font-mono text-xs flex items-center gap-1"
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
             {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}
           </button>
           <button
             onClick={() => onSeek(0)}
-            className="p-2 rounded-lg bg-[#202124] hover:bg-[#282a2c] text-[#c4c7c5] hover:text-white border border-[#333538] transition"
+            className="p-1.5 rounded-sm bg-[#1a1b1e] hover:bg-[#222428] text-[#c4c7c5] hover:text-white border border-[#2a2c30] transition"
             title="Rewind to start"
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
-          <span className="text-xs font-mono tabular-nums text-[#a8aaa8] ml-1 inline-block min-w-[76px] select-none">
+          <span className="text-xs font-mono tabular-nums text-[#9ca3af] ml-1 inline-block min-w-[76px] select-none bg-[#0d0e10] px-2 py-0.5 border border-[#222428] rounded-xs">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
         </div>
@@ -636,7 +792,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             step={0.05}
             value={currentTime}
             onChange={(e) => onSeek(parseFloat(e.target.value))}
-            className="w-full h-1 bg-[#2e3135] rounded-lg appearance-none cursor-pointer accent-[#3b82f6] hover:h-1.5 transition-all"
+            className="w-full h-1 bg-[#25272c] rounded-none appearance-none cursor-pointer accent-[#3b82f6] transition-colors"
           />
         </div>
 
@@ -648,8 +804,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
                 const target = characters.find(c => c.position !== 'hidden');
                 if (target) onToggleCharacterFlip(target.id);
               }}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-transparent text-[#8e918f] border-[#333538] hover:text-white hover:border-[#8e918f] flex items-center gap-1.5 transition"
-              title="Flip character horizontally (左右反転)"
+              className="px-2 py-1 rounded-sm text-xs font-mono border bg-[#1a1b1e] text-[#9ca3af] border-[#2a2c30] hover:text-white hover:border-[#3f434a] flex items-center gap-1.5 transition"
+              title="Flip character horizontally"
             >
               <FlipHorizontal className="w-3.5 h-3.5" />
               Flip
@@ -658,10 +814,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           <button
             onClick={() => setShowAvatar(!showAvatar)}
-            className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition ${
+            className={`px-2 py-1 rounded-sm text-xs font-mono border flex items-center gap-1.5 transition ${
               showAvatar
-                ? 'bg-[#202124] text-[#10b981] border-[#3c4043]'
-                : 'bg-transparent text-[#8e918f] border-[#333538] hover:text-white'
+                ? 'bg-[#14231e] text-[#34d399] border-[#166534]'
+                : 'bg-[#1a1b1e] text-[#9ca3af] border-[#2a2c30] hover:text-white'
             }`}
             title="Toggle character avatar on screen"
           >
@@ -671,10 +827,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           <button
             onClick={() => setIsMuted(!isMuted)}
-            className="p-1.5 rounded-lg hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition"
+            className="p-1.5 rounded-sm hover:bg-[#202226] text-[#9ca3af] hover:text-white border border-transparent hover:border-[#2a2c30] transition"
             title={isMuted ? 'Unmute' : 'Mute'}
           >
-            {isMuted ? <VolumeX className="w-4 h-4 text-red-400" /> : <Volume2 className="w-4 h-4" />}
+            {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4" />}
           </button>
 
           <button
@@ -685,7 +841,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
                 canvasRef.current.requestFullscreen();
               }
             }}
-            className="p-1.5 rounded-lg hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition"
+            className="p-1.5 rounded-sm hover:bg-[#202226] text-[#9ca3af] hover:text-white border border-transparent hover:border-[#2a2c30] transition"
             title="Fullscreen"
           >
             <Maximize2 className="w-4 h-4" />

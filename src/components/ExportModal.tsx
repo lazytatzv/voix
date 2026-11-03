@@ -51,25 +51,25 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#1e1f20] border border-[#282a2c] rounded-3xl w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+      <div className="bg-[#121315] border border-[#2a2c30] rounded-sm w-full max-w-md overflow-hidden shadow-2xl flex flex-col">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#282a2c] flex items-center justify-between">
+        <div className="px-5 py-3 border-b border-[#202226] flex items-center justify-between bg-[#0e0f11]">
           <div className="flex items-center gap-2">
             <Film className="w-4 h-4 text-[#8ab4f8]" />
-            <h3 className="font-semibold text-sm text-[#e3e3e3]">Export Video (MP4)</h3>
+            <h3 className="font-semibold text-xs font-mono uppercase tracking-wider text-[#e3e3e3]">Export Video (MP4)</h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-[#8e918f] hover:text-white hover:bg-[#282a2c] transition"
+            className="p-1 rounded-sm text-[#8e918f] hover:text-white hover:bg-[#1a1b1e] transition"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Settings Area */}
-        <div className="p-6 space-y-4 text-xs">
-          <div className="bg-[#131314] p-4 rounded-2xl border border-[#282a2c] space-y-2">
+        <div className="p-5 space-y-4 text-xs font-mono">
+          <div className="bg-[#151619] p-3.5 rounded-sm border border-[#24262a] space-y-2">
             <div className="flex justify-between text-[#8e918f]">
               <span>Caption Clips</span>
               <span className="font-medium text-[#e3e3e3]">{voiceClips.length} clips</span>
@@ -85,12 +85,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           </div>
 
           <div>
-            <label className="text-xs text-[#c4c7c5] block mb-1.5 font-medium">Output File Path</label>
+            <label className="text-[11px] text-[#c4c7c5] block mb-1.5 uppercase">Output File Path</label>
             <input
               type="text"
               value={outputPath}
               onChange={(e) => setOutputPath(e.target.value)}
-              className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-xl px-3.5 py-2 text-xs text-[#e3e3e3] font-mono outline-none"
+              className="w-full bg-[#101113] border border-[#26282c] focus:border-[#3b82f6] rounded-sm px-3 py-1.5 text-xs text-[#e3e3e3] font-mono outline-none"
             />
           </div>
 

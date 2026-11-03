@@ -17,6 +17,12 @@ export interface ScriptLinePrompt {
   characterName: string;
   text: string;
   expression?: 'default' | 'smile' | 'shock' | 'trouble' | 'angry';
+  se?: string;
+  anim?: string;
+  terminal?: {
+    cmd: string;
+    output?: string;
+  };
 }
 
 export type AiProviderType = 'gemini' | 'remote_ollama' | 'remote_openai' | 'local_persona';
@@ -24,7 +30,7 @@ export type AiProviderType = 'gemini' | 'remote_ollama' | 'remote_openai' | 'loc
 export interface GenerateFullScriptRequest {
   topic: string;
   characters: { id: string; name: string }[];
-  style?: 'gaming' | 'tech_review' | 'comedy_banter' | 'shorts_hook' | 'general';
+  style?: 'gaming' | 'tech_review' | 'linux_tech' | 'comedy_banter' | 'shorts_hook' | 'general';
   lineCount?: number;
   provider?: AiProviderType;
   apiKey?: string;
@@ -46,6 +52,10 @@ export function formatSpeechWithPersona(characterName: string, text: string): st
     res = res.replace(/でした([！!。.]|$)/g, 'だったのだ$1');
     res = res.replace(/ました([！!。.]|$)/g, 'たのだ$1');
     res = res.replace(/ですよ|ですね/g, 'のだ');
+    res = res.replace(/するよ([！!。.]|$)/g, 'するのだ$1');
+    res = res.replace(/だよ([！!。.]|$)/g, 'なのだ$1');
+    res = res.replace(/るよ([！!。.]|$)/g, 'るのだ$1');
+    res = res.replace(/たよ([！!。.]|$)/g, 'たのだ$1');
     res = res.replace(/です([！!。.]|$)/g, 'なのだ$1');
     res = res.replace(/ます([！!。.]|$)/g, 'るのだ$1');
     res = res.replace(/(?<!の)だ([！!。.]|$)/g, 'なのだ$1');
@@ -145,7 +155,7 @@ function processLocalAi(action: AiAction, text: string): string {
     case 'translate_ja':
       return `こんにちは！ ${text}`;
     case 'reaction':
-      return `Wait, what?! ${text}`;
+      return `えっ、本当に！？ ${text}`;
     case 'shorten':
       return text.length > 20 ? text.slice(0, 18) + '...' : text;
   }
@@ -158,19 +168,19 @@ async function callGeminiApi(action: AiAction, text: string, apiKey: string): Pr
       prompt = `Translate into natural conversational English for YouTube: "${text}". Only return translation.`;
       break;
     case 'translate_ja':
-      prompt = `Translate into Japanese YouTube caption: "${text}". Only return translation.`;
+      prompt = `以下の文章を動画の字幕用に自然な日本語に翻訳・清書してください: "${text}"。日本語のセリフのみを出力してください。`;
       break;
     case 'zundamon':
-      prompt = `Rewrite into Zundamon persona (ends with 〜なのだ or 〜のだ, energetic, cute): "${text}".`;
+      prompt = `以下の文章をずんだもんの口調（語尾は「〜なのだ」「〜のだ」、一人称は「ボク」）の自然な日本語に書き換えてください。日本語セリフのみ出力してください: "${text}"`;
       break;
     case 'metan':
-      prompt = `Rewrite into Shikoku Metan persona (ends with 〜ですわ, high-class ojou-sama tsukkomi): "${text}".`;
+      prompt = `以下の文章を四国めたんの口調（語尾は「〜ですわ」「〜かしら」「〜わね」、一人称は「わたくし」）の自然なお嬢様日本語に書き換えてください。日本語セリフのみ出力してください: "${text}"`;
       break;
     case 'reaction':
-      prompt = `Generate a short YouTube video reaction based on: "${text}".`;
+      prompt = `以下の内容に対する短いYouTube動画リアクションセリフ（驚きやツッコミ）を1行のみ自然な日本語で生成してください: "${text}"`;
       break;
     case 'shorten':
-      prompt = `Shorten for video subtitles: "${text}".`;
+      prompt = `以下のセリフを動画の字幕テロップ用に短く要約した自然な日本語にしてください: "${text}"`;
       break;
   }
 
@@ -219,11 +229,18 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
     ? `添付された画像はユーザーが編集中の動画から時系列順に抽出したスクリーンショット（キーフレーム）です。
 動画で実際に何が起きているか（ゲームの進行、敵の出現、ハプニング、場面展開など）を視覚的に細かく読み取り、
 動画の展開と100%シンクロした臨場感のある実況・解説掛け合い台本を${lineCount}行作成してください！
-トピックの補足情報: ${topic || 'ゲーム実況'}`
+トピックの補足情報: ${topic || 'ゲーム実況'}
+※すべてのセリフ（text）は必ず自然な日本語で生成してください。`
     : `以下のトピックに基づいて、キャラクター同士のテンポが良い魅力的な掛け合い台本を${lineCount}行作成してください。
-トピック: ${topic}`;
+トピック: ${topic || '実況動画'}
+※すべてのセリフ（text）は必ず自然な日本語で生成してください。`;
 
   const systemPrompt = `あなたはYouTube・ニコニコ動画の動画編集アプリ「Voix」の動画監督AIです。
+
+【最重要・言語指定】
+生成するセリフ（text）は、100%必ずすべて自然でテンポの良い「日本語」で出力してください。
+英語や他言語のセリフは絶対に出力せず、YouTube/ニコニコ動画で定番の魅力的な日本語掛け合い会話（各キャラクターの語尾や口調・ペルソナを徹底的に反映）で出力してください。
+All dialogue 'text' field values MUST be in natural Japanese only. Do NOT output English dialogue.
 
 ${baseInstructions}
 動画スタイル: ${style}
@@ -233,10 +250,27 @@ ${charProfiles}
 【出力形式】
 必ず以下のJSON形式のみを出力してください（Markdownコードブロック可）:
 [
-  { "speaker": "${char1.name}", "text": "セリフ", "expression": "smile" },
-  { "speaker": "${char2.name}", "text": "セリフ", "expression": "shock" }
+  {
+    "speaker": "${char1.name}",
+    "text": "日本語のセリフ",
+    "expression": "smile",
+    "se": "pop",
+    "anim": "bounce"
+  },
+  {
+    "speaker": "${char2.name}",
+    "text": "日本語のセリフ",
+    "expression": "default",
+    "cmd": "pacman -Syu",
+    "output": ":: Synchronizing package databases...",
+    "se": "chime"
+  }
 ]
-※ expression は "default", "smile", "shock", "trouble", "angry" のいずれか`;
+※ expression: "default", "smile", "shock", "trouble", "angry"
+※ se (任意): "pop", "chime", "click", "punch", "error", "success", "laser", "kira", "question"
+※ anim (任意): "bounce", "pop", "shake", "nod"
+※ cmd / output (技術解説時任意): 画面上に表示するLinuxターミナルコマンドとその出力
+※ 重ねて警告: セリフ(text)は必ず自然な日本語で出力してください。`;
 
   // 1. Google Gemini 2.0 Flash (マルチモーダル動画認識対応)
   if ((provider === 'gemini' || !remoteEndpoint) && apiKey?.trim()) {
@@ -340,17 +374,38 @@ function parseScriptJson(
   if (!jsonMatch) return [];
 
   try {
-    const list = JSON.parse(jsonMatch[0]) as { speaker: string; text: string; expression?: string }[];
+    const list = JSON.parse(jsonMatch[0]) as {
+      speaker: string;
+      text: string;
+      expression?: string;
+      se?: string;
+      anim?: string;
+      cmd?: string;
+      output?: string;
+      terminal?: { cmd: string; output?: string };
+    }[];
+
     return list.map((item) => {
       const matchedChar =
         characters.find((c) => c.name.includes(item.speaker) || item.speaker.includes(c.name)) || defaultChar;
       const formatted = formatSpeechWithPersona(matchedChar.name, item.text);
       const expr = (item.expression as any) || inferExpressionFromText(formatted);
+
+      let terminal: { cmd: string; output?: string } | undefined = undefined;
+      if (item.terminal?.cmd) {
+        terminal = item.terminal;
+      } else if (item.cmd) {
+        terminal = { cmd: item.cmd, output: item.output };
+      }
+
       return {
         characterId: matchedChar.id,
         characterName: matchedChar.name,
         text: formatted,
         expression: expr,
+        se: item.se ? String(item.se).trim() : undefined,
+        anim: item.anim ? String(item.anim).trim() : undefined,
+        terminal,
       };
     });
   } catch {
@@ -361,50 +416,92 @@ function parseScriptJson(
 function generateDynamicScript(
   topic: string,
   characters: { id: string; name: string }[],
-  style: string,
-  count: number
+  style: string = 'general',
+  count: number = 6
 ): ScriptLinePrompt[] {
   const c1 = characters[0];
   const c2 = characters.length > 1 ? characters[1] : characters[0];
-  const cleanTopic = topic.trim() || 'Minecraft';
+  const cleanTopic = topic.trim() || '注目の最新テーマ';
 
-  let templates: { speakerIsFirst: boolean; baseText: string }[] = [];
+  interface DynamicTemplate {
+    speakerIsFirst: boolean;
+    baseText: string;
+    se?: string;
+    anim?: string;
+    terminal?: { cmd: string; output?: string };
+  }
 
-  if (style === 'gaming') {
+  let templates: DynamicTemplate[] = [];
+
+  if (style === 'linux_tech' || style === 'tech_review') {
     templates = [
-      { speakerIsFirst: true, baseText: `今回は話題の${cleanTopic}を本気でプレイしていくよ！` },
-      { speakerIsFirst: false, baseText: `楽しみですね。油断すると即ゲームオーバーですよ？` },
-      { speakerIsFirst: true, baseText: `任せて！ボクの神技プレイを目に焼き付けるといいよ！` },
-      { speakerIsFirst: false, baseText: `あ、前方に巨大な敵が出現しました！逃げてください！` },
-      { speakerIsFirst: true, baseText: `うわあぁー！危ない！ギリギリ紙一重でセーフだったよ！` },
-      { speakerIsFirst: false, baseText: `素晴らしい回避でした！このまま勝利を掴み取りましょう！` },
-      { speakerIsFirst: true, baseText: `やったー完全勝利！みんな高評価と登録よろしくね！` },
-      { speakerIsFirst: false, baseText: `最後までご視聴いただき本当にありがとうございました。` },
+      {
+        speakerIsFirst: true,
+        baseText: `今回はArch Linuxで絶対に導入すべき神ツール「${cleanTopic}」を紹介するよ！`,
+        se: 'pop',
+        anim: 'bounce',
+      },
+      {
+        speakerIsFirst: false,
+        baseText: `エンジニアやLinux使いの間でとても話題になっていますね。`,
+        anim: 'nod',
+      },
+      {
+        speakerIsFirst: true,
+        baseText: `まずはターミナルからサクッとインストールしてみるよ！`,
+        se: 'click',
+        terminal: {
+          cmd: `sudo pacman -S --needed ${cleanTopic.toLowerCase().replace(/\s+/g, '-')}`,
+          output: 'resolving dependencies...\nlooking for conflicting packages...\nPackages (1) done.\n:: Proceed with installation? [Y/n] Y',
+        },
+      },
+      {
+        speakerIsFirst: false,
+        baseText: `爆速で完了しましたわね。設定はYAMLですべてカスタマイズ可能ですわ。`,
+        se: 'chime',
+      },
+      {
+        speakerIsFirst: true,
+        baseText: `実行してみると超カッコいいのだ！作業効率が10倍に跳ね上がるよ！`,
+        se: 'success',
+        anim: 'bounce',
+        terminal: {
+          cmd: `${cleanTopic.toLowerCase().replace(/\s+/g, '-')} --version`,
+          output: 'v2.8.4 [linux-x86_64 release]\nAll checks passed in 12ms.',
+        },
+      },
+      {
+        speakerIsFirst: false,
+        baseText: `これは常用確定ですわね。詳細は概要欄のドキュメントをご覧ください。`,
+        se: 'kira',
+      },
     ];
-  } else if (style === 'tech_review') {
+  } else if (style === 'gaming') {
     templates = [
-      { speakerIsFirst: true, baseText: `みんな注目！今日は今話題沸騰中の${cleanTopic}について解説するよ！` },
-      { speakerIsFirst: false, baseText: `SNSやクリエイターの間でも非常に話題になっていますね。` },
-      { speakerIsFirst: true, baseText: `なんとこれ、使うだけで作業時間が半分以下に激減する神ツールなんだよ！` },
-      { speakerIsFirst: false, baseText: `初心者でも直感的にすぐ使いこなせるUIが大きな魅力です。` },
-      { speakerIsFirst: true, baseText: `誰でも今すぐ無料で試せるから、ぜひ使ってみてほしいよ！` },
-      { speakerIsFirst: false, baseText: `詳しい導入リンクは概要欄に載せておきますね。` },
+      { speakerIsFirst: true, baseText: `今回は話題の${cleanTopic}を本気でプレイしていくよ！`, se: 'pop', anim: 'bounce' },
+      { speakerIsFirst: false, baseText: `楽しみですね。油断すると即ゲームオーバーですよ？` },
+      { speakerIsFirst: true, baseText: `任せて！ボクの神技プレイを目に焼き付けるといいよ！`, anim: 'bounce' },
+      { speakerIsFirst: false, baseText: `あ、前方に巨大な敵が出現しました！逃げてください！`, se: 'laser' },
+      { speakerIsFirst: true, baseText: `うわあぁー！危ない！ギリギリ紙一重でセーフだったよ！`, se: 'punch', anim: 'shake' },
+      { speakerIsFirst: false, baseText: `素晴らしい回避でした！このまま勝利を掴み取りましょう！`, se: 'chime' },
+      { speakerIsFirst: true, baseText: `やったー完全勝利！みんな高評価と登録よろしくね！`, se: 'success', anim: 'bounce' },
+      { speakerIsFirst: false, baseText: `最後までご視聴いただき本当にありがとうございました。`, se: 'kira' },
     ];
   } else if (style === 'shorts_hook') {
     templates = [
-      { speakerIsFirst: true, baseText: `これ知ってた！？${cleanTopic}の超ヤバい裏技を教えちゃうよ！` },
+      { speakerIsFirst: true, baseText: `これ知ってた！？${cleanTopic}の超ヤバい裏技を教えちゃうよ！`, se: 'pop', anim: 'bounce' },
       { speakerIsFirst: false, baseText: `実はこれ、9割以上の人がまだ知らない隠し仕様なんです。` },
-      { speakerIsFirst: true, baseText: `設定をひとつ変えるだけで劇的に変わるんだよ！` },
-      { speakerIsFirst: false, baseText: `後で見返せるように今すぐ保存しておいてくださいね。` },
+      { speakerIsFirst: true, baseText: `設定をひとつ変えるだけで劇的に変わるんだよ！`, se: 'chime' },
+      { speakerIsFirst: false, baseText: `後で見返せるように今すぐ保存しておいてくださいね。`, se: 'kira' },
     ];
   } else {
     templates = [
-      { speakerIsFirst: true, baseText: `大変！${cleanTopic}について重大な事実に気づいちゃったよ！` },
+      { speakerIsFirst: true, baseText: `大変！${cleanTopic}について重大な事実に気づいちゃったよ！`, se: 'pop', anim: 'bounce' },
       { speakerIsFirst: false, baseText: `一体何ですか？くだらないことじゃないといいですけど。` },
-      { speakerIsFirst: true, baseText: `なんと、${cleanTopic}は全人類が知るべき最高のコンテンツだったんだよ！` },
-      { speakerIsFirst: false, baseText: `……当たり前すぎてリアクションに困ります。` },
-      { speakerIsFirst: true, baseText: `えっ！？知ってたの！？ボクだけ知らなかったのか…！` },
-      { speakerIsFirst: false, baseText: `まったく、相変わらずお調子者ですね。` },
+      { speakerIsFirst: true, baseText: `なんと、${cleanTopic}は全人類が知るべき最高のコンテンツだったんだよ！`, se: 'chime' },
+      { speakerIsFirst: false, baseText: `……当たり前すぎてリアクションに困ります。`, se: 'question', anim: 'nod' },
+      { speakerIsFirst: true, baseText: `えっ！？知ってたの！？ボクだけ知らなかったのか…！`, se: 'punch', anim: 'shake' },
+      { speakerIsFirst: false, baseText: `まったく、相変わらずお調子者ですね。`, se: 'kira' },
     ];
   }
 
@@ -420,6 +517,9 @@ function generateDynamicScript(
       characterName: char.name,
       text: textWithPersona,
       expression: expr,
+      se: tpl.se,
+      anim: tpl.anim,
+      terminal: tpl.terminal,
     };
   });
 }

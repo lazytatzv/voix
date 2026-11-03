@@ -224,24 +224,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in select-none">
-      <div className="bg-[#141517] border border-[#2e3135] rounded-3xl w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col overflow-hidden font-sans">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+      <div className="bg-[#121315] border border-[#2a2c30] rounded-sm w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col overflow-hidden font-sans">
         {/* Header */}
-        <div className="px-6 py-3.5 bg-[#101113] border-b border-[#242628] flex items-center justify-between">
+        <div className="px-5 py-3 bg-[#0d0e10] border-b border-[#202226] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-xl bg-[#1e2023] border border-[#2e3135] text-[#8ab4f8] flex items-center justify-center shadow-xs">
+            <div className="w-7 h-7 rounded-sm bg-[#16171a] border border-[#26282c] text-[#8ab4f8] flex items-center justify-center shadow-xs">
               <Terminal className="w-4 h-4" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-sm text-[#e3e3e3] tracking-tight">
+                <h3 className="font-semibold text-xs font-mono uppercase tracking-wider text-[#e3e3e3]">
                   Voix Preferences & Control Center
                 </h3>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#1e2023] border border-[#2e3135] text-[#8e918f]">
-                  Linux XDG
+                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-xs bg-[#16171a] border border-[#26282c] text-[#8e918f]">
+                  ~/.config/voix
                 </span>
               </div>
-              <p className="text-[11px] text-[#8e918f]">
+              <p className="text-[10px] text-[#8e918f]">
                 Centralized settings for AI offloading, TTS speech, dotfiles, and video rendering
               </p>
             </div>
@@ -249,7 +249,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <button
             onClick={onClose}
-            className="p-1.5 rounded-lg text-[#8e918f] hover:text-white hover:bg-[#202124] transition"
+            className="p-1 rounded-sm text-[#8e918f] hover:text-white hover:bg-[#1a1b1e] transition"
           >
             <X className="w-4 h-4" />
           </button>

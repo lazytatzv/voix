@@ -24,8 +24,8 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   rawVideoPath,
   hasVideo,
 }) => {
-  const [topic, setTopic] = useState('Reaction when finding diamonds in Minecraft');
-  const [style, setStyle] = useState<'gaming' | 'tech_review' | 'comedy_banter' | 'shorts_hook'>('gaming');
+  const [topic, setTopic] = useState('Arch Linuxのターミナル快適化とNeovim設定');
+  const [style, setStyle] = useState<'gaming' | 'tech_review' | 'linux_tech' | 'comedy_banter' | 'shorts_hook'>('linux_tech');
   const [lineCount, setLineCount] = useState<number>(6);
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>(() =>
     characters.slice(0, 2).map((c) => c.id)
@@ -61,10 +61,11 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   if (!isOpen) return null;
 
   const quickTopics = [
-    { label: '🎮 Gaming: Minecraft', text: 'Reaction when finding diamonds in Minecraft' },
-    { label: '🥑 Comedy: Zunda & Metan', text: 'Funny everyday comedy banter between Zundamon and Metan' },
-    { label: '💡 Tech: AI Workstation', text: 'Introduction to cutting-edge AI technology and Voix' },
-    { label: '⚡ Shorts: Lifehack Tips', text: 'Secret tricks and gaming tips 90% of people don’t know' },
+    { label: '🐧 Linux: Arch & Fastfetch', text: 'Arch Linuxの爆速化設定とおすすめCLIツール解説' },
+    { label: '💡 Tech: AI Tools', text: '最新AI技術と動画編集ソフトVoixの便利な使い方解説' },
+    { label: '🥑 Comedy: Zundamon & Metan', text: 'ずんだもんと四国めたんのクスッと笑える日常コント掛け合い' },
+    { label: '🎮 Gaming: Epic Moments', text: '白熱したゲーム実況とハプニング・神プレイのリアクション' },
+    { label: '⚡ Dev: Terminal Hacks', text: '現役エンジニアの9割が知らないターミナル便利ショートカット裏技' },
   ];
 
   const handleToggleChar = (id: string) => {
@@ -87,7 +88,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
 
       let keyframes: string[] = [];
       if (useVideoVision && rawVideoPath) {
-        setStatusMessage('Extracting video frames for multimodal AI understanding...');
+        setStatusMessage('Extracting video frames (analyzing visual context)...');
         try {
           keyframes = await invoke<string[]>('extract_video_keyframes', {
             videoPath: rawVideoPath,
@@ -102,10 +103,10 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
         provider === 'remote_ollama'
           ? `Sending prompt to remote Ollama server (${remoteModel})...`
           : provider === 'remote_openai'
-          ? `Calling remote OpenAI-compatible server...`
+          ? `Sending prompt to remote OpenAI server...`
           : apiKey.trim()
-          ? 'Calling Gemini 2.0 Flash AI...'
-          : 'Generating with local persona engine...'
+          ? 'Generating Japanese script with Gemini 2.0 Flash...'
+          : 'Generating Japanese script with local AI engine...'
       );
 
       const activeChars = characters.filter((c) => selectedCharIds.includes(c.id));
@@ -121,51 +122,51 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
         videoKeyframes: keyframes,
       });
 
-      setStatusMessage(`Synthesizing voices for ${script.length} clips with VOICEVOX...`);
+      setStatusMessage(`Synthesizing ${script.length} audio clips with VOICEVOX...`);
       await onGenerateVideo(script);
       onClose();
     } catch (e: unknown) {
       const err = e as { message?: string } | string;
-      const msg = typeof err === 'string' ? err : err?.message || 'Generation failed';
+      const msg = typeof err === 'string' ? err : err?.message || 'Failed to generate script';
       setStatusMessage(`Error: ${msg}`);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="bg-[#18191b] border border-[#3c4043] rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in select-none">
+      <div className="bg-[#121315] border border-[#2a2c30] rounded-sm w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#282a2c] flex items-center justify-between bg-[#131415]">
+        <div className="px-5 py-3.5 border-b border-[#202226] flex items-center justify-between bg-[#0e0f11]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-[#282a2c] border border-[#3c4043] text-[#8ab4f8] flex items-center justify-center">
+            <div className="w-7 h-7 rounded-sm bg-[#18191c] border border-[#282a2e] text-[#8ab4f8] flex items-center justify-center">
               <Bot className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-semibold text-sm text-[#e3e3e3] flex items-center gap-2">
-                AI Script Generator
-                <span className="text-[10px] px-2 py-0.5 rounded bg-[#202124] border border-[#3c4043] text-[#8e918f] font-mono">
-                  Cloud & Remote Host
+              <h3 className="font-semibold text-xs text-[#e3e3e3] flex items-center gap-2 uppercase tracking-wide">
+                AI Script & Commentary Studio
+                <span className="text-[9px] px-1.5 py-0.2 rounded-xs bg-[#1a1c20] border border-[#2c2f34] text-[#8e918f] font-mono">
+                  Cloud / Remote
                 </span>
               </h3>
-              <p className="text-[11px] text-[#8e918f]">
-                Multi-speaker script generation with persona engine, video vision, and remote server support
+              <p className="text-[10px] text-[#8e918f]">
+                Auto-generate Japanese dialogue, sound effects, and character animations for video
               </p>
             </div>
           </div>
           <button
             onClick={onClose}
             disabled={isGenerating}
-            className="p-1.5 rounded-lg hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition disabled:opacity-40"
+            className="p-1 rounded-sm hover:bg-[#202226] text-[#8e918f] hover:text-white transition disabled:opacity-40"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="p-6 space-y-4 overflow-y-auto">
+        <div className="p-5 space-y-4 overflow-y-auto">
           {/* AI Backend Provider Selection */}
           <div>
-            <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
+            <label className="text-[11px] font-mono text-[#c4c7c5] block mb-1.5 uppercase">
               AI Generation Engine & Server
             </label>
             <div className="grid grid-cols-3 gap-1.5">
@@ -178,10 +179,10 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                   key={p.id}
                   type="button"
                   onClick={() => setProvider(p.id as any)}
-                  className={`p-2 rounded-lg border text-left transition ${
+                  className={`p-2 rounded-sm border text-left transition ${
                     provider === p.id
-                      ? 'bg-[#202124] border-[#3b82f6] text-white'
-                      : 'bg-[#131314] border-[#2e3135] text-[#8e918f] hover:text-[#e3e3e3]'
+                      ? 'bg-[#1e2430] border-[#3b82f6] text-white'
+                      : 'bg-[#151619] border-[#24262a] text-[#8e918f] hover:text-[#e3e3e3]'
                   }`}
                 >
                   <div className="text-xs font-semibold">{p.label}</div>
@@ -192,9 +193,9 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
 
             {/* Provider Specific Settings */}
             {provider === 'gemini' && (
-              <div className="mt-2.5 bg-[#131415] border border-[#282a2c] rounded-xl p-3 space-y-1.5 animate-in fade-in">
+              <div className="mt-2.5 bg-[#141518] border border-[#24262a] rounded-sm p-3 space-y-1.5 animate-in fade-in">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-[#c4c7c5]">Gemini API Key</span>
+                  <span className="font-mono text-xs text-[#c4c7c5]">Gemini API Key</span>
                   <a
                     href="https://aistudio.google.com/app/apikey"
                     target="_blank"
@@ -210,13 +211,13 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                   value={apiKey}
                   onChange={(e) => setApiKey(e.target.value)}
                   placeholder="Paste Gemini API Key (Leaves zero GPU/battery footprint)"
-                  className="w-full bg-[#18191b] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg px-3 py-1.5 text-xs text-[#e3e3e3] outline-none font-mono"
+                  className="w-full bg-[#101113] border border-[#2a2c30] focus:border-[#3b82f6] rounded-sm px-3 py-1.5 text-xs text-[#e3e3e3] outline-none font-mono"
                 />
               </div>
             )}
 
             {provider === 'remote_ollama' && (
-              <div className="mt-2.5 bg-[#131415] border border-[#282a2c] rounded-xl p-3 space-y-2 animate-in fade-in">
+              <div className="mt-2.5 bg-[#141518] border border-[#24262a] rounded-sm p-3 space-y-2 animate-in fade-in">
                 <div className="text-[11px] text-[#8e918f]">
                   Offloads LLM inference to your desktop PC or home server on the local network.
                 </div>
@@ -282,14 +283,14 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           {/* Topic / Prompt */}
           <div>
             <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5 flex items-center justify-between">
-              <span>Topic or Prompt Directive</span>
-              <span className="text-[10px] text-[#8e918f]">Any language</span>
+              <span>Script Topic & Prompt (Outputs Japanese dialogue)</span>
+              <span className="text-[10px] text-[#8e918f]">Outputs Japanese</span>
             </label>
             <textarea
               rows={2}
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Reaction when discovering diamonds in Minecraft..."
+              placeholder="e.g. Exciting commentary reacting to finding diamonds in Minecraft..."
               className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg p-3 text-xs text-[#e3e3e3] outline-none transition resize-none font-normal"
             />
 
@@ -346,27 +347,28 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             </div>
           </div>
 
-          {/* Video Style & Line Count (100% Dark Buttons, Zero White Dropdown) */}
+          {/* Video Style & Line Count */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
+              <label className="text-[11px] font-mono uppercase text-[#c4c7c5] block mb-1.5">
                 Style / Format
               </label>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
-                  { id: 'gaming', label: '🎮 Gaming' },
+                  { id: 'linux_tech', label: '🐧 Linux & Code' },
                   { id: 'tech_review', label: '💡 Tech / Explainer' },
                   { id: 'comedy_banter', label: '🥑 Comedy / Banter' },
+                  { id: 'gaming', label: '🎮 Gaming' },
                   { id: 'shorts_hook', label: '⚡ Shorts' },
                 ].map((s) => (
                   <button
                     key={s.id}
                     type="button"
                     onClick={() => setStyle(s.id as any)}
-                    className={`px-2 py-1.5 rounded-lg text-xs font-medium border text-left transition ${
+                    className={`px-2 py-1.5 rounded-sm text-xs font-mono border text-left transition ${
                       style === s.id
-                        ? 'bg-[#202124] border-[#3b82f6] text-white shadow-xs'
-                        : 'bg-[#131314] border-[#2e3135] text-[#8e918f] hover:text-[#e3e3e3]'
+                        ? 'bg-[#1e2430] border-[#3b82f6] text-white'
+                        : 'bg-[#151619] border-[#24262a] text-[#8e918f] hover:text-[#e3e3e3]'
                     }`}
                   >
                     {s.label}
@@ -420,12 +422,12 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             {isGenerating ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Generating Script & Voices...</span>
+                <span>Generating Japanese Script & Audio...</span>
               </>
             ) : (
               <>
                 <Wand2 className="w-3.5 h-3.5" />
-                <span>Generate Dialogue & Voices</span>
+                <span>Generate Japanese Script & Audio</span>
               </>
             )}
           </button>

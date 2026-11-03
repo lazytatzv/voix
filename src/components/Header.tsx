@@ -151,7 +151,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={handlePickVideo}
-          className="px-2.5 py-1 bg-[#18191b] hover:bg-[#222427] text-[#e3e3e3] text-xs font-medium rounded-lg border border-[#2e3135] flex items-center gap-1.5 transition active:scale-95"
+          className="px-2.5 py-1 bg-[#151619] hover:bg-[#1f2126] text-[#e3e3e3] text-xs font-mono rounded-sm border border-[#282a2e] flex items-center gap-1.5 transition active:scale-95"
           title="Select or change video file"
         >
           {hasVideo ? <Video className="w-3.5 h-3.5 text-[#8ab4f8]" /> : <Upload className="w-3.5 h-3.5 text-[#8ab4f8]" />}
@@ -163,8 +163,8 @@ export const Header: React.FC<HeaderProps> = ({
             type="button"
             onClick={onAutoTranscribe}
             disabled={isTranscribing}
-            className="px-2.5 py-1 bg-[#18191b] hover:bg-[#222427] text-[#8ab4f8] text-xs font-medium rounded-lg border border-[#2e3135] flex items-center gap-1.5 transition active:scale-95 disabled:opacity-30"
-            title="Transcribe speech from video automatically"
+            className="px-2.5 py-1 bg-[#151619] hover:bg-[#1f2126] text-[#8ab4f8] text-xs font-mono rounded-sm border border-[#282a2e] flex items-center gap-1.5 transition active:scale-95 disabled:opacity-30"
+            title="Auto-transcribe video speech to Japanese dialogue"
           >
             <Layers className={`w-3.5 h-3.5 ${isTranscribing ? 'animate-spin' : ''}`} />
             <span>{isTranscribing ? 'Transcribing...' : 'Auto Captions'}</span>
@@ -174,8 +174,8 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={onOpenAiVideoGenerator}
-          className="px-2.5 py-1 bg-[#18191b] hover:bg-[#222427] text-[#c4c7c5] hover:text-white text-xs font-medium rounded-lg border border-[#2e3135] flex items-center gap-1.5 transition active:scale-95"
-          title="Generate AI dialogue script"
+          className="px-2.5 py-1 bg-[#151619] hover:bg-[#1f2126] text-[#c4c7c5] hover:text-white text-xs font-mono rounded-sm border border-[#282a2e] flex items-center gap-1.5 transition active:scale-95"
+          title="Generate Japanese dialogue script with AI"
         >
           <Bot className="w-3.5 h-3.5 text-[#34d399]" />
           <span>AI Script</span>
@@ -188,7 +188,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={onOpenCharacterSettings}
-          className="p-1.5 rounded-lg bg-[#18191b] hover:bg-[#222427] text-[#a8aaa8] hover:text-white border border-[#2e3135] transition"
+          className="p-1.5 rounded-sm bg-[#151619] hover:bg-[#1f2126] text-[#a8aaa8] hover:text-white border border-[#282a2e] transition"
           title="Characters & Voice"
         >
           <User className="w-3.5 h-3.5" />
@@ -199,7 +199,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="p-1.5 rounded-lg bg-[#18191b] hover:bg-[#222427] text-[#a8aaa8] hover:text-white border border-[#2e3135] transition"
+            className="p-1.5 rounded-sm bg-[#151619] hover:bg-[#1f2126] text-[#a8aaa8] hover:text-white border border-[#282a2e] transition"
             title="Settings (Ctrl+,)"
           >
             <Settings className="w-3.5 h-3.5" />
@@ -211,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={onExportVideo}
           disabled={itemCount === 0}
-          className="ml-1 px-3 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] text-xs font-semibold rounded-lg border border-[#004a77] shadow-xs transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
+          className="ml-1 px-3 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] text-xs font-mono font-semibold rounded-sm border border-[#005a92] shadow-xs transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
           title="Render and export video"
         >
           <Download className="w-3 h-3" />

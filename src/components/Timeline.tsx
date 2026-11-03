@@ -96,18 +96,18 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   return (
-    <div className="flex flex-col bg-[#1e1f20] border border-[#282a2c] rounded-2xl overflow-hidden shadow-lg">
+    <div className="flex flex-col bg-[#141517] border border-[#242629] rounded-sm overflow-hidden shadow-lg select-none">
       {/* Toolbar */}
-      <div className="px-5 py-2.5 bg-[#1e1f20] border-b border-[#282a2c] flex items-center justify-between">
+      <div className="px-4 py-2 bg-[#141517] border-b border-[#222426] flex items-center justify-between">
         <div className="flex items-center gap-3 text-xs text-[#c4c7c5]">
-          <span className="font-semibold text-[#e3e3e3]">Timeline</span>
-          <span className="text-[#8e918f] font-mono">Duration: {totalDuration.toFixed(1)}s</span>
+          <span className="font-semibold text-xs font-mono uppercase tracking-wider text-[#e3e3e3]">Timeline</span>
+          <span className="text-[#8e918f] font-mono text-[11px]">Duration: {totalDuration.toFixed(2)}s</span>
         </div>
 
-        <div className="flex items-center gap-1.5 bg-[#131314] px-2 py-1 rounded-full border border-[#2e3134]">
+        <div className="flex items-center gap-1.5 bg-[#0e0f11] px-2 py-0.5 rounded-sm border border-[#242629]">
           <button
             onClick={() => setZoom((z) => Math.max(0.5, z - 0.25))}
-            className="p-1 rounded-full hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition"
+            className="p-1 rounded-sm hover:bg-[#202226] text-[#8e918f] hover:text-white transition"
             title="Zoom Out"
           >
             <ZoomOut className="w-3.5 h-3.5" />
@@ -117,7 +117,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </span>
           <button
             onClick={() => setZoom((z) => Math.min(3, z + 0.25))}
-            className="p-1 rounded-full hover:bg-[#282a2c] text-[#8e918f] hover:text-white transition"
+            className="p-1 rounded-sm hover:bg-[#202226] text-[#8e918f] hover:text-white transition"
             title="Zoom In"
           >
             <ZoomIn className="w-3.5 h-3.5" />
@@ -128,14 +128,14 @@ export const Timeline: React.FC<TimelineProps> = ({
       {/* Tracks */}
       <div className="flex">
         {/* Track Labels */}
-        <div className="w-36 bg-[#18191b] border-r border-[#282a2c] flex-shrink-0 select-none">
-          <div className="h-6 border-b border-[#282a2c] px-3 flex items-center text-[10px] font-mono text-[#8e918f]">
-            TRACKS
+        <div className="w-32 bg-[#111214] border-r border-[#222426] flex-shrink-0 select-none">
+          <div className="h-6 border-b border-[#222426] px-3 flex items-center text-[10px] font-mono text-[#8e918f] uppercase">
+            Tracks
           </div>
-          <div className="h-11 border-b border-[#282a2c] px-3 flex items-center text-xs text-[#c4c7c5]">
-            Captions
+          <div className="h-11 border-b border-[#222426] px-3 flex items-center text-xs font-mono text-[#c4c7c5]">
+            Voice/Sub
           </div>
-          <div className="h-10 border-b border-[#282a2c] px-3 flex items-center text-xs text-[#c4c7c5]">
+          <div className="h-10 border-b border-[#222426] px-3 flex items-center text-xs font-mono text-[#c4c7c5]">
             Video
           </div>
         </div>
@@ -144,16 +144,16 @@ export const Timeline: React.FC<TimelineProps> = ({
         <div
           ref={containerRef}
           onClick={handleTimelineClick}
-          className="relative flex-1 h-27 overflow-x-auto overflow-y-hidden bg-[#131314] cursor-pointer select-none"
+          className="relative flex-1 h-27 overflow-x-auto overflow-y-hidden bg-[#0a0a0c] cursor-pointer select-none"
         >
           <div style={{ width: `${timelineWidth}px` }} className="relative h-full">
             {/* Ruler */}
-            <div className="h-6 w-full border-b border-[#282a2c] relative bg-[#18191b]">
+            <div className="h-6 w-full border-b border-[#222426] relative bg-[#111214]">
               {renderRuler()}
             </div>
 
             {/* Captions Track (吹き出しタップで該当カード/YAMLセクションへジャンプ) */}
-            <div className="h-11 border-b border-[#282a2c] relative flex items-center bg-[#131314]">
+            <div className="h-11 border-b border-[#222426] relative flex items-center bg-[#0a0a0c]">
               {items
                 .filter((item): item is VoiceItem => item.type === 'voice')
                 .map((item) => {
@@ -166,56 +166,56 @@ export const Timeline: React.FC<TimelineProps> = ({
                     <div
                       key={item.id}
                       onMouseDown={(e) => handleMouseDownItem(e, item)}
-                      className={`absolute h-8 rounded-lg flex items-center px-2.5 text-xs cursor-pointer active:cursor-grabbing transition-all select-none shadow-sm ${
+                      className={`absolute h-8 rounded-xs flex items-center px-2 text-xs cursor-pointer active:cursor-grabbing transition-all select-none shadow-xs ${
                         isDragging
                           ? 'ring-2 ring-white z-20 shadow-lg'
                           : isSelected
-                          ? 'ring-2 ring-[#8ab4f8] bg-[#005c94] brightness-125 z-20 shadow-md scale-[1.02]'
+                          ? 'ring-1 ring-[#38bdf8] bg-[#005c94] brightness-125 z-20 shadow-md'
                           : 'hover:brightness-110 z-10'
                       }`}
                       style={{
                         left: `${left}px`,
                         width: `${width}px`,
-                        backgroundColor: isSelected ? '#005c94' : '#004a77',
-                        color: '#c2e7ff',
-                        border: isSelected ? '1px solid #8ab4f8' : '1px solid #005c94',
+                        backgroundColor: isSelected ? '#0369a1' : '#075985',
+                        color: '#f0f9ff',
+                        border: isSelected ? '1px solid #38bdf8' : '1px solid #0284c7',
                       }}
                       title={`${item.text} (Click to jump to card/YAML)`}
                     >
                       <MessageSquare
-                        className={`w-3 h-3 mr-1.5 flex-shrink-0 ${
-                          isSelected ? 'text-[#8ab4f8] opacity-100' : 'opacity-70'
+                        className={`w-3 h-3 mr-1 flex-shrink-0 ${
+                          isSelected ? 'text-[#38bdf8] opacity-100' : 'opacity-70'
                         }`}
                       />
-                      <span className="truncate font-medium text-[11px]">{getSubtitleDisplayText(item.text)}</span>
+                      <span className="truncate font-mono text-[11px]">{getSubtitleDisplayText(item.text)}</span>
                     </div>
                   );
                 })}
             </div>
 
             {/* Video Track */}
-            <div className="h-10 border-b border-[#282a2c] relative flex items-center px-2 bg-[#131314]">
+            <div className="h-10 border-b border-[#222426] relative flex items-center px-2 bg-[#0a0a0c]">
               <div
-                className="absolute h-7 rounded-lg flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap"
+                className="absolute h-7 rounded-xs flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap"
                 style={{
                   left: 0,
                   width: `${Math.min(duration, totalDuration) * basePixelsPerSecond}px`,
-                  backgroundColor: '#282a2c',
-                  color: '#e3e3e3',
-                  border: '1px solid #3c4043',
+                  backgroundColor: '#1f242c',
+                  color: '#e2e8f0',
+                  border: '1px solid #334155',
                 }}
               >
-                <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#8ab4f8]" />
+                <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#38bdf8]" />
                 <span className="text-[11px]">Video Track ({duration.toFixed(1)}s)</span>
               </div>
             </div>
 
             {/* Playhead */}
             <div
-              className="absolute top-0 bottom-0 w-[2px] bg-[#8ab4f8] z-30 pointer-events-none"
+              className="absolute top-0 bottom-0 w-[2px] bg-[#38bdf8] z-30 pointer-events-none"
               style={{ left: `${currentTime * basePixelsPerSecond}px` }}
             >
-              <div className="w-2.5 h-3 bg-[#8ab4f8] rounded-b -translate-x-[4px]" />
+              <div className="w-2.5 h-3 bg-[#38bdf8] rounded-none -translate-x-[4px]" />
             </div>
           </div>
         </div>

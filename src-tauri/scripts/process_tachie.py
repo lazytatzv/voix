@@ -229,39 +229,88 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
 
     if effective_psd_path and os.path.exists(effective_psd_path):
         try:
-            # First attempt: Try high-fidelity psd-tools composite to completely avoid double face features
+            # First attempt: Try high-fidelity psd-tools composite with strictly exclusive layer selection
             try:
                 from psd_tools import PSDImage
                 psd_obj = PSDImage.open(effective_psd_path)
 
-                def find_groups():
-                    eye_group = None
-                    mouth_group = None
-                    brow_group = None
-                    blush_group = None
-                    for layer in psd_obj:
-                        lname = layer.name
-                        if "目" in lname and layer.is_group(): eye_group = layer
-                        elif "口" in lname and layer.is_group(): mouth_group = layer
-                        elif "眉" in lname and layer.is_group(): brow_group = layer
-                        elif "顔色" in lname and layer.is_group(): blush_group = layer
-                    return eye_group, mouth_group, brow_group, blush_group
+                def find_groups(container):
+                    eye_g, mouth_g, brow_g, blush_g = None, None, None, None
+                    for layer in container:
+                        if not layer.is_group():
+                            continue
+                        lname = layer.name.lower()
+                        if ("目" in layer.name or "eye" in lname) and not eye_g:
+                            eye_g = layer
+                        elif ("口" in layer.name or "mouth" in lname) and not mouth_g:
+                            mouth_g = layer
+                        elif ("眉" in layer.name or "brow" in lname) and not brow_g:
+                            brow_g = layer
+                        elif any(k in layer.name for k in ["顔色", "ほっぺ", "チーク", "赤面"]) and not blush_g:
+                            blush_g = layer
 
-                eye_g, mouth_g, brow_g, blush_g = find_groups()
+                        sub_eye, sub_mouth, sub_brow, sub_blush = find_groups(layer)
+                        if not eye_g and sub_eye: eye_g = sub_eye
+                        if not mouth_g and sub_mouth: mouth_g = sub_mouth
+                        if not brow_g and sub_brow: brow_g = sub_brow
+                        if not blush_g and sub_blush: blush_g = sub_blush
+                    return eye_g, mouth_g, brow_g, blush_g
+
+                eye_g, mouth_g, brow_g, blush_g = find_groups(psd_obj)
 
                 if eye_g and mouth_g:
+                    def select_one_layer(group, keywords, allow_none=False):
+                        if not group:
+                            return None
+                        # 全レイヤーとその子を完全に非表示にする（パーツのダブり・重複を構造的に完全排除）
+                        for layer in group:
+                            layer.visible = False
+                            if layer.is_group():
+                                for sub in layer:
+                                    sub.visible = False
+
+                        chosen = None
+                        if keywords:
+                            for kw in keywords:
+                                # 1. 完全一致を最優先
+                                for layer in group:
+                                    clean = layer.name.lstrip('*!')
+                                    if clean == kw or layer.name == kw:
+                                        chosen = layer
+                                        break
+                                if chosen is not None:
+                                    break
+                                # 2. 部分一致
+                                for layer in group:
+                                    if kw in layer.name:
+                                        chosen = layer
+                                        break
+                                if chosen is not None:
+                                    break
+
+                        if chosen is not None:
+                            chosen.visible = True
+                            if chosen.is_group():
+                                for sub in chosen:
+                                    sub.visible = any(k in sub.name for k in ["普通", "黒目", "ベース"]) or (sub == list(chosen)[0])
+                            return chosen
+
+                        if not allow_none and len(group) > 0:
+                            first = list(group)[0]
+                            first.visible = True
+                            if first.is_group():
+                                for sub in first:
+                                    sub.visible = any(k in sub.name for k in ["普通", "黒目", "ベース"]) or (sub == list(first)[0])
+                            return first
+
+                        return None
+
                     def render_expr(expr_key, eye_kw, mouth_kw, brow_kw, blush_kw):
-                        for c in eye_g:
-                            c.visible = any(k in c.name for k in eye_kw) if eye_kw else False
-                        for c in mouth_g:
-                            c.visible = any(k in c.name for k in mouth_kw) if mouth_kw else False
-                        if brow_g:
-                            for c in brow_g:
-                                c.visible = any(k in c.name for k in brow_kw) if brow_kw else False
-                        if blush_g:
-                            for c in blush_g:
-                                c.visible = any(k in c.name for k in blush_kw) if blush_kw else False
-                        
+                        select_one_layer(eye_g, eye_kw)
+                        select_one_layer(mouth_g, mouth_kw)
+                        select_one_layer(brow_g, brow_kw)
+                        select_one_layer(blush_g, blush_kw, allow_none=True)
+
                         comp_img = psd_obj.composite()
                         if comp_img.height > max_height:
                             scale = max_height / float(comp_img.height)
@@ -271,12 +320,15 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
                         comp_img.save(p, format="PNG", optimize=True)
                         return p
 
-                    # Render speaking, smile, angry, shock, trouble
-                    speaking_data_url = render_expr("speaking", ["普通目", "目セット"], ["ほあー", "わあー", "▽", "あー", "open"], ["普通", "ごきげん"], ["普通", "ほっぺ"])
-                    expressions["smile"] = render_expr("smile", ["にっこり", "><", "目閉じ"], ["ほほえみ", "△", "わあー"], ["ごきげん", "普通"], ["赤面", "ほっぺ赤め", "ほっぺ"])
-                    expressions["angry"] = render_expr("angry", ["普通目", "目セット"], ["む", "むー"], ["おこ", "怒り"], [])
-                    expressions["shock"] = render_expr("shock", ["○○", "〇〇", "見開き", "ぐるぐる"], ["お"], ["こまり", "困り"], ["青ざめ"])
-                    expressions["trouble"] = render_expr("trouble", ["ジト目", "普通目", "目セット"], ["んー", "むふ"], ["こまり", "困り"], ["普通", "ほっぺ"])
+                    # 各表情パーツを単一排他的に生成 (口閉じ・口開き・笑顔・瞬き)
+                    idle_path = render_expr("idle", ["普通目", "目セット"], ["むふ", "んー", "△", "ほほえみ", "む", "普通"], ["普通眉", "普通", "ごきげん"], ["ほっぺ", "普通"])
+                    avatar_data_url = idle_path
+                    speaking_data_url = render_expr("speaking", ["普通目", "目セット"], ["ほあー", "わあー", "▽", "お", "あー"], ["普通眉", "普通", "ごきげん"], ["ほっぺ", "普通"])
+                    expressions["blinking"] = render_expr("blinking", ["にっこり", "なごみ目", "目閉じ", "細め目"], ["むふ", "んー", "△", "ほほえみ", "む", "普通"], ["普通眉", "普通", "ごきげん"], ["ほっぺ", "普通"])
+                    expressions["smile"] = render_expr("smile", ["にっこり", "><", "目閉じ"], ["ほほえみ", "△", "むふ", "にやり"], ["ごきげん", "普通眉", "普通"], ["赤面", "ほっぺ赤め", "ほっぺ"])
+                    expressions["angry"] = render_expr("angry", ["普通目", "目セット"], ["むー", "む", "んー"], ["怒り眉", "おこ", "上がり眉"], [])
+                    expressions["shock"] = render_expr("shock", ["〇〇", "見開き", "ぐるぐる"], ["おほお", "お", "わあー"], ["困り眉", "こまり"], ["青ざめ", "かげり"])
+                    expressions["trouble"] = render_expr("trouble", ["ジト目", "細め目"], ["んー", "むふ", "む"], ["困り眉", "こまり"], ["ほっぺ", "普通"])
             except Exception as e_psd:
                 sys.stderr.write(f"psd_tools composite notice: {e_psd}\n")
 

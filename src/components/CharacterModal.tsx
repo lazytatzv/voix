@@ -130,19 +130,19 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   );
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#1e1f20] border border-[#282a2c] rounded-3xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+      <div className="bg-[#121315] border border-[#2a2c30] rounded-sm w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-[#282a2c] flex items-center justify-between bg-[#1e1f20]">
+        <div className="px-5 py-3 border-b border-[#202226] flex items-center justify-between bg-[#0e0f11]">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="w-4 h-4 text-[#8ab4f8]" />
-            <h3 className="font-semibold text-sm text-[#e3e3e3]">
+            <h3 className="font-semibold text-xs font-mono uppercase tracking-wider text-[#e3e3e3]">
               Speakers & Caption Studio
             </h3>
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 rounded-full text-[#8e918f] hover:text-white hover:bg-[#282a2c] transition"
+            className="p-1 rounded-sm text-[#8e918f] hover:text-white hover:bg-[#1a1b1e] transition"
           >
             <X className="w-4 h-4" />
           </button>
@@ -257,12 +257,12 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                   ))}
                 </div>
 
-                {/* Flip Horizontally (左右反転) */}
+                {/* Flip Horizontally */}
                 <div className="mt-2.5 flex items-center justify-between p-2.5 rounded-xl bg-[#131314] border border-[#282a2c]">
                   <div className="flex items-center gap-2">
                     <FlipHorizontal className="w-4 h-4 text-[#8ab4f8]" />
                     <div>
-                      <span className="text-xs font-medium text-[#e3e3e3] block">Flip Horizontally (左右反転)</span>
+                      <span className="text-xs font-medium text-[#e3e3e3] block">Flip Horizontally</span>
                       <span className="text-[10px] text-[#8e918f]">Mirror avatar facing direction</span>
                     </div>
                   </div>
@@ -275,7 +275,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         : 'bg-[#1e1f20] text-[#c4c7c5] border-[#3c4043] hover:border-[#8e918f]'
                     }`}
                   >
-                    {char.flipH ? 'Flipped (反転中)' : 'Normal (通常)'}
+                    {char.flipH ? 'Flipped' : 'Normal'}
                   </button>
                 </div>
               </div>

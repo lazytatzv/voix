@@ -18,8 +18,10 @@ import { processAiAction, AiAction } from '../services/aiService';
 import { extractPronunciations, autoAnnotatePronunciations } from '../utils/pronunciation';
 import {
   itemsToRawText,
-  parseRawScript,
+  parseScriptWithConfig,
   ParsedScriptLine,
+  ParsedYamlConfig,
+  generateYamlConfigHeader,
 } from '../utils/scriptParser';
 
 interface ScriptEditorProps {
@@ -36,7 +38,7 @@ interface ScriptEditorProps {
   onSeek: (time: number) => void;
   onPlaySingle: (item: VoiceItem) => void;
   onSynthesizeItem: (id: string) => Promise<void>;
-  onSyncFromYaml?: (lines: ParsedScriptLine[]) => Promise<void>;
+  onSyncFromYaml?: (lines: ParsedScriptLine[], config?: ParsedYamlConfig) => Promise<void>;
   onSelectItem?: (id: string | null) => void;
 }
 
@@ -217,8 +219,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       if (!onSyncFromYaml) return;
       try {
         setIsSyncing(true);
-        const parsed = parseRawScript(textToSync);
-        await onSyncFromYaml(parsed);
+        const { lines, config } = parseScriptWithConfig(textToSync);
+        await onSyncFromYaml(lines, config);
       } catch (err) {
         console.warn('Auto-sync YAML error:', err);
       } finally {
@@ -274,6 +276,59 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     isEditingYamlRef.current = false;
   };
 
+  // エンジニア向けキーボード操作: Tabキーインデント、Ctrl/Cmd+Enter即時同期
+  const handleYamlKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const textarea = e.currentTarget;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const nextVal = yamlText.substring(0, start) + '  ' + yamlText.substring(end);
+      setYamlText(nextVal);
+      setTimeout(() => {
+        textarea.selectionStart = textarea.selectionEnd = start + 2;
+      }, 0);
+      return;
+    }
+
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+      e.preventDefault();
+      if (debounceTimerRef.current) {
+        window.clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
+      }
+      syncYamlToItems(yamlText);
+      isEditingYamlRef.current = false;
+      return;
+    }
+  };
+
+  // ワンクリック・スニペット挿入
+  const insertYamlSnippet = (snippet: string) => {
+    const textarea = yamlTextareaRef.current;
+    if (!textarea) {
+      const next = yamlText ? yamlText.trimEnd() + '\n' + snippet : snippet;
+      setYamlText(next);
+      syncYamlToItems(next);
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const prev = textarea.value;
+    const nextVal = prev.substring(0, start) + snippet + prev.substring(end);
+    setYamlText(nextVal);
+    textarea.focus();
+    setTimeout(() => {
+      textarea.selectionStart = textarea.selectionEnd = start + snippet.length;
+    }, 0);
+    isEditingYamlRef.current = true;
+    if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
+    debounceTimerRef.current = window.setTimeout(async () => {
+      await syncYamlToItems(nextVal);
+      isEditingYamlRef.current = false;
+    }, 600);
+  };
+
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) {
@@ -318,7 +373,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     setIsAiProcessing(true);
     setIsAiMenuOpen(false);
     try {
-      const targetText = inputText.trim() || 'Hello everyone! Today we are playing a game.';
+      const targetText = inputText.trim() || 'みなさんこんにちは！今日は注目の技術について解説していくのだ！';
       const result = await processAiAction({ action, text: targetText });
       setInputText(result);
     } finally {
@@ -392,44 +447,149 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       {/* Main Content Area: Cards vs YAML */}
       {tab === 'yaml' ? (
         <div className="flex-1 relative flex flex-col bg-[#121314] overflow-hidden">
-          {/* Active / Playing Section Highlight Backdrop */}
-          {activeLineRange && (
-            <div
-              style={{
-                top: `${12 + activeLineRange.startLine * 22 - yamlScrollTop}px`,
-                height: `${activeLineRange.lineCount * 22}px`,
-                left: '8px',
-                right: '8px',
+          {/* Quick Snippet Chips Toolbar */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#141518] border-b border-[#222428] overflow-x-auto text-[11px] select-none flex-shrink-0">
+            <span className="text-[#5f6368] font-mono text-[10px] mr-0.5 uppercase tracking-wider">Insert:</span>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet('\n- z: ')}
+              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#10b981] hover:text-[#34d399] font-mono transition flex items-center gap-1 border border-[#26282c]"
+              title="Insert Zundamon dialogue line"
+            >
+              <span>🥑 - z:</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet('\n- m: ')}
+              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#f472b6] hover:text-[#fbcfe8] font-mono transition flex items-center gap-1 border border-[#26282c]"
+              title="Insert Metan dialogue line"
+            >
+              <span>🌸 - m:</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet('(smile)')}
+              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#8ab4f8] font-mono transition border border-[#26282c]"
+              title="Insert smile emotion"
+            >
+              (smile)
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet('(shock)')}
+              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#8ab4f8] font-mono transition border border-[#26282c]"
+              title="Insert shock emotion"
+            >
+              (shock)
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet('\n- pause: 0.8\n')}
+              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#fbbf24] hover:text-[#fde68a] font-mono transition flex items-center gap-1 border border-[#26282c]"
+              title="Insert natural pause"
+            >
+              <span>⏱️ pause</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet(', se=pop')}
+              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#c084fc] hover:text-[#d8b4fe] font-mono transition border border-[#26282c]"
+              title="Insert SE pop sound"
+            >
+              🔔 se:pop
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet(', se=chime')}
+              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#c084fc] hover:text-[#d8b4fe] font-mono transition border border-[#26282c]"
+              title="Insert SE chime sound"
+            >
+              🔔 se:chime
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet(', anim=bounce')}
+              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#f59e0b] hover:text-[#fbbf24] font-mono transition border border-[#26282c]"
+              title="Insert bounce hop animation"
+            >
+              ✨ bounce
+            </button>
+            <button
+              type="button"
+              onClick={() => insertYamlSnippet('\n- z:\n    text: コマンドを実行するのだ！\n    cmd: "pnpm dev"\n    output: "Vite ready in 150ms"\n    se: chime\n    anim: bounce\n')}
+              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#38bdf8] hover:text-[#7dd3fc] font-mono transition flex items-center gap-1 border border-[#26282c]"
+              title="Insert terminal overlay block"
+            >
+              <span>💻 terminal</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const configHeader = generateYamlConfigHeader(characters);
+                if (!yamlText.includes('config:')) {
+                  const nextVal = configHeader + yamlText;
+                  setYamlText(nextVal);
+                  syncYamlToItems(nextVal);
+                }
               }}
-              className="absolute rounded-lg bg-[#1e2d40]/90 border-l-4 border-[#8ab4f8] shadow-md pointer-events-none transition-all duration-150 z-0 ring-1 ring-[#8ab4f8]/30"
+              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#a5b4fc] hover:text-white font-mono transition flex items-center gap-1 border border-[#26282c]"
+              title="Insert or prepend YAML config template for character layout, position, and subtitles"
+            >
+              <span>⚙️ config:</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const formatted = itemsToRawText(items, characters, 'smart');
+                setYamlText(formatted);
+                syncYamlToItems(formatted);
+              }}
+              className="ml-auto px-2 py-0.5 rounded-sm text-[10px] bg-[#1a1c20] hover:bg-[#25282e] text-[#8e918f] hover:text-[#e3e3e3] border border-[#26282c] font-mono transition"
+              title="Format script to clean 1-liner YAML syntax"
+            >
+              ⚡ Clean 1-Liner
+            </button>
+          </div>
+
+          <div className="flex-1 relative overflow-hidden">
+            {/* Active / Playing Section Highlight Backdrop */}
+            {activeLineRange && (
+              <div
+                style={{
+                  top: `${12 + activeLineRange.startLine * 22 - yamlScrollTop}px`,
+                  height: `${activeLineRange.lineCount * 22}px`,
+                  left: '8px',
+                  right: '8px',
+                }}
+                className="absolute rounded-lg bg-[#1e2d40]/90 border-l-4 border-[#8ab4f8] shadow-md pointer-events-none transition-all duration-150 z-0 ring-1 ring-[#8ab4f8]/30"
+              />
+            )}
+
+            <textarea
+              ref={yamlTextareaRef}
+              value={yamlText}
+              onChange={handleYamlChange}
+              onKeyDown={handleYamlKeyDown}
+              onScroll={(e) => setYamlScrollTop((e.target as HTMLTextAreaElement).scrollTop)}
+              onBlur={handleYamlBlur}
+              placeholder={`# Clean YAML script (Auto-syncs with Timeline)
+- z: 今日はTypeScriptの型システムについて解説するのだ！
+- m(smile): 難解ですが面白いテーマですわね。
+- pause: 0.5
+- z(shock):
+    text: なんとコンパイル時にバグが全部消えるのだ！
+    cmd: "tsc --noEmit"
+    output: "Found 0 errors."`}
+              style={{
+                lineHeight: '22px',
+                fontSize: '12px',
+                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                padding: '12px',
+              }}
+              className="w-full h-full bg-transparent text-[#e3e3e3] resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266] relative z-10"
+              spellCheck={false}
             />
-          )}
-
-          <textarea
-            ref={yamlTextareaRef}
-            value={yamlText}
-            onChange={handleYamlChange}
-            onScroll={(e) => setYamlScrollTop((e.target as HTMLTextAreaElement).scrollTop)}
-            onBlur={handleYamlBlur}
-            placeholder={`# Dialogue in YAML format (auto-synced with Cards)
-- speaker: Zundamon
-  time: 0.0
-  emotion: default
-  text: Welcome to Voix!
-
-- speaker: Shikoku Metan
-  time: 1.5
-  emotion: smile
-  text: Cards and YAML are automatically synchronized.`}
-            style={{
-              lineHeight: '22px',
-              fontSize: '12px',
-              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-              padding: '12px',
-            }}
-            className="w-full h-full bg-transparent text-[#e3e3e3] resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266] relative z-10"
-            spellCheck={false}
-          />
+          </div>
         </div>
       ) : (
         <>
@@ -454,17 +614,17 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                     key={item.id}
                     id={`dialogue-card-${item.id}`}
                     onClick={() => onSelectItem?.(item.id)}
-                    className={`p-3 rounded-xl border transition-all duration-200 flex flex-col gap-2 relative cursor-pointer ${
+                    className={`p-3 rounded-sm border transition-all duration-150 flex flex-col gap-2 relative cursor-pointer ${
                       isSelected
-                        ? 'bg-[#22272e] border-[#8ab4f8] shadow-lg ring-2 ring-[#8ab4f8]/50'
+                        ? 'bg-[#1e232a] border-[#3b82f6] shadow-md ring-1 ring-[#3b82f6]'
                         : isActive
-                        ? 'bg-[#22252a] border-[#8ab4f8]/70 shadow-md ring-1 ring-[#8ab4f8]/30'
-                        : 'bg-[#1b1c1e] border-[#2a2c30] hover:border-[#3c4044]'
+                        ? 'bg-[#1a1f26] border-[#3b82f6]/70 shadow-sm'
+                        : 'bg-[#151619] border-[#26282c] hover:border-[#383b40]'
                     }`}
                   >
                     {/* Selected Indicator Bar */}
                     {isSelected && (
-                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-[#8ab4f8] rounded-r-full" />
+                      <div className="absolute left-0 top-2 bottom-2 w-1 bg-[#3b82f6] rounded-none" />
                     )}
 
                     {/* Row Header */}
@@ -497,13 +657,29 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                           onChange={(expr) => onUpdateItem(item.id, { expression: expr })}
                         />
 
+                        {/* SE Badge if set */}
+                        {item.se && (
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 bg-[#251838] text-[#d8b4fe] border border-[#6b21a8] rounded-xs flex items-center gap-0.5">
+                            <span>🔔</span>
+                            <span>{item.se}</span>
+                          </span>
+                        )}
+
+                        {/* Anim Badge if set */}
+                        {item.anim && item.anim !== 'none' && (
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 bg-[#312008] text-[#fde047] border border-[#854d0e] rounded-xs flex items-center gap-0.5">
+                            <span>✨</span>
+                            <span>{item.anim}</span>
+                          </span>
+                        )}
+
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onSeek(item.startTime);
                             onSelectItem?.(item.id);
                           }}
-                          className={`font-mono text-[11px] transition flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                          className={`font-mono text-[11px] transition flex items-center gap-1 px-1.5 py-0.5 rounded-sm ${
                             isSelected
                               ? 'text-[#8ab4f8] bg-[#8ab4f8]/10'
                               : 'text-[#8e918f] hover:text-[#8ab4f8]'
@@ -522,7 +698,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         <button
                           onClick={() => onPlaySingle(item)}
                           disabled={item.isSynthesizing}
-                          className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white transition disabled:opacity-40"
+                          className="p-1.5 rounded-sm hover:bg-[#222428] text-[#c4c7c5] hover:text-white transition disabled:opacity-40"
                           title="Play audio preview"
                         >
                           {item.isSynthesizing ? (
@@ -534,8 +710,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
                         <button
                           onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                          className={`p-1.5 rounded-lg transition ${
-                            isExpanded ? 'bg-[#004a77] text-[#c2e7ff]' : 'hover:bg-[#282a2e] text-[#8e918f]'
+                          className={`p-1.5 rounded-sm transition ${
+                            isExpanded ? 'bg-[#1e3a5f] text-[#c2e7ff]' : 'hover:bg-[#222428] text-[#8e918f]'
                           }`}
                           title="Voice Tuning (Speed / Pitch)"
                         >
@@ -544,7 +720,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
                         <button
                           onClick={() => onDuplicateItem(item.id)}
-                          className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#8e918f] hover:text-[#c4c7c5] transition"
+                          className="p-1.5 rounded-sm hover:bg-[#222428] text-[#8e918f] hover:text-[#c4c7c5] transition"
                           title="Duplicate item"
                         >
                           <Copy className="w-3.5 h-3.5" />
@@ -686,43 +862,51 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
                 {/* AI Menu Popover */}
                 {isAiMenuOpen && (
-                  <div className="absolute bottom-10 left-0 w-60 bg-[#1e2023] border border-[#3c4043] rounded-2xl shadow-2xl p-1.5 space-y-1 backdrop-blur-xl animate-in fade-in duration-100 z-50">
-                    <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2.5 py-1 block">
-                      AI Script Tools
+                  <div className="absolute bottom-10 left-0 w-64 bg-[#141518] border border-[#26282c] rounded-sm shadow-2xl p-1.5 space-y-1 backdrop-blur-xl animate-in fade-in duration-100 z-50 select-none">
+                    <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2.5 py-1 block tracking-wider">
+                      AI Script Assistant
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleTriggerAi('translate_en')}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2e] hover:text-white transition text-left"
+                      onClick={() => handleTriggerAi('zundamon')}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
                     >
-                      <Languages className="w-3.5 h-3.5 text-[#8ab4f8]" />
-                      <span>Translate to English</span>
+                      <span className="text-sm">🥑</span>
+                      <span>Convert to Zundamon Style</span>
                     </button>
                     <button
                       type="button"
-                      onClick={() => handleTriggerAi('zundamon')}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2e] hover:text-white transition text-left"
+                      onClick={() => handleTriggerAi('metan')}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
                     >
-                      <span className="text-sm">🥑</span>
-                      <span>Zundamon-ify</span>
+                      <span className="text-sm">🌸</span>
+                      <span>Convert to Metan Style</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleTriggerAi('reaction')}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2e] hover:text-white transition text-left"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
                     >
                       <Wand2 className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Generate Reaction Line</span>
+                      <span>Generate Reaction (Japanese)</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => handleTriggerAi('shorten')}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2e] hover:text-white transition text-left"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
                     >
                       <Scissors className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Shorten & Punchy</span>
+                      <span>Summarize for Subtitles</span>
                     </button>
-                    <div className="border-t border-[#2e3134] my-1" />
+                    <button
+                      type="button"
+                      onClick={() => handleTriggerAi('translate_ja')}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
+                    >
+                      <Languages className="w-3.5 h-3.5 text-[#8ab4f8]" />
+                      <span>Refine to Natural Japanese</span>
+                    </button>
+                    <div className="border-t border-[#26282c] my-1" />
                     <button
                       type="button"
                       onClick={() => {
@@ -731,10 +915,10 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         }
                         setIsAiMenuOpen(false);
                       }}
-                      className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2e] hover:text-white transition text-left"
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
                     >
                       <Tag className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Auto Readings (Reading Hints)</span>
+                      <span>Auto Furigana / Ruby</span>
                     </button>
                   </div>
                 )}
@@ -742,23 +926,23 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
               <input
                 type="text"
-                placeholder={`Type dialogue for ${selectedChar?.name || 'speaker'}...`}
+                placeholder={`Enter dialogue for ${selectedChar?.name || 'speaker'} (Enter to add)...`}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}
                 disabled={isSubmitting}
-                className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-full pl-11 pr-12 py-2.5 text-sm text-[#e3e3e3] placeholder-[#8e918f] outline-none transition shadow-inner"
+                className="w-full bg-[#101113] border border-[#26282c] focus:border-[#3b82f6] rounded-sm pl-11 pr-12 py-2 text-sm text-[#e3e3e3] placeholder-[#8e918f] outline-none transition shadow-inner font-sans"
               />
 
               <button
                 type="submit"
                 disabled={!inputText.trim() || isSubmitting}
-                className="absolute right-1.5 p-2 rounded-full bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] transition disabled:opacity-30 disabled:bg-[#2e3135] disabled:text-[#8e918f] shadow-sm"
+                className="absolute right-1 px-2.5 py-1.5 rounded-sm bg-[#2563eb] hover:bg-[#1d4ed8] text-white transition disabled:opacity-30 disabled:bg-[#1f2228] disabled:text-[#8e918f] shadow-xs"
               >
                 {isSubmitting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Send className="w-4 h-4" />
+                  <Send className="w-3.5 h-3.5" />
                 )}
               </button>
             </form>
