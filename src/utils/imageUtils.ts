@@ -1,7 +1,10 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+
+// メモリ内 Data URL キャッシュ (ディスク読み込みを最小限に抑え瞬時描画)
+const resolvedCache = new Map<string, string>();
 
 /**
- * ファイルパスまたはURLを安全なアセットURLに変換
+ * ファイルパスまたはURLを安全なアセットURLまたは Data URL に変換
  */
 export function toAssetUrl(filePathOrUrl: string): string {
   if (!filePathOrUrl) return '';
@@ -10,31 +13,85 @@ export function toAssetUrl(filePathOrUrl: string): string {
     filePathOrUrl.startsWith('https://') ||
     filePathOrUrl.startsWith('data:') ||
     filePathOrUrl.startsWith('blob:') ||
-    filePathOrUrl.startsWith('asset://') ||
     filePathOrUrl.startsWith('/characters/')
   ) {
     return filePathOrUrl;
   }
+
+  // メモリキャッシュにあれば即座に返却
+  if (resolvedCache.has(filePathOrUrl)) {
+    return resolvedCache.get(filePathOrUrl)!;
+  }
+
+  // asset:// 形式ならそのまま返す
+  if (filePathOrUrl.startsWith('asset://')) {
+    return filePathOrUrl;
+  }
+
   return convertFileSrc(filePathOrUrl);
+}
+
+/**
+ * Tauri IPC 経由でローカル画像ファイルを確実に読み込み、Data URL として返却 (WebKitGTK プロトコル不具合の完全回避)
+ */
+export async function resolveImageToDataUrl(filePathOrUrl: string): Promise<string> {
+  if (!filePathOrUrl) return '';
+  if (
+    filePathOrUrl.startsWith('http://') ||
+    filePathOrUrl.startsWith('https://') ||
+    filePathOrUrl.startsWith('data:') ||
+    filePathOrUrl.startsWith('blob:') ||
+    filePathOrUrl.startsWith('/characters/')
+  ) {
+    return filePathOrUrl;
+  }
+
+  if (resolvedCache.has(filePathOrUrl)) {
+    return resolvedCache.get(filePathOrUrl)!;
+  }
+
+  try {
+    let cleanPath = filePathOrUrl;
+    if (cleanPath.startsWith('asset://localhost/')) {
+      cleanPath = decodeURIComponent(cleanPath.replace('asset://localhost/', '/'));
+    } else if (cleanPath.startsWith('asset://')) {
+      cleanPath = decodeURIComponent(cleanPath.replace('asset://', '/'));
+    }
+
+    const dataUrl = await invoke<string>('read_file_data_url', { filePath: cleanPath });
+    resolvedCache.set(filePathOrUrl, dataUrl);
+    resolvedCache.set(cleanPath, dataUrl);
+    return dataUrl;
+  } catch (err) {
+    console.warn('read_file_data_url fallback:', err);
+    const fallback = convertFileSrc(filePathOrUrl);
+    return fallback;
+  }
 }
 
 /**
  * 白ベタ塗り背景（非透過PNGやJPG）の外周を検出し、自動で透明化するユーティリティ
  */
 export async function removeWhiteBackgroundFromDataUrl(
-  dataUrl: string,
+  dataUrlOrPath: string,
   tolerance: number = 32
 ): Promise<string> {
+  const resolvedUrl = await resolveImageToDataUrl(dataUrlOrPath);
+
   return new Promise((resolve) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    // WebKitGTK でカスタムプロトコルに crossOrigin を付けると CORS 違反になるため http/https のみ付与
+    if (resolvedUrl.startsWith('http://') || resolvedUrl.startsWith('https://')) {
+      img.crossOrigin = 'anonymous';
+    }
+
     img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.width;
       canvas.height = img.height;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       if (!ctx) {
-        resolve(dataUrl);
+        resolve(resolvedUrl);
         return;
       }
 
@@ -59,14 +116,14 @@ export async function removeWhiteBackgroundFromDataUrl(
 
       // 既に角が透明 (alpha < 50) なら何もしない
       if (corners.some((c) => c[3] < 50)) {
-        resolve(dataUrl);
+        resolve(resolvedUrl);
         return;
       }
 
       // 角が白色系（R, G, B > 220）かチェック
       const isWhiteCorner = corners.some((c) => c[0] > 220 && c[1] > 220 && c[2] > 220);
       if (!isWhiteCorner) {
-        resolve(dataUrl);
+        resolve(resolvedUrl);
         return;
       }
 
@@ -139,7 +196,11 @@ export async function removeWhiteBackgroundFromDataUrl(
       resolve(canvas.toDataURL('image/png'));
     };
 
-    img.onerror = () => resolve(dataUrl);
-    img.src = dataUrl;
+    img.onerror = () => {
+      console.warn('Failed to load image for background removal:', resolvedUrl.slice(0, 50));
+      resolve(resolvedUrl);
+    };
+
+    img.src = resolvedUrl;
   });
 }

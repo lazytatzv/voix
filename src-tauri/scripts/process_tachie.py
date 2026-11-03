@@ -203,7 +203,19 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
 
     # 抽出画像をローカルLinuxの ~/.config/voix/characters/ へ直接PNG保存 (base64肥大化・フリーズ防止)
     output_base = os.path.expanduser("~/.config/voix/characters")
-    safe_name = "".join(c for c in char_info["name"] if c.isalnum() or c in ("_", "-")).strip() or "character"
+    # ASCII英数字に安全マッピング (WebKitGTK URLエンコード不一致・パーセントエンコードバグの完全防止)
+    cname = char_info["name"].lower()
+    if "ずんだもん" in cname or "zundamon" in cname:
+        safe_name = "zundamon"
+    elif "めたん" in cname or "metan" in cname:
+        safe_name = "metan"
+    elif "つむぎ" in cname or "tsumugi" in cname:
+        safe_name = "tsumugi"
+    elif "リツ" in cname or "ritsu" in cname:
+        safe_name = "ritsu"
+    else:
+        ascii_chars = "".join(c for c in char_info["name"] if c.isascii() and (c.isalnum() or c in ("_", "-"))).strip()
+        safe_name = ascii_chars or f"char_{char_info.get('speaker_id', 3)}"
     import time
     char_dir = os.path.join(output_base, f"{safe_name}_{int(time.time())}")
     os.makedirs(char_dir, exist_ok=True)

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { X, Loader2, Check, FileArchive, ArrowRight, FolderOpen, UserPlus } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { importTachieFile, TachieImportResult } from '../services/tachieService';
-import { toAssetUrl } from '../utils/imageUtils';
+import { resolveImageToDataUrl } from '../utils/imageUtils';
+import { SafeAvatarImg } from './SafeAvatarImg';
 
 interface TachieImportModalProps {
   isOpen: boolean;
@@ -27,18 +28,17 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
     setError(null);
     try {
       const res = await importTachieFile(pathOrData, hint);
-      // ローカルパスを安全・軽量なアセットURLに変換 (メモリ枯渇・フリーズ防止)
-      const converted: TachieImportResult = {
-        ...res,
-        avatar_data_url: toAssetUrl(res.avatar_data_url),
-        speaking_data_url: res.speaking_data_url ? toAssetUrl(res.speaking_data_url) : undefined,
-        expressions: res.expressions
-          ? Object.fromEntries(
-              Object.entries(res.expressions).map(([k, v]) => [k, toAssetUrl(v)])
-            )
-          : undefined,
-      };
-      setPreviewResult(converted);
+      // メモリキャッシュを事前ウォームアップして即座にプレビュー描画
+      await resolveImageToDataUrl(res.avatar_data_url);
+      if (res.speaking_data_url) {
+        await resolveImageToDataUrl(res.speaking_data_url);
+      }
+      if (res.expressions) {
+        await Promise.all(
+          Object.values(res.expressions).map((p) => resolveImageToDataUrl(p))
+        );
+      }
+      setPreviewResult(res);
     } catch (e: unknown) {
       const err = e as { message?: string } | string;
       const msg = typeof err === 'string' ? err : err?.message || 'Failed to extract tachie';
@@ -192,7 +192,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
           {previewResult && (
             <div className="bg-[#131415] border border-[#2e3135] rounded-xl p-4 flex gap-4 items-center animate-in fade-in">
               <div className="w-24 h-32 rounded-lg bg-[#18191b] border border-[#3c4043] overflow-hidden flex items-center justify-center p-1 relative flex-shrink-0">
-                <img
+                <SafeAvatarImg
                   src={previewResult.avatar_data_url}
                   alt={previewResult.character_name}
                   className="w-full h-full object-contain"

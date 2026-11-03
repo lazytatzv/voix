@@ -23,7 +23,21 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**",
+          "$HOME/**",
+          "$HOME/**/*",
+          "$HOME/.config/**",
+          "$HOME/.config/**/*",
+          "/home/**",
+          "/home/**/*",
+          "/home/*/.config/**",
+          "/home/*/.config/**/*",
+          "$APPDATA/**",
+          "$APPDATA/**/*",
+          "$TEMP/**",
+          "$TEMP/**/*"
+        ]
       }
     }
   },

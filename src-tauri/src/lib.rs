@@ -477,6 +477,60 @@ fn open_config_directory() -> Result<(), String> {
     Ok(())
 }
 
+fn percent_decode_str(input: &str) -> String {
+    let bytes = input.as_bytes();
+    let mut decoded: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(byte) = u8::from_str_radix(std::str::from_utf8(&bytes[i + 1..i + 3]).unwrap_or(""), 16) {
+                decoded.push(byte);
+                i += 3;
+                continue;
+            }
+        }
+        decoded.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&decoded).to_string()
+}
+
+#[tauri::command]
+fn read_file_data_url(file_path: String) -> Result<String, String> {
+    let mut clean_path = file_path;
+    if clean_path.starts_with("asset://localhost/") {
+        let stripped = &clean_path["asset://localhost/".len()..];
+        let decoded = percent_decode_str(stripped);
+        clean_path = if !decoded.starts_with('/') {
+            format!("/{}", decoded)
+        } else {
+            decoded
+        };
+    } else if clean_path.contains('%') {
+        clean_path = percent_decode_str(&clean_path);
+    }
+
+    let p = std::path::Path::new(&clean_path);
+    if !p.exists() {
+        return Err(format!("File not found: {}", clean_path));
+    }
+
+    let bytes = fs::read(p).map_err(|e| format!("Failed to read file: {}", e))?;
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+    let mime = if clean_path.ends_with(".webp") {
+        "image/webp"
+    } else if clean_path.ends_with(".jpg") || clean_path.ends_with(".jpeg") {
+        "image/jpeg"
+    } else if clean_path.ends_with(".svg") {
+        "image/svg+xml"
+    } else {
+        "image/png"
+    };
+
+    Ok(format!("data:{};base64,{}", mime, b64))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -492,7 +546,8 @@ pub fn run() {
             load_app_settings,
             save_characters_config,
             load_characters_config,
-            open_config_directory
+            open_config_directory,
+            read_file_data_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
