@@ -25,7 +25,28 @@ export function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.characters) return parsed.characters;
+        if (parsed.characters && parsed.characters.length > 0) {
+          return parsed.characters.map((c: Character) => {
+            const def = defaultCharacters.find((d) => d.id === c.id);
+            if (def) {
+              return {
+                ...def,
+                ...c,
+                avatar: {
+                  ...def.avatar,
+                  ...c.avatar,
+                  speaking: def.avatar.speaking || c.avatar.speaking,
+                  expressions: def.avatar.expressions || c.avatar.expressions,
+                },
+                subtitleStyle: {
+                  ...def.subtitleStyle,
+                  ...c.subtitleStyle,
+                },
+              };
+            }
+            return c;
+          });
+        }
       } catch {}
     }
     return defaultCharacters;
@@ -58,10 +79,26 @@ export function App() {
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
 
-  // 再生制御タイマー
+  // 再生制御タイマー & オーディオ管理 (エコー防止)
   const playTimerRef = useRef<number | null>(null);
   const lastPlayTimestampRef = useRef<number>(0);
   const playedItemIdsRef = useRef<Set<string>>(new Set());
+  const playingAudiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+  const stopAllAudio = () => {
+    playingAudiosRef.current.forEach((audio) => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    playingAudiosRef.current.clear();
+  };
+
+  // 停止時に全音声を完全停止 (エコー・重複再生の完全抑止)
+  useEffect(() => {
+    if (!isPlaying) {
+      stopAllAudio();
+    }
+  }, [isPlaying]);
 
   // 総尺の自動計算
   const totalDuration = Math.max(
@@ -116,6 +153,7 @@ export function App() {
           const next = prev + deltaSec;
           if (next >= totalDuration) {
             setIsPlaying(false);
+            stopAllAudio();
             return totalDuration;
           }
 
@@ -125,10 +163,15 @@ export function App() {
               item.audioBlobUrl &&
               next >= item.startTime &&
               next <= item.startTime + item.duration &&
-              !playedItemIdsRef.current.has(item.id)
+              !playedItemIdsRef.current.has(item.id) &&
+              !playingAudiosRef.current.has(item.id)
             ) {
               playedItemIdsRef.current.add(item.id);
               const audio = new Audio(item.audioBlobUrl);
+              playingAudiosRef.current.set(item.id, audio);
+              audio.onended = () => {
+                playingAudiosRef.current.delete(item.id);
+              };
               audio.play().catch(() => {});
             }
           });
@@ -141,6 +184,7 @@ export function App() {
       playTimerRef.current = requestAnimationFrame(updatePlayhead);
     } else {
       if (playTimerRef.current) cancelAnimationFrame(playTimerRef.current);
+      stopAllAudio();
     }
 
     return () => {
@@ -152,15 +196,18 @@ export function App() {
     if (!isPlaying && currentTime >= totalDuration) {
       setCurrentTime(0);
       playedItemIdsRef.current.clear();
+      stopAllAudio();
     }
     setIsPlaying(!isPlaying);
   };
 
   const handleSeek = (time: number) => {
     setCurrentTime(time);
+    stopAllAudio();
+    // シーク位置より後に始まるアイテムのみ再生フラグを再準備
     playedItemIdsRef.current.forEach((id) => {
       const it = items.find((i) => i.id === id);
-      if (it && it.startTime >= time) {
+      if (it && it.startTime > time + 0.05) {
         playedItemIdsRef.current.delete(id);
       }
     });
@@ -184,7 +231,7 @@ export function App() {
   };
 
   // セリフ追加
-  const handleAddVoiceItem = async (characterId: string, text: string, startTime: number) => {
+  const handleAddVoiceItem = async (characterId: string, text: string, startTime: number, expression: string = 'default') => {
     const char = characters.find((c) => c.id === characterId) || characters[0];
     const newItemId = `voice_${Date.now()}`;
 
@@ -195,6 +242,7 @@ export function App() {
       name: `${char.name}: ${text.slice(0, 10)}`,
       characterId,
       text,
+      expression,
       startTime,
       duration: 1.5,
       speedScale: 1.0,
@@ -391,6 +439,7 @@ export function App() {
             name: `${char.name}: ${line.text.slice(0, 10)}`,
             characterId: char.id,
             text: line.text,
+            expression: line.expression || 'default',
             startTime: currentStart,
             duration,
             speedScale: 1.0,
@@ -440,6 +489,7 @@ export function App() {
       avatar: {
         idle: result.avatar_data_url,
         speaking: result.speaking_data_url || result.avatar_data_url,
+        expressions: result.expressions,
       },
       subtitleStyle: {
         textColor: '#ffffff',

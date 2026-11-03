@@ -11,8 +11,14 @@ export const defaultCharacters: Character[] = [
       idle: '/characters/zundamon.png',
       speaking: '/characters/zundamon_talking.png',
       blinking: '/characters/zundamon.png',
+      expressions: {
+        smile: '/characters/zundamon_smile.png',
+        shock: '/characters/zundamon_shock.png',
+        trouble: '/characters/zundamon_trouble.png',
+        angry: '/characters/zundamon_angry.png',
+      },
     },
-    // プロYouTube動画仕様の極太二重縁取り
+    // プロYouTube実況仕様の極太二重縁取り
     subtitleStyle: {
       textColor: '#ffffff',
       fontSize: 42,
@@ -39,9 +45,16 @@ export const defaultCharacters: Character[] = [
     styleId: 2,
     avatar: {
       idle: '/characters/metan.png',
-      speaking: '/characters/metan.png',
+      speaking: '/characters/metan_talking.png',
       blinking: '/characters/metan.png',
+      expressions: {
+        smile: '/characters/metan_smile.png',
+        shock: '/characters/metan_shock.png',
+        trouble: '/characters/metan_trouble.png',
+        angry: '/characters/metan_angry.png',
+      },
     },
+    // 四国めたん専用の華やかな極太二重縁取り (ずんだもんと統一感のあるプロ仕様)
     subtitleStyle: {
       textColor: '#ffffff',
       fontSize: 42,
@@ -49,7 +62,7 @@ export const defaultCharacters: Character[] = [
       fontWeight: '900',
       strokeColor: '#090a0c', // 内側黒縁取り
       strokeWidth: 8,
-      outerStrokeColor: '#db2777', // めたんピンク外側縁取り
+      outerStrokeColor: '#ec4899', // めたんピンク外側縁取り
       outerStrokeWidth: 14,
       hasShadow: true,
       shadowColor: 'rgba(0, 0, 0, 0.85)',

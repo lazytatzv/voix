@@ -17,6 +17,56 @@ interface VideoPreviewProps {
   activeAudioUrl?: string | null;
 }
 
+/**
+ * 長文を自然な位置（読点・句点・感嘆符・ルビ外）で2行に改行する
+ */
+function splitTextIntoBalancedLines(text: string, maxCharsPerLine = 17): string[] {
+  if (text.includes('\n')) {
+    return text.split('\n');
+  }
+  // ルビ表記 (例: France(フランス)) を除いた純粋文字数
+  const plainText = text.replace(/\([^)]+\)/g, '');
+  if (plainText.length <= maxCharsPerLine) {
+    return [text];
+  }
+
+  // 中央付近の自然な句読点（！、？、。、、など）を探す
+  const mid = Math.floor(text.length / 2);
+  let bestBreak = -1;
+  let bestDist = 999;
+
+  for (let i = 4; i < text.length - 4; i++) {
+    // ルビの括弧内では絶対に改行しない
+    const sub = text.slice(0, i);
+    const openParen = (sub.match(/\(/g) || []).length;
+    const closeParen = (sub.match(/\)/g) || []).length;
+    if (openParen !== closeParen) continue;
+
+    const ch = text[i];
+    if (['、', '。', '！', '!', '？', '?', ' '].includes(ch)) {
+      const dist = Math.abs(i - mid);
+      if (dist < bestDist) {
+        bestDist = dist;
+        bestBreak = i + 1;
+      }
+    }
+  }
+
+  if (bestBreak > 0) {
+    return [text.slice(0, bestBreak).trim(), text.slice(bestBreak).trim()];
+  }
+
+  // 句読点がない場合は中央でルビ外の安全な位置で分割
+  for (let i = mid; i < text.length - 3; i++) {
+    const sub = text.slice(0, i);
+    if ((sub.match(/\(/g) || []).length === (sub.match(/\)/g) || []).length) {
+      return [text.slice(0, i).trim(), text.slice(i).trim()];
+    }
+  }
+
+  return [text];
+}
+
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoSrc,
   items,
@@ -40,15 +90,24 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   useEffect(() => {
     const loaded: Record<string, HTMLImageElement> = {};
     characters.forEach((char) => {
-      if (char.avatar.idle) {
+      const loadImg = (key: string, src?: string) => {
+        if (!src) return;
         const img = new Image();
-        img.src = char.avatar.idle;
-        loaded[char.id] = img;
-      }
-      if (char.avatar.speaking) {
-        const imgSpeak = new Image();
-        imgSpeak.src = char.avatar.speaking;
-        loaded[`${char.id}_speaking`] = imgSpeak;
+        img.src = src;
+        img.onload = () => {
+          setImagesLoaded((prev) => ({ ...prev, [key]: img }));
+        };
+        loaded[key] = img;
+      };
+
+      loadImg(char.id, char.avatar.idle);
+      loadImg(`${char.id}_speaking`, char.avatar.speaking);
+
+      // 表情差分画像のロード
+      if (char.avatar.expressions) {
+        Object.entries(char.avatar.expressions).forEach(([expr, src]) => {
+          loadImg(`${char.id}_expr_${expr}`, src);
+        });
       }
     });
     setImagesLoaded(loaded);
@@ -72,7 +131,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, [isPlaying, videoSrc]);
 
-  // 2. シーク位置 (currentTime) と動画の同期: 停止中のみシークを行う (再生中のスタッター防止)
+  // 2. シーク同期: 停止中のみシークを行う (再生中のスタッター・エコー防止)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
@@ -86,7 +145,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, [currentTime, videoSrc, isPlaying]);
 
-  // 3. 動画ソース変更時に読み込み直し (currentTimeはloadedmetadata後に安全に同期)
+  // 3. 動画ソース変更時に読み込み直し
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
@@ -155,11 +214,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       let drawY = 0;
 
       if (vAspect > cAspect) {
-        // 横長動画 (21:9等): 上下に黒帯 (レターボックス)
         drawHeight = width / vAspect;
         drawY = (height - drawHeight) / 2;
       } else {
-        // 縦長・4:3・16:10等: 左右に黒帯 (ピラーボックス)
         drawWidth = height * vAspect;
         drawX = (width - drawWidth) / 2;
       }
@@ -169,7 +226,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       try {
         ctx.drawImage(videoRef.current, drawX, drawY, drawWidth, drawHeight);
       } catch {
-        // Safe catch while frame buffer prepares
+        // Safe catch
       }
     } else {
       ctx.fillStyle = '#101113';
@@ -188,26 +245,29 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       }
     }
 
-    // 2. 立ち絵キャラクター描画 (透過バグ解消 & リアル口パクアニメーション)
+    // 2. 立ち絵キャラクター描画 (表情差分・100%不透明・口パク)
     if (showAvatar) {
       characters.forEach((char) => {
         if (char.position === 'hidden') return;
 
         const isSpeaking = currentVoiceItem?.characterId === char.id;
+        const expr = (isSpeaking && currentVoiceItem?.expression) || 'default';
+        const exprImg = expr !== 'default' ? imagesLoaded[`${char.id}_expr_${expr}`] : null;
 
         // 口パク判定: 発話中、7〜8Hzの周期で口を開閉
         const isMouthOpen = isSpeaking && Math.floor(currentTime * 7.5) % 2 === 0;
 
-        // 口開き画像があれば口開き画像、なければ口閉じ画像
         const speakingImg = imagesLoaded[`${char.id}_speaking`];
-        const idleImg = imagesLoaded[char.id];
+        const idleImg = exprImg || imagesLoaded[char.id];
         const activeImg =
-          isMouthOpen && speakingImg && speakingImg.complete ? speakingImg : idleImg;
+          isMouthOpen && speakingImg && speakingImg.complete
+            ? speakingImg
+            : (idleImg || imagesLoaded[char.id]);
 
         if (activeImg && activeImg.complete) {
           ctx.save();
 
-          // 透過バグ修正: キャラクターは常に100%不透明！(動画が透けるのを防止)
+          // 透過バグ修正: キャラクターは常に100%不透明
           ctx.globalAlpha = 1.0;
 
           // 発話していないキャラクターは透過させず、わずかにトーンを落とす
@@ -220,8 +280,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           const charHeight = height * 0.54;
           const charWidth = (activeImg.width / activeImg.height) * charHeight;
 
-          // 位置設定 (left, right, center) に応じたX座標の計算
-          let charX = 80; // デフォルト: 左側
+          let charX = 80;
           if (char.position === 'right') {
             charX = width - charWidth - 80;
           } else if (char.position === 'center') {
@@ -229,8 +288,6 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           }
 
           const charY = height - charHeight;
-
-          // 上下の飛び跳ねは撤廃し、自然に描画
           ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
 
           ctx.restore();
@@ -238,7 +295,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       });
     }
 
-    // 3. プロフェッショナル字幕テロップ描画 (二重縁取り・ドロップシャドウ対応)
+    // 3. プロフェッショナル字幕テロップ描画 (自動改行・二重縁取り・ルビ対応)
     if (currentVoiceItem && currentVoiceItem.text) {
       const speaker = characters.find((c) => c.id === currentVoiceItem.characterId);
       const style = speaker?.subtitleStyle || {
@@ -260,13 +317,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
       ctx.save();
 
-      const x = width / 2;
-      const y = (height * (100 - (style.yOffsetPercent ?? 12))) / 100;
+      const centerX = width / 2;
+      const baseY = (height * (100 - (style.yOffsetPercent ?? 12))) / 100;
       const rawText = currentVoiceItem.text;
 
-      // ルビ解析 (e.g. France(フランス) -> ルビトークンに分割)
-      const tokens = parsePronunciationTokens(rawText);
-      const hasRuby = tokens.some((t) => !!t.reading);
+      // 自動改行処理 (長文をバランスよく2行に分割)
+      const lines = splitTextIntoBalancedLines(rawText);
+      const lineHeight = style.fontSize * 1.34;
+      const totalBlockHeight = (lines.length - 1) * lineHeight;
 
       const mainFont = `900 ${style.fontSize}px "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif`;
       const rubyFontSize = Math.max(14, Math.round(style.fontSize * 0.36));
@@ -276,150 +334,154 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
 
-      if (!hasRuby) {
-        // 通常字幕 (ルビなし)
-        const displayText = getSubtitleDisplayText(rawText);
+      lines.forEach((lineText, lineIdx) => {
+        const lineY = baseY - totalBlockHeight / 2 + lineIdx * lineHeight;
+        const tokens = parsePronunciationTokens(lineText);
+        const hasRuby = tokens.some((t) => !!t.reading);
 
-        // 背景ピル
-        if (style.bgStyle === 'pill') {
-          const metrics = ctx.measureText(displayText);
-          const bgPaddingX = 28;
-          const bgPaddingY = 14;
-          ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
-          ctx.beginPath();
-          ctx.roundRect?.(
-            x - metrics.width / 2 - bgPaddingX,
-            y - style.fontSize / 2 - bgPaddingY,
-            metrics.width + bgPaddingX * 2,
-            style.fontSize + bgPaddingY * 2,
-            14
-          );
-          ctx.fill();
-        }
+        if (!hasRuby) {
+          const displayText = getSubtitleDisplayText(lineText);
 
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
+          // 背景ピル
+          if (style.bgStyle === 'pill') {
+            const metrics = ctx.measureText(displayText);
+            const bgPaddingX = 28;
+            const bgPaddingY = 14;
+            ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
+            ctx.beginPath();
+            ctx.roundRect?.(
+              centerX - metrics.width / 2 - bgPaddingX,
+              lineY - style.fontSize / 2 - bgPaddingY,
+              metrics.width + bgPaddingX * 2,
+              style.fontSize + bgPaddingY * 2,
+              14
+            );
+            ctx.fill();
+          }
 
-        // ドロップシャドウ設定
-        if (style.hasShadow) {
-          ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
-          ctx.shadowBlur = style.shadowBlur ?? 8;
-          ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
-          ctx.shadowOffsetX = 0;
-        }
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
 
-        // レイヤーA: 外側縁取り (アウターストローク / 二重縁取り)
-        if (style.outerStrokeColor && style.outerStrokeWidth && style.outerStrokeWidth > 0) {
-          ctx.strokeStyle = style.outerStrokeColor;
-          ctx.lineWidth = style.outerStrokeWidth;
-          ctx.strokeText(displayText, x, y);
-        }
+          // ドロップシャドウ
+          if (style.hasShadow) {
+            ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
+            ctx.shadowBlur = style.shadowBlur ?? 8;
+            ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
+            ctx.shadowOffsetX = 0;
+          }
 
-        // レイヤーB: 内側メイン縁取り
-        ctx.shadowColor = 'transparent';
-        if (style.strokeWidth && style.strokeWidth > 0) {
-          ctx.strokeStyle = style.strokeColor;
-          ctx.lineWidth = style.strokeWidth;
-          ctx.strokeText(displayText, x, y);
-        }
-
-        // レイヤーC: 文字本体塗り
-        ctx.fillStyle = style.textColor;
-        ctx.fillText(displayText, x, y);
-      } else {
-        // ルビ付きプロ字幕レンダリング (France(フランス) -> Franceの上に小さくフランス)
-        ctx.font = mainFont;
-        const tokenWidths = tokens.map((t) => ctx.measureText(t.text).width);
-        const totalWidth = tokenWidths.reduce((sum, w) => sum + w, 0);
-        const rubyY = y - style.fontSize * 0.72;
-
-        // 背景ピル (ルビを含む高さに拡張)
-        if (style.bgStyle === 'pill') {
-          const bgPaddingX = 32;
-          const bgPaddingY = 18;
-          ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
-          ctx.beginPath();
-          ctx.roundRect?.(
-            x - totalWidth / 2 - bgPaddingX,
-            rubyY - rubyFontSize / 2 - bgPaddingY,
-            totalWidth + bgPaddingX * 2,
-            y - rubyY + style.fontSize / 2 + bgPaddingY * 2,
-            16
-          );
-          ctx.fill();
-        }
-
-        // ドロップシャドウ設定
-        if (style.hasShadow) {
-          ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
-          ctx.shadowBlur = style.shadowBlur ?? 8;
-          ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
-          ctx.shadowOffsetX = 0;
-        }
-
-        // レイヤーA: 外側二重縁取り
-        if (style.outerStrokeColor && style.outerStrokeWidth && style.outerStrokeWidth > 0) {
-          ctx.strokeStyle = style.outerStrokeColor;
-          let curX = x - totalWidth / 2;
-          for (let i = 0; i < tokens.length; i++) {
-            const tok = tokens[i];
-            const w = tokenWidths[i];
-            ctx.font = mainFont;
+          // レイヤーA: 外側縁取り (アウターストローク / 二重縁取り)
+          if (style.outerStrokeColor && style.outerStrokeWidth && style.outerStrokeWidth > 0) {
+            ctx.strokeStyle = style.outerStrokeColor;
             ctx.lineWidth = style.outerStrokeWidth;
-            ctx.textAlign = 'left';
-            ctx.strokeText(tok.text, curX, y);
-
-            if (tok.reading) {
-              ctx.font = rubyFont;
-              ctx.lineWidth = Math.max(2, style.outerStrokeWidth * 0.6);
-              ctx.textAlign = 'center';
-              ctx.strokeText(tok.reading, curX + w / 2, rubyY);
-            }
-            curX += w;
+            ctx.strokeText(displayText, centerX, lineY);
           }
-        }
 
-        // レイヤーB: 内側メイン縁取り
-        ctx.shadowColor = 'transparent';
-        if (style.strokeWidth && style.strokeWidth > 0) {
-          ctx.strokeStyle = style.strokeColor;
-          let curX = x - totalWidth / 2;
+          // レイヤーB: 内側メイン縁取り
+          ctx.shadowColor = 'transparent';
+          if (style.strokeWidth && style.strokeWidth > 0) {
+            ctx.strokeStyle = style.strokeColor;
+            ctx.lineWidth = style.strokeWidth;
+            ctx.strokeText(displayText, centerX, lineY);
+          }
+
+          // レイヤーC: 文字本体塗り
+          ctx.fillStyle = style.textColor;
+          ctx.fillText(displayText, centerX, lineY);
+        } else {
+          // ルビ付きプロ字幕レンダリング
+          ctx.font = mainFont;
+          const tokenWidths = tokens.map((t) => ctx.measureText(t.text).width);
+          const totalWidth = tokenWidths.reduce((sum, w) => sum + w, 0);
+          const rubyY = lineY - style.fontSize * 0.72;
+
+          // 背景ピル
+          if (style.bgStyle === 'pill') {
+            const bgPaddingX = 32;
+            const bgPaddingY = 18;
+            ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
+            ctx.beginPath();
+            ctx.roundRect?.(
+              centerX - totalWidth / 2 - bgPaddingX,
+              rubyY - rubyFontSize / 2 - bgPaddingY,
+              totalWidth + bgPaddingX * 2,
+              lineY - rubyY + style.fontSize / 2 + bgPaddingY * 2,
+              16
+            );
+            ctx.fill();
+          }
+
+          if (style.hasShadow) {
+            ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
+            ctx.shadowBlur = style.shadowBlur ?? 8;
+            ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
+            ctx.shadowOffsetX = 0;
+          }
+
+          // レイヤーA: 外側二重縁取り
+          if (style.outerStrokeColor && style.outerStrokeWidth && style.outerStrokeWidth > 0) {
+            ctx.strokeStyle = style.outerStrokeColor;
+            let curX = centerX - totalWidth / 2;
+            for (let i = 0; i < tokens.length; i++) {
+              const tok = tokens[i];
+              const w = tokenWidths[i];
+              ctx.font = mainFont;
+              ctx.lineWidth = style.outerStrokeWidth;
+              ctx.textAlign = 'left';
+              ctx.strokeText(tok.text, curX, lineY);
+
+              if (tok.reading) {
+                ctx.font = rubyFont;
+                ctx.lineWidth = Math.max(2, style.outerStrokeWidth * 0.6);
+                ctx.textAlign = 'center';
+                ctx.strokeText(tok.reading, curX + w / 2, rubyY);
+              }
+              curX += w;
+            }
+          }
+
+          // レイヤーB: 内側メイン縁取り
+          ctx.shadowColor = 'transparent';
+          if (style.strokeWidth && style.strokeWidth > 0) {
+            ctx.strokeStyle = style.strokeColor;
+            let curX = centerX - totalWidth / 2;
+            for (let i = 0; i < tokens.length; i++) {
+              const tok = tokens[i];
+              const w = tokenWidths[i];
+              ctx.font = mainFont;
+              ctx.lineWidth = style.strokeWidth;
+              ctx.textAlign = 'left';
+              ctx.strokeText(tok.text, curX, lineY);
+
+              if (tok.reading) {
+                ctx.font = rubyFont;
+                ctx.lineWidth = Math.max(1, style.strokeWidth * 0.6);
+                ctx.textAlign = 'center';
+                ctx.strokeText(tok.reading, curX + w / 2, rubyY);
+              }
+              curX += w;
+            }
+          }
+
+          // レイヤーC: 文字本体塗り
+          ctx.fillStyle = style.textColor;
+          let curX = centerX - totalWidth / 2;
           for (let i = 0; i < tokens.length; i++) {
             const tok = tokens[i];
             const w = tokenWidths[i];
             ctx.font = mainFont;
-            ctx.lineWidth = style.strokeWidth;
             ctx.textAlign = 'left';
-            ctx.strokeText(tok.text, curX, y);
+            ctx.fillText(tok.text, curX, lineY);
 
             if (tok.reading) {
               ctx.font = rubyFont;
-              ctx.lineWidth = Math.max(1, style.strokeWidth * 0.6);
               ctx.textAlign = 'center';
-              ctx.strokeText(tok.reading, curX + w / 2, rubyY);
+              ctx.fillText(tok.reading, curX + w / 2, rubyY);
             }
             curX += w;
           }
         }
-
-        // レイヤーC: 文字本体塗り
-        ctx.fillStyle = style.textColor;
-        let curX = x - totalWidth / 2;
-        for (let i = 0; i < tokens.length; i++) {
-          const tok = tokens[i];
-          const w = tokenWidths[i];
-          ctx.font = mainFont;
-          ctx.textAlign = 'left';
-          ctx.fillText(tok.text, curX, y);
-
-          if (tok.reading) {
-            ctx.font = rubyFont;
-            ctx.textAlign = 'center';
-            ctx.fillText(tok.reading, curX + w / 2, rubyY);
-          }
-          curX += w;
-        }
-      }
+      });
 
       ctx.restore();
     }
@@ -466,9 +528,6 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             onSeeked={() => renderCanvas()}
             onTimeUpdate={() => {
               renderCanvas();
-              if (isPlaying && videoRef.current) {
-                onSeek(videoRef.current.currentTime);
-              }
             }}
           />
         )}

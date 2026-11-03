@@ -25,7 +25,6 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
     characters.slice(0, 2).map((c) => c.id)
   );
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('gemini_api_key') || '');
-  const [showApiKey, setShowApiKey] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -204,31 +203,44 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             </div>
           </div>
 
-          {/* Optional Gemini API Key */}
-          <div className="pt-1">
-            <button
-              type="button"
-              onClick={() => setShowApiKey(!showApiKey)}
-              className="text-[11px] text-[#8e918f] hover:text-[#e3e3e3] flex items-center gap-1 transition"
-            >
-              <Key className="w-3 h-3" />
-              <span>{showApiKey ? 'Hide Gemini API Key' : 'Configure Custom Gemini API Key (Optional)'}</span>
-            </button>
-
-            {showApiKey && (
-              <div className="mt-2 space-y-1 animate-in fade-in">
-                <input
-                  type="password"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="AIzaSy... (Leave empty for built-in prompt engine)"
-                  className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg px-3 py-2 text-xs text-[#e3e3e3] outline-none font-mono"
-                />
-                <span className="text-[10px] text-[#8e918f] block">
-                  Voix includes high-quality offline script templates if no key is provided.
-                </span>
+          {/* Gemini AI Key or Offline Mode */}
+          <div className="pt-1 bg-[#131415] border border-[#282a2c] rounded-xl p-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Key className="w-3.5 h-3.5 text-[#8ab4f8]" />
+                <span className="text-xs font-medium text-[#e3e3e3]">AI Generation Engine</span>
               </div>
-            )}
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded font-mono ${
+                  apiKey.trim()
+                    ? 'bg-[#1e3a5f] text-[#93c5fd] border border-[#3b82f6]/40'
+                    : 'bg-[#202124] text-[#a8aaa8] border border-[#333538]'
+                }`}
+              >
+                {apiKey.trim() ? 'Gemini 2.0 Flash (Online)' : 'Persona Engine (Local)'}
+              </span>
+            </div>
+
+            <div className="mt-2 space-y-1.5">
+              <input
+                type="password"
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Paste Gemini API Key here for 100% generative AI script..."
+                className="w-full bg-[#18191b] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg px-3 py-1.5 text-xs text-[#e3e3e3] outline-none font-mono"
+              />
+              <div className="flex items-center justify-between text-[10px] text-[#8e918f]">
+                <span>Free tier supported with no credit card required</span>
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[#8ab4f8] hover:underline"
+                >
+                  Get Free Gemini API Key &rarr;
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Status / Progress */}

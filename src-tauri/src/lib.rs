@@ -16,6 +16,7 @@ pub struct TachieImportResult {
     pub theme_color: String,
     pub avatar_data_url: String,
     pub speaking_data_url: Option<String>,
+    pub expressions: Option<std::collections::HashMap<String, String>>,
     pub width: u32,
     pub height: u32,
 }

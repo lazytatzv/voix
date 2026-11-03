@@ -151,6 +151,20 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                       }}
                     />
 
+                    {/* 表情差分セレクター */}
+                    <select
+                      value={item.expression || 'default'}
+                      onChange={(e) => onUpdateItem(item.id, { expression: e.target.value })}
+                      className="bg-[#202124] hover:bg-[#282a2c] text-[#c4c7c5] hover:text-white border border-[#3c4043] rounded px-1.5 py-0.5 text-[10px] outline-none font-medium transition cursor-pointer"
+                      title="Character Expression (表情差分)"
+                    >
+                      <option value="default">通常</option>
+                      <option value="smile">笑顔</option>
+                      <option value="shock">驚き</option>
+                      <option value="trouble">困り</option>
+                      <option value="angry">怒り</option>
+                    </select>
+
                     <button
                       onClick={() => onSeek(item.startTime)}
                       className="text-[#8e918f] hover:text-[#8ab4f8] font-mono text-[11px] transition"

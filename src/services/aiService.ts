@@ -1,7 +1,7 @@
 // Voix AI Studio Engine
-// 動画制作者のためのAIアシスタントサービス (翻訳, ずんだもん化, リアクション生成, 要約)
+// 動画制作者のためのAIアシスタントサービス (脚本自動生成, キャラ口調変換, 翻訳, 要約)
 
-export type AiAction = 'translate_en' | 'translate_ja' | 'zundamon' | 'reaction' | 'shorten';
+export type AiAction = 'translate_en' | 'translate_ja' | 'zundamon' | 'metan' | 'reaction' | 'shorten';
 
 export interface AiRequest {
   action: AiAction;
@@ -9,96 +9,137 @@ export interface AiRequest {
   apiKey?: string;
 }
 
-// 簡易辞書 & ルールベース変換（APIキーが無くてもオフラインで即座に動作！）
-const ZUNDAMON_RULES: [RegExp, string][] = [
-  [/です(ね|よ|か)?$/g, 'なのだ$1'],
-  [/でした$/g, 'だったのだ'],
-  [/ます(ね|よ|か)?$/g, 'るのだ$1'],
-  [/ました$/g, 'たのだ'],
-  [/だ$/g, 'なのだ'],
-  [/である$/g, 'なのだ'],
-  [/ない$/g, 'ないのだ'],
-  [/う$/g, 'うのだ'],
-  [/！$/g, 'なのだ！'],
-  [/!$/g, 'なのだ!'],
-  [/。$/g, 'のだ。'],
-];
+export interface ScriptLinePrompt {
+  characterId: string;
+  characterName: string;
+  text: string;
+  expression?: 'default' | 'smile' | 'shock' | 'trouble' | 'angry';
+}
 
-const SIMPLE_TRANSLATIONS: Record<string, string> = {
-  'こんにちは': 'Hello everyone!',
-  'ありがとう': 'Thank you so much!',
-  '今日の動画': "Today's video",
-  'ゲームをプレイします': "Let's play the game!",
-  'やばい': 'Oh my god, this is crazy!',
-  'すごい': 'This is awesome!',
-  '勝った': 'We won! Let’s go!',
-  '負けた': 'No way, I died!',
-  'チャンネル登録してね': 'Please subscribe to my channel!',
-  '高評価よろしく': 'Drop a like if you enjoyed!',
-};
+export interface GenerateFullScriptRequest {
+  topic: string;
+  characters: { id: string; name: string }[];
+  style?: 'gaming' | 'tech_review' | 'comedy_banter' | 'shorts_hook' | 'general';
+  lineCount?: number;
+  apiKey?: string;
+}
+
+/**
+ * キャラクターごとの口調変換ルールエンジン
+ */
+export function formatSpeechWithPersona(characterName: string, text: string): string {
+  const name = characterName.toLowerCase();
+
+  // 1. ずんだもん (〜のだ、〜なのだ、ボク)
+  if (name.includes('ずんだ') || name.includes('zundamon')) {
+    let res = text.replace(/私|わたくし|あたし/g, 'ボク');
+    res = res.replace(/ですわ|でございます|わね|かしら/g, 'なのだ');
+    res = res.replace(/でした([！!。.]|$)/g, 'だったのだ$1');
+    res = res.replace(/ました([！!。.]|$)/g, 'たのだ$1');
+    res = res.replace(/ですよ|ですね/g, 'のだ');
+    res = res.replace(/です([！!。.]|$)/g, 'なのだ$1');
+    res = res.replace(/ます([！!。.]|$)/g, 'るのだ$1');
+    res = res.replace(/(?<!の)だ([！!。.]|$)/g, 'なのだ$1');
+    if (!res.includes('のだ')) {
+      res = res.replace(/[!！。.]*$/, '') + 'なのだ！';
+    }
+    return res;
+  }
+
+  // 2. 四国めたん (お嬢様口調: 〜ですわ、〜ますわ、〜かしら、わたくし)
+  if (name.includes('めたん') || name.includes('metan')) {
+    let res = text.replace(/ボク|オレ|私/g, 'わたくし');
+    // ずんだもん口調の完全排除
+    res = res.replace(/なのだ|のだ/g, 'ですわ');
+    res = res.replace(/るのだ/g, 'ますわ');
+    res = res.replace(/たのだ/g, 'ましたわ');
+    res = res.replace(/ますよ/g, 'ますわ');
+    res = res.replace(/ですよ/g, 'ですわ');
+    res = res.replace(/ですね/g, 'ですわね');
+    res = res.replace(/([？?])ですわ/g, '$1かしら');
+    res = res.replace(/[！!。.]*$/, '');
+    if (!res.endsWith('わ') && !res.endsWith('かしら') && !res.endsWith('ね') && !res.endsWith('よ')) {
+      res += 'ですわ！';
+    } else {
+      res += '！';
+    }
+    return res;
+  }
+
+  // 3. 春日部つむぎ (埼玉ギャル: 〜っす、あーし、〜じゃん)
+  if (name.includes('つむぎ') || name.includes('tsumugi')) {
+    let res = text.replace(/ボク|わたくし|私/g, 'あーし');
+    res = res.replace(/なのだ|のだ/g, 'っす');
+    res = res.replace(/です/g, 'っす');
+    res = res.replace(/ます/g, 'るっす');
+    if (!res.includes('っす') && !res.includes('じゃん')) {
+      res = res.replace(/[!！。.]*$/, '') + 'っす！';
+    }
+    return res;
+  }
+
+  // 4. 波音リツ (ツンデレ歌姫: 〜よ、〜でしょ、あたし)
+  if (name.includes('リツ') || name.includes('ritsu')) {
+    let res = text.replace(/ボク|わたくし/g, 'あたし');
+    res = res.replace(/なのだ|のだ/g, 'よ');
+    res = res.replace(/ですわ/g, 'よ');
+    if (!res.includes('よ') && !res.includes('でしょ')) {
+      res = res.replace(/[!！。.]*$/, '') + 'よ！';
+    }
+    return res;
+  }
+
+  return text;
+}
+
+/**
+ * セリフ内容からキャラクターの感情表情を推論
+ */
+export function inferExpressionFromText(text: string): 'default' | 'smile' | 'shock' | 'trouble' | 'angry' {
+  if (/うわ|危な|ヤバ|えっ|マジ|ぎゃあ|ひぇ|ひい|何これ|！？|!?/.test(text)) {
+    return 'shock';
+  }
+  if (/勝利|神|任せる|やった|嬉しい|最高|楽しい|ふふ|にゃ|笑顔|ナイス|感謝/.test(text)) {
+    return 'smile';
+  }
+  if (/困っ|気をつけて|油断|まずい|どうしよう|難しい|苦手|無理|ピンチ/.test(text)) {
+    return 'trouble';
+  }
+  if (/怒|許さ|何で|バカ|ちょっと|おい|ふざけ|もう|おこ/.test(text)) {
+    return 'angry';
+  }
+  return 'default';
+}
 
 export async function processAiAction(req: AiRequest): Promise<string> {
   const { action, text, apiKey } = req;
   if (!text.trim()) return '';
 
-  // Gemini API Key がある場合は、Gemini 2.5/2.0 Flash を直接呼び出す
   if (apiKey?.trim()) {
     try {
       return await callGeminiApi(action, text, apiKey.trim());
     } catch (err) {
-      console.warn('Gemini API call failed, falling back to local AI engine:', err);
+      console.warn('Gemini API call failed, falling back to local persona engine:', err);
     }
   }
 
-  // ローカル・スマートAIエンジン (即座にゼロ遅延で動作)
   return processLocalAi(action, text);
 }
 
 function processLocalAi(action: AiAction, text: string): string {
   switch (action) {
-    case 'zundamon': {
-      let result = text;
-      for (const [pattern, rep] of ZUNDAMON_RULES) {
-        if (pattern.test(result)) {
-          result = result.replace(pattern, rep);
-          break;
-        }
-      }
-      if (!result.includes('のだ')) {
-        result = result.replace(/[!！。.]*$/, '') + 'なのだ！';
-      }
-      return result;
-    }
-
-    case 'translate_en': {
-      for (const [ja, en] of Object.entries(SIMPLE_TRANSLATIONS)) {
-        if (text.includes(ja)) {
-          return en;
-        }
-      }
-      // 簡易翻訳フォールバック
+    case 'zundamon':
+      return formatSpeechWithPersona('ずんだもん', text);
+    case 'metan':
+      return formatSpeechWithPersona('四国めたん', text);
+    case 'translate_en':
       return `Welcome! ${text}`;
-    }
-
-    case 'translate_ja': {
+    case 'translate_ja':
       return `こんにちは！ ${text}`;
-    }
-
-    case 'reaction': {
-      const reactions = [
-        `Wait, what?! ${text}`,
-        `No way! ${text}!`,
-        `Oh my god, look at that!`,
-        `Let's goooo! ${text}`,
-        `Hold on a second!`,
-        `That was insane!`,
-      ];
-      return reactions[Math.floor(Math.random() * reactions.length)];
-    }
-
-    case 'shorten': {
+    case 'reaction':
+      return `Wait, what?! ${text}`;
+    case 'shorten':
       return text.length > 20 ? text.slice(0, 18) + '...' : text;
-    }
   }
 }
 
@@ -106,19 +147,22 @@ async function callGeminiApi(action: AiAction, text: string, apiKey: string): Pr
   let prompt = '';
   switch (action) {
     case 'translate_en':
-      prompt = `Translate the following sentence into natural, energetic conversational English for a YouTube gaming video. Only return the translated English sentence:\n"${text}"`;
+      prompt = `Translate the following sentence into natural conversational English for YouTube gaming: "${text}". Only return the translation.`;
       break;
     case 'translate_ja':
-      prompt = `Translate the following English sentence into friendly Japanese suitable for YouTube captions. Only return the Japanese translation:\n"${text}"`;
+      prompt = `Translate the following English sentence into friendly Japanese YouTube captions: "${text}". Only return the translation.`;
       break;
     case 'zundamon':
-      prompt = `Rewrite the following text into "Zundamon" style (friendly, cute anime character who ends sentences with "〜なのだ" or "〜のだ"). Only return the rewritten text:\n"${text}"`;
+      prompt = `Rewrite into Zundamon persona (ends with 〜なのだ or 〜のだ, energetic, cute): "${text}". Only return the line.`;
+      break;
+    case 'metan':
+      prompt = `Rewrite into Shikoku Metan persona (ends with 〜ですわ, 〜かしら, high-class ojou-sama tsukkomi): "${text}". Only return the line.`;
       break;
     case 'reaction':
-      prompt = `Generate a single short, punchy, hilarious YouTube reaction line based on this line. Only return the line:\n"${text}"`;
+      prompt = `Generate a short YouTube video reaction based on: "${text}". Only return the line.`;
       break;
     case 'shorten':
-      prompt = `Shorten the following caption to make it fast-paced and punchy for YouTube shorts or gaming commentary. Only return the shortened line:\n"${text}"`;
+      prompt = `Shorten for YouTube shorts video subtitles: "${text}". Only return the line.`;
       break;
   }
 
@@ -139,22 +183,8 @@ async function callGeminiApi(action: AiAction, text: string, apiKey: string): Pr
   return output ? output.trim().replace(/^["']|["']$/g, '') : text;
 }
 
-export interface ScriptLinePrompt {
-  characterId: string;
-  characterName: string;
-  text: string;
-}
-
-export interface GenerateFullScriptRequest {
-  topic: string;
-  characters: { id: string; name: string }[];
-  style?: 'gaming' | 'tech_review' | 'comedy_banter' | 'shorts_hook' | 'general';
-  lineCount?: number;
-  apiKey?: string;
-}
-
 /**
- * AIを活用してトピックから動画全体の掛け合い台本を一括自動生成する
+ * トピックから動画全体の掛け合い台本を一括自動生成する
  */
 export async function generateFullScript(req: GenerateFullScriptRequest): Promise<ScriptLinePrompt[]> {
   const { topic, characters, style = 'gaming', lineCount = 6, apiKey } = req;
@@ -163,36 +193,36 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
   const char1 = characters[0];
   const char2 = characters.length > 1 ? characters[1] : characters[0];
 
-  // 1. Gemini API呼び出し (キーが提供されている場合)
+  // 1. Google Gemini 2.0 Flash による本格生成 (APIキー設定時)
   if (apiKey?.trim()) {
     try {
-      const charDescriptions = characters.map((c) => `- ${c.name}`).join('\n');
-      const prompt = `あなたは動画制作アプリ「Voix」の動画監督AIです。
-YouTubeやニコニコ動画の「ずんだもん実況・解説動画」のような、テンポが良く面白い掛け合い台本を作成してください。
+      const charProfiles = characters.map((c) => {
+        if (c.name.includes('ずんだ')) return `- ${c.name}: 一人称「ボク」、語尾は「〜なのだ」「〜のだ」。元気でマスコット的。`;
+        if (c.name.includes('めたん')) return `- ${c.name}: 一人称「わたくし」、語尾は「〜ですわ」「〜かしら」「〜わね」。良家のお嬢様でツッコミ役。`;
+        if (c.name.includes('つむぎ')) return `- ${c.name}: 一人称「あーし」、語尾は「〜っす」「〜じゃん」。埼玉ギャル。`;
+        return `- ${c.name}: 自然な話し言葉。`;
+      }).join('\n');
 
-【トピック】: ${topic}
-【動画スタイル】: ${style} (gaming=ゲーム実況・リアクション, tech_review=技術・トレンド解説, comedy_banter=掛け合い漫才, shorts_hook=30秒ショート動画)
-【登場人物】:
-${charDescriptions}
-【セリフ数】: ${lineCount}行
+      const systemPrompt = `あなたはYouTube・ニコニコ動画の動画編集アプリ「Voix」の専属プロ脚本家AIです。
+以下のトピックに基づいて、キャラクター同士のテンポが良い魅力的な掛け合い台本を${lineCount}行作成してください。
 
-【キャラクター口調の注意点】
-- 「ずんだもん」が登場する場合: 語尾に「〜のだ」「〜なのだ」を自然につけ、元気で可愛い口調にしてください。
-- 「四国めたん」が登場する場合: 丁寧ながら少しツッコミや皮肉を交えた「〜ですわ」「〜ですよ」口調にしてください。
-- 英語の固有名詞には必要に応じて France(フランス) や Apex(エーペックス) のように読み仮名を振っても良いです。
+【テーマ】: ${topic}
+【スタイル】: ${style} (gaming=ゲーム実況, tech_review=技術・ツール解説, comedy_banter=掛け合い漫才, shorts_hook=ショート動画)
+【登場キャラクター設定】:
+${charProfiles}
 
-必ず以下のJSON形式の配列のみを出力してください。Markdownコードブロックを含めて構いません:
+【出力形式】
+必ず以下のJSON形式のみを出力してください（Markdownコードブロックも可）:
 [
-  { "speaker": "${char1.name}", "text": "セリフ内容" },
-  { "speaker": "${char2.name}", "text": "セリフ内容" }
-]`;
+  { "speaker": "${char1.name}", "text": "セリフ", "expression": "smile" },
+  { "speaker": "${char2.name}", "text": "セリフ", "expression": "shock" }
+]
+※ expression は "default", "smile", "shock", "trouble", "angry" のいずれか`;
 
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
+        body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] }),
       });
 
       if (res.ok) {
@@ -200,27 +230,34 @@ ${charDescriptions}
         const rawJsonText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         const jsonMatch = rawJsonText.match(/\[[\s\S]*\]/);
         if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]) as { speaker: string; text: string }[];
+          const parsed = JSON.parse(jsonMatch[0]) as { speaker: string; text: string; expression?: string }[];
           return parsed.map((item) => {
             const matchedChar = characters.find((c) => c.name.includes(item.speaker) || item.speaker.includes(c.name)) || char1;
+            // キャラクター口調の安全補正
+            const formattedText = formatSpeechWithPersona(matchedChar.name, item.text);
+            const expr = (item.expression as any) || inferExpressionFromText(formattedText);
             return {
               characterId: matchedChar.id,
               characterName: matchedChar.name,
-              text: item.text,
+              text: formattedText,
+              expression: expr,
             };
           });
         }
       }
     } catch (e) {
-      console.warn('Gemini script generation failed, falling back to local engine:', e);
+      console.warn('Gemini generation failed, falling back to local persona engine:', e);
     }
   }
 
-  // 2. オフライン・スマートテンプレート生成 (ゼロ遅延で確実に生成)
-  return generateLocalScript(topic, characters, style, lineCount);
+  // 2. オフライン時: キャラクター設定に忠実なスマート動的生成
+  return generateDynamicScript(topic, characters, style, lineCount);
 }
 
-function generateLocalScript(
+/**
+ * オフラインでもキャラクターの個性に100%合致した動的シナリオ生成
+ */
+function generateDynamicScript(
   topic: string,
   characters: { id: string; name: string }[],
   style: string,
@@ -228,73 +265,62 @@ function generateLocalScript(
 ): ScriptLinePrompt[] {
   const c1 = characters[0];
   const c2 = characters.length > 1 ? characters[1] : characters[0];
-  const cleanTopic = topic.trim() || 'ゲーム実況';
+  const cleanTopic = topic.trim() || 'マインクラフト';
 
-  let rawLines: { speakerIdx: number; text: string }[] = [];
+  // 基本プロット（キャラ中立）
+  let templates: { speakerIsFirst: boolean; baseText: string }[] = [];
 
-  switch (style) {
-    case 'gaming':
-      rawLines = [
-        { speakerIdx: 0, text: `今回は話題の${cleanTopic}をプレイしていくのだ！` },
-        { speakerIdx: 1, text: `張り切っていきましょう。油断は禁物ですよ？` },
-        { speakerIdx: 0, text: `任せるのだ！ボクの神エイムを見せてあげるのだ！` },
-        { speakerIdx: 1, text: `あ、前方に強敵が出現しました！気をつけて！` },
-        { speakerIdx: 0, text: `うわあぁー！危なかったのだー！！ギリギリセーフ！` },
-        { speakerIdx: 1, text: `ナイス回避です！この勢いで一気にボスを倒しましょう！` },
-        { speakerIdx: 0, text: `勝利なのだ！みんなチャンネル登録よろしくなのだ！` },
-        { speakerIdx: 1, text: `高評価もポチッと押していただけると嬉しいですわ。` },
-      ];
-      break;
-
-    case 'tech_review':
-      rawLines = [
-        { speakerIdx: 0, text: `みんなこんにちは！今日は話題の${cleanTopic}について解説するのだ！` },
-        { speakerIdx: 1, text: `最近SNSでもとても注目されている分野ですね。` },
-        { speakerIdx: 0, text: `なんとこれ、従来のツールと比べて作業効率が3倍以上になるのだ！` },
-        { speakerIdx: 1, text: `初心者でも直感的にすぐ使いこなせるのが最大の魅力です。` },
-        { speakerIdx: 0, text: `無料ですぐ試せるから、みんなもぜひ使ってみてほしいのだ！` },
-        { speakerIdx: 1, text: `詳しい使い方は概要欄にリンクを載せておきますね。` },
-      ];
-      break;
-
-    case 'comedy_banter':
-      rawLines = [
-        { speakerIdx: 0, text: `大変なのだ！重大な事実に気づいてしまったのだ！` },
-        { speakerIdx: 1, text: `今度は何ですか？くだらないことじゃないといいですけど。` },
-        { speakerIdx: 0, text: `実は、${cleanTopic}は最高の神コンテンツだったのだ！` },
-        { speakerIdx: 1, text: `……知ってましたよ、そんなの当たり前です。` },
-        { speakerIdx: 0, text: `えっ、知ってたのだ！？ボクだけ知らなかったのだ…` },
-        { speakerIdx: 1, text: `まったく、相変わらずお調子者ですね。` },
-      ];
-      break;
-
-    case 'shorts_hook':
-      rawLines = [
-        { speakerIdx: 0, text: `これ知ってる！？${cleanTopic}の超ヤバい裏技なのだ！` },
-        { speakerIdx: 1, text: `実はこれ、9割以上の人が知らない裏技なんです。` },
-        { speakerIdx: 0, text: `ワンクリックで設定完了するのだ！` },
-        { speakerIdx: 1, text: `忘れないうちに今すぐ保存しておいてくださいね。` },
-      ];
-      break;
-
-    default:
-      rawLines = [
-        { speakerIdx: 0, text: `今回は${cleanTopic}についてやっていくのだ！` },
-        { speakerIdx: 1, text: `よろしくお願いします。楽しんでいきましょう。` },
-        { speakerIdx: 0, text: `見て見て！すごく面白いことになっているのだ！` },
-        { speakerIdx: 1, text: `これは驚きですね、見逃せません。` },
-      ];
+  if (style === 'gaming') {
+    templates = [
+      { speakerIsFirst: true, baseText: `今回は話題の${cleanTopic}を本気でプレイしていくよ！` },
+      { speakerIsFirst: false, baseText: `楽しみですね。油断すると即ゲームオーバーですよ？` },
+      { speakerIsFirst: true, baseText: `任せて！ボクの神技プレイを目に焼き付けるといいよ！` },
+      { speakerIsFirst: false, baseText: `あ、前方に巨大な敵が出現しました！逃げてください！` },
+      { speakerIsFirst: true, baseText: `うわあぁー！危ない！ギリギリ紙一重でセーフだったよ！` },
+      { speakerIsFirst: false, baseText: `素晴らしい回避でした！このまま勝利を掴み取りましょう！` },
+      { speakerIsFirst: true, baseText: `やったー完全勝利！みんな高評価と登録よろしくね！` },
+      { speakerIsFirst: false, baseText: `最後までご視聴いただき本当にありがとうございました。` },
+    ];
+  } else if (style === 'tech_review') {
+    templates = [
+      { speakerIsFirst: true, baseText: `みんな注目！今日は今話題沸騰中の${cleanTopic}について解説するよ！` },
+      { speakerIsFirst: false, baseText: `SNSやクリエイターの間でも非常に話題になっていますね。` },
+      { speakerIsFirst: true, baseText: `なんとこれ、使うだけで作業時間が半分以下に激減する神ツールなんだよ！` },
+      { speakerIsFirst: false, baseText: `初心者でも直感的にすぐ使いこなせるUIが大きな魅力です。` },
+      { speakerIsFirst: true, baseText: `誰でも今すぐ無料で試せるから、ぜひ使ってみてほしいよ！` },
+      { speakerIsFirst: false, baseText: `詳しい導入リンクは概要欄に載せておきますね。` },
+    ];
+  } else if (style === 'shorts_hook') {
+    templates = [
+      { speakerIsFirst: true, baseText: `これ知ってた！？${cleanTopic}の超ヤバい裏技を教えちゃうよ！` },
+      { speakerIsFirst: false, baseText: `実はこれ、9割以上の人がまだ知らない隠し仕様なんです。` },
+      { speakerIsFirst: true, baseText: `設定をひとつ変えるだけで劇的に変わるんだよ！` },
+      { speakerIsFirst: false, baseText: `後で見返せるように今すぐ保存しておいてくださいね。` },
+    ];
+  } else {
+    templates = [
+      { speakerIsFirst: true, baseText: `大変！${cleanTopic}について重大な事実に気づいちゃったよ！` },
+      { speakerIsFirst: false, baseText: `一体何ですか？くだらないことじゃないといいですけど。` },
+      { speakerIsFirst: true, baseText: `なんと、${cleanTopic}は全人類が知るべき最高のコンテンツだったんだよ！` },
+      { speakerIsFirst: false, baseText: `……当たり前すぎてリアクションに困ります。` },
+      { speakerIsFirst: true, baseText: `えっ！？知ってたの！？ボクだけ知らなかったのか…！` },
+      { speakerIsFirst: false, baseText: `まったく、相変わらずお調子者ですね。` },
+    ];
   }
 
-  // 指定行数にスライス
-  const selected = rawLines.slice(0, Math.max(3, count));
+  const selected = templates.slice(0, Math.max(2, count));
 
-  return selected.map((item) => {
-    const char = item.speakerIdx === 0 ? c1 : c2;
+  return selected.map((tpl) => {
+    const char = tpl.speakerIsFirst ? c1 : c2;
+    // キャラクターごとの口調に厳密に変換
+    const textWithPersona = formatSpeechWithPersona(char.name, tpl.baseText);
+    const expr = inferExpressionFromText(textWithPersona);
+
     return {
       characterId: char.id,
       characterName: char.name,
-      text: item.text,
+      text: textWithPersona,
+      expression: expr,
     };
   });
 }

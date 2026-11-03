@@ -50,6 +50,7 @@ export interface CharacterAvatar {
   idle: string;
   speaking?: string;
   blinking?: string;
+  expressions?: Record<string, string>; // e.g. smile, shock, trouble, angry
 }
 
 export interface Character {
@@ -67,6 +68,7 @@ export interface VoiceItem extends BaseTimelineItem {
   type: 'voice';
   characterId: string;
   text: string;
+  expression?: string; // 'default' | 'smile' | 'shock' | 'trouble' | 'angry'
   audioBlobUrl?: string;
   audioBlob?: Blob;
   phonemes?: PhonemeTiming[];

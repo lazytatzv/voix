@@ -154,42 +154,60 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
     b64 = base64.b64encode(buf.getvalue()).decode("ascii")
     avatar_data_url = f"data:image/png;base64,{b64}"
 
-    # Try extracting open talking mouth layer for lip flap (口パク差分)
+    # Try extracting open talking mouth layer for lip flap (口パク差分) and expressions
     speaking_data_url = avatar_data_url
+    expressions = {}
     if effective_psd_path and os.path.exists(effective_psd_path):
         try:
             import subprocess
             out = subprocess.check_output(['identify', '-format', '%[label]\n', effective_psd_path], stderr=subprocess.DEVNULL)
             lines = out.splitlines()
             target_idx = None
+            expr_candidates = {
+                'smile': [],
+                'shock': [],
+                'trouble': [],
+                'angry': []
+            }
+            scale_factor = im.height / float(unscaled_height) if 'unscaled_height' in locals() and unscaled_height else 1.0
+
             for i, line in enumerate(lines):
                 decoded = line.decode('cp932', errors='replace')
-                if any(k in decoded for k in ['ほあー', 'ほあ', 'あー', 'あ', '開', 'open']):
+                if target_idx is None and any(k in decoded for k in ['ほあー', 'ほあ', 'あー', 'わあー', '▽', 'open']):
                     target_idx = i
-                    break
+                
+                if any(k in decoded for k in ['にっこり', '><', 'ほほえみ', '赤面']):
+                    expr_candidates['smile'].append(i)
+                elif any(k in decoded for k in ['青ざめ', '見開き']):
+                    expr_candidates['shock'].append(i)
+                elif any(k in decoded for k in ['困り', '汗']):
+                    expr_candidates['trouble'].append(i)
+                elif any(k in decoded for k in ['おこ', '怒り']):
+                    expr_candidates['angry'].append(i)
+
+            def make_composite(layer_indices):
+                comp = im.copy()
+                for idx in layer_indices:
+                    geom = subprocess.check_output(['magick', 'identify', '-format', '%w %h %X %Y', f'{effective_psd_path}[{idx}]'], stderr=subprocess.DEVNULL).decode().strip().split()
+                    if len(geom) == 4:
+                        raw_x = int(geom[2].replace('+', ''))
+                        raw_y = int(geom[3].replace('+', ''))
+                        b = subprocess.check_output(['magick', f'{effective_psd_path}[{idx}]', 'png:-'], stderr=subprocess.DEVNULL)
+                        l_im = Image.open(io.BytesIO(b)).convert('RGBA')
+                        sx = int(raw_x * scale_factor)
+                        sy = int(raw_y * scale_factor)
+                        sl = l_im.resize((max(1, int(l_im.width * scale_factor)), max(1, int(l_im.height * scale_factor))), Image.Resampling.LANCZOS)
+                        comp.paste(sl, (sx, sy), sl)
+                buf_c = io.BytesIO()
+                comp.save(buf_c, format='PNG')
+                return f"data:image/png;base64,{base64.b64encode(buf_c.getvalue()).decode('ascii')}"
 
             if target_idx is not None:
-                geom = subprocess.check_output(['magick', 'identify', '-format', '%w %h %X %Y', f'{effective_psd_path}[{target_idx}]'], stderr=subprocess.DEVNULL).decode().strip()
-                parts = geom.split()
-                if len(parts) == 4:
-                    raw_x = int(parts[2].replace('+', ''))
-                    raw_y = int(parts[3].replace('+', ''))
-                    mouth_bytes = subprocess.check_output(['magick', f'{effective_psd_path}[{target_idx}]', 'png:-'], stderr=subprocess.DEVNULL)
-                    mouth_im = Image.open(io.BytesIO(mouth_bytes)).convert("RGBA")
-                    
-                    # Calculate scale factor if base was resized
-                    scale_factor = im.height / float(unscaled_height) if 'unscaled_height' in locals() and unscaled_height else 1.0
-                    scaled_x = int(raw_x * scale_factor)
-                    scaled_y = int(raw_y * scale_factor)
-                    scaled_mouth = mouth_im.resize((max(1, int(mouth_im.width * scale_factor)), max(1, int(mouth_im.height * scale_factor))), Image.Resampling.LANCZOS)
-                    
-                    talking_im = im.copy()
-                    talking_im.paste(scaled_mouth, (scaled_x, scaled_y), scaled_mouth)
+                speaking_data_url = make_composite([target_idx])
 
-                    buf_talk = io.BytesIO()
-                    talking_im.save(buf_talk, format="PNG")
-                    b64_talk = base64.b64encode(buf_talk.getvalue()).decode("ascii")
-                    speaking_data_url = f"data:image/png;base64,{b64_talk}"
+            for k, indices in expr_candidates.items():
+                if indices:
+                    expressions[k] = make_composite(indices[:3])
         except Exception:
             pass
 
@@ -201,6 +219,7 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
         "theme_color": char_info["theme_color"],
         "avatar_data_url": avatar_data_url,
         "speaking_data_url": speaking_data_url,
+        "expressions": expressions,
         "width": im.width,
         "height": im.height
     }

@@ -266,6 +266,38 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                     </div>
                   </div>
                 </div>
+
+                {/* Expression Variations (表情差分ギャラリー) */}
+                {char.avatar.expressions && Object.keys(char.avatar.expressions).length > 0 && (
+                  <div className="bg-[#131314] p-3 rounded-xl border border-[#282a2c] space-y-1.5">
+                    <span className="text-[11px] font-medium text-[#c4c7c5] block">
+                      PSD Expression Variations (立ち絵 表情差分)
+                    </span>
+                    <div className="grid grid-cols-4 gap-2">
+                      {Object.entries(char.avatar.expressions).map(([exprName, exprUrl]) => {
+                        const labels: Record<string, string> = {
+                          smile: '笑顔 (Smile)',
+                          shock: '驚き (Shock)',
+                          trouble: '困り (Trouble)',
+                          angry: '怒り (Angry)',
+                        };
+                        return (
+                          <div
+                            key={exprName}
+                            className="bg-[#1c1d1f] border border-[#333538] hover:border-[#8ab4f8] rounded-lg p-1.5 flex flex-col items-center gap-1 transition"
+                          >
+                            <div className="w-12 h-14 overflow-hidden rounded flex items-center justify-center bg-[#131415]">
+                              <img src={exprUrl} alt={exprName} className="w-full h-full object-contain" />
+                            </div>
+                            <span className="text-[10px] text-[#a8aaa8] font-medium">
+                              {labels[exprName] || exprName}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Caption Presets (ワンクリックで極上テロップに) */}

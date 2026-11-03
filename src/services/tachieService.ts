@@ -6,6 +6,7 @@ export interface TachieImportResult {
   theme_color: string;
   avatar_data_url: string;
   speaking_data_url?: string;
+  expressions?: Record<string, string>;
   width: number;
   height: number;
 }
