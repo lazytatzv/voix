@@ -470,6 +470,13 @@ fn load_characters_config() -> Result<String, String> {
     }
 }
 
+#[tauri::command]
+fn open_config_directory() -> Result<(), String> {
+    let dir = get_voix_config_dir();
+    let _ = Command::new("xdg-open").arg(&dir).spawn();
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -484,7 +491,8 @@ pub fn run() {
             save_app_settings,
             load_app_settings,
             save_characters_config,
-            load_characters_config
+            load_characters_config,
+            open_config_directory
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

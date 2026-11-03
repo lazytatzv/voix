@@ -10,6 +10,7 @@ import { TtsModal } from './components/TtsModal';
 import { ExportModal } from './components/ExportModal';
 import { AiVideoGeneratorModal } from './components/AiVideoGeneratorModal';
 import { TachieImportModal } from './components/TachieImportModal';
+import { SettingsModal } from './components/SettingsModal';
 import { Character, TimelineItem, VoiceItem } from './types';
 import { defaultCharacters } from './utils/defaultCharacters';
 import { ttsManager } from './services/tts/TTSManager';
@@ -80,6 +81,7 @@ export function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isAiVideoModalOpen, setIsAiVideoModalOpen] = useState(false);
   const [isTachieModalOpen, setIsTachieModalOpen] = useState(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
 
@@ -251,6 +253,9 @@ export function App() {
       } else if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         handleSaveProject();
+      } else if ((e.ctrlKey || e.metaKey) && e.key === ',') {
+        e.preventDefault();
+        setIsSettingsModalOpen((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -772,6 +777,7 @@ export function App() {
         onVideoSelect={handleVideoSelect}
         onAutoTranscribe={handleAutoTranscribe}
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenTtsSettings={() => setIsTtsModalOpen(true)}
         onExportVideo={() => setIsExportModalOpen(true)}
         onSaveProject={handleSaveProject}
@@ -913,6 +919,11 @@ export function App() {
       <TtsModal
         isOpen={isTtsModalOpen}
         onClose={() => setIsTtsModalOpen(false)}
+      />
+
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
       />
 
       <ExportModal

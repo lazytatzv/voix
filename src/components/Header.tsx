@@ -14,6 +14,7 @@ import {
   PanelRightOpen,
   PanelBottomClose,
   PanelBottomOpen,
+  Settings,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -23,6 +24,7 @@ interface HeaderProps {
   onVideoSelect: (fileOrPath: File | string) => void;
   onAutoTranscribe: () => void;
   onOpenCharacterSettings: () => void;
+  onOpenSettings?: () => void;
   onOpenTtsSettings?: () => void;
   onExportVideo: () => void;
   onSaveProject: () => void;
@@ -44,6 +46,7 @@ export const Header: React.FC<HeaderProps> = ({
   onVideoSelect,
   onAutoTranscribe,
   onOpenCharacterSettings,
+  onOpenSettings,
   onExportVideo,
   onSaveProject,
   onLoadProject,
@@ -211,6 +214,17 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <SlidersHorizontal className="w-4 h-4" />
         </button>
+
+        {/* Centralized Settings & Preferences */}
+        {onOpenSettings && (
+          <button
+            onClick={onOpenSettings}
+            className="p-1.5 rounded-lg bg-[#1a1b1d] hover:bg-[#242629] text-[#a8aaa8] hover:text-white border border-[#333639] transition"
+            title="Preferences & System Control Center (Ctrl+,)"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
 
         {/* Panel View Toggles */}
         <div className="flex items-center bg-[#18191b] p-0.5 rounded-lg border border-[#2e3135]">

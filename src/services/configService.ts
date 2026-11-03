@@ -6,7 +6,11 @@ export interface AppSettings {
   geminiApiKey?: string;
   remoteEndpoint?: string;
   remoteModel?: string;
+  remoteOpenAiEndpoint?: string;
+  voicevoxEndpoint?: string;
   exportOutputPath?: string;
+  hardwareAcceleration?: 'auto' | 'vaapi' | 'nvenc' | 'cpu';
+  exportFps?: number;
 }
 
 const SETTINGS_KEY = 'voix_app_settings';
@@ -57,21 +61,27 @@ export async function saveCharactersToConfig(characters: Character[]): Promise<v
  * Linux XDG (~/.config/voix/settings.json) から全体設定をロード
  */
 export async function loadSettingsFromConfig(): Promise<AppSettings> {
+  let loaded: Partial<AppSettings> = {};
+
   try {
     const jsonStr = await invoke<string>('load_app_settings');
     if (jsonStr && jsonStr.trim() !== '{}' && jsonStr.trim() !== '') {
-      return JSON.parse(jsonStr);
+      loaded = JSON.parse(jsonStr);
     }
   } catch (err) {
     console.warn('[configService] Could not load ~/.config/voix/settings.json:', err);
   }
 
-  // Fallback to localStorage keys
   return {
-    aiProvider: (localStorage.getItem('voix_ai_provider') as AppSettings['aiProvider']) || 'gemini',
-    geminiApiKey: localStorage.getItem('gemini_api_key') || '',
-    remoteEndpoint: localStorage.getItem('voix_ai_remote_endpoint') || 'http://192.168.1.100:11434',
-    remoteModel: localStorage.getItem('voix_ai_remote_model') || 'qwen2.5:latest',
+    aiProvider: loaded.aiProvider || (localStorage.getItem('voix_ai_provider') as AppSettings['aiProvider']) || 'gemini',
+    geminiApiKey: loaded.geminiApiKey || localStorage.getItem('gemini_api_key') || '',
+    remoteEndpoint: loaded.remoteEndpoint || localStorage.getItem('voix_ai_remote_endpoint') || 'http://192.168.1.100:11434',
+    remoteModel: loaded.remoteModel || localStorage.getItem('voix_ai_remote_model') || 'qwen2.5:latest',
+    remoteOpenAiEndpoint: loaded.remoteOpenAiEndpoint || 'http://localhost:8000/v1',
+    voicevoxEndpoint: loaded.voicevoxEndpoint || 'http://localhost:50021',
+    exportOutputPath: loaded.exportOutputPath || '/home/tatsv/myymm/output_video.mp4',
+    hardwareAcceleration: loaded.hardwareAcceleration || 'auto',
+    exportFps: loaded.exportFps || 30,
   };
 }
 
@@ -91,4 +101,51 @@ export async function saveSettingsToConfig(settings: AppSettings): Promise<void>
   } catch (err) {
     console.warn('[configService] Could not save ~/.config/voix/settings.json:', err);
   }
+}
+
+/**
+ * ~/.config/voix/ フォルダをLinux標準ファイルマネージャで開く
+ */
+export async function openConfigFolder(): Promise<void> {
+  try {
+    await invoke('open_config_directory');
+  } catch (err) {
+    console.warn('Could not open config directory:', err);
+  }
+}
+
+/**
+ * settings.json のRAW文字列を直接取得
+ */
+export async function loadRawSettingsJson(): Promise<string> {
+  try {
+    return await invoke<string>('load_app_settings');
+  } catch {
+    return '{}';
+  }
+}
+
+/**
+ * settings.json のRAW文字列を直接保存
+ */
+export async function saveRawSettingsJson(jsonStr: string): Promise<void> {
+  await invoke('save_app_settings', { settingsJson: jsonStr });
+}
+
+/**
+ * characters.json のRAW文字列を直接取得
+ */
+export async function loadRawCharactersJson(): Promise<string> {
+  try {
+    return await invoke<string>('load_characters_config');
+  } catch {
+    return '[]';
+  }
+}
+
+/**
+ * characters.json のRAW文字列を直接保存
+ */
+export async function saveRawCharactersJson(jsonStr: string): Promise<void> {
+  await invoke('save_characters_config', { charactersJson: jsonStr });
 }
