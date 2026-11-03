@@ -114,7 +114,7 @@ export function App() {
   });
 
   const [layoutMode, setLayoutMode] = useState<'stacked' | 'split'>(() => {
-    return (localStorage.getItem('voix_layout_mode') as 'stacked' | 'split') || 'stacked';
+    return (localStorage.getItem('voix_layout_mode') as 'stacked' | 'split') || 'split';
   });
 
   const handleToggleLayoutMode = () => {
