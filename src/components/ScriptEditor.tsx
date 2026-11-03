@@ -21,7 +21,12 @@ import { Character, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
 import { processAiAction, AiAction } from '../services/aiService';
 import { extractPronunciations, autoAnnotatePronunciations } from '../utils/pronunciation';
-import { itemsToRawText, parseRawScript, ParsedScriptLine } from '../utils/scriptParser';
+import {
+  itemsToRawText,
+  parseRawScript,
+  ParsedScriptLine,
+  getCharacterShortPrefix,
+} from '../utils/scriptParser';
 
 interface ScriptEditorProps {
   items: VoiceItem[];
@@ -71,11 +76,19 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     ? selectedCharacterId
     : characters[0]?.id || '';
 
-  // RAWモード切り替え時にタイムラインの最新状態を反映
-  const handleSwitchToRaw = () => {
-    setRawText(itemsToRawText(items, characters));
+  const [rawFormat, setRawFormat] = useState<'short' | 'full'>('short');
+
+  // RAWモード切り替え時にタイムラインの最新状態を反映 (短縮形式対応)
+  const handleSwitchToRaw = (fmt: 'short' | 'full' = rawFormat) => {
+    setRawText(itemsToRawText(items, characters, fmt));
     setViewMode('raw');
     setRawStatusMessage(null);
+  };
+
+  const handleToggleRawFormat = () => {
+    const nextFmt = rawFormat === 'short' ? 'full' : 'short';
+    setRawFormat(nextFmt);
+    handleSwitchToRaw(nextFmt);
   };
 
   const handleSwitchToCards = () => {
@@ -215,7 +228,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
             </button>
             <button
               type="button"
-              onClick={handleSwitchToRaw}
+              onClick={() => handleSwitchToRaw()}
               className={`px-2.5 py-1 text-xs rounded-md font-medium transition flex items-center gap-1.5 ${
                 viewMode === 'raw'
                   ? 'bg-[#004a77] text-[#c2e7ff] shadow-xs'
@@ -230,7 +243,17 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
         {/* View Mode Action Header */}
         {viewMode === 'raw' ? (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
+            {/* Format toggle: 短縮 vs フル名 */}
+            <button
+              type="button"
+              onClick={handleToggleRawFormat}
+              className="px-2 py-1 rounded-md text-[11px] font-mono text-[#a8aaa8] hover:text-white bg-[#202124] hover:bg-[#282a2e] border border-[#2e3135] transition"
+              title="短縮記号（ず:/め:）とフル名前（ずんだもん:）を相互変換"
+            >
+              {rawFormat === 'short' ? '短縮形式 (ず:/め:)' : 'フル名前形式'}
+            </button>
+
             <button
               type="button"
               onClick={handleCopyRaw}
@@ -243,7 +266,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
             <button
               type="button"
-              onClick={handleSwitchToRaw}
+              onClick={() => handleSwitchToRaw()}
               className="px-2 py-1 rounded-md text-[11px] text-[#8e918f] hover:text-white bg-[#202124] hover:bg-[#282a2e] border border-[#2e3135] transition flex items-center gap-1"
               title="Sync from current timeline"
             >
@@ -255,7 +278,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               type="button"
               onClick={handleApplyRawScript}
               disabled={isApplyingRaw}
-              className="px-3 py-1 rounded-md text-xs font-semibold text-white bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-95 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm"
+              className="px-3 py-1 rounded-md text-xs font-semibold text-white bg-[#004a77] hover:bg-[#005a92] active:scale-95 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm border border-[#004a77]"
               title="Apply script to timeline & synthesize with VOICEVOX (Ctrl+Enter)"
             >
               {isApplyingRaw ? (
@@ -263,7 +286,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               ) : (
                 <Play className="w-3 h-3 fill-current" />
               )}
-              Apply (Ctrl+Enter)
+              反映 (Ctrl+Enter)
             </button>
           </div>
         ) : (
@@ -278,30 +301,34 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         /* ================= RAW BATCH SCRIPT EDITOR (Linux / Engineer Grade) ================= */
         <div className="flex-1 flex flex-col overflow-hidden bg-[#121314]">
           {/* Quick Snippet Insert Bar */}
-          <div className="px-3 py-2 bg-[#17181a] border-b border-[#242628] flex items-center gap-2 overflow-x-auto text-[11px]">
+          <div className="px-3 py-1.5 bg-[#17181a] border-b border-[#242628] flex items-center gap-1.5 overflow-x-auto text-[11px]">
             <span className="text-[#8e918f] font-mono text-[10px] uppercase flex-shrink-0">
               Insert:
             </span>
-            {characters.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                onClick={() => handleInsertSnippet(`${c.name}: `)}
-                className="px-2 py-0.5 rounded bg-[#202124] hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white border border-[#2e3135] flex items-center gap-1 flex-shrink-0 transition active:scale-95"
-              >
-                <span className="text-[#8ab4f8] font-bold">+</span>
-                {c.name}
-              </button>
-            ))}
+            {characters.map((c, idx) => {
+              const prefix = getCharacterShortPrefix(c, idx);
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  onClick={() => handleInsertSnippet(`${prefix}: `)}
+                  className="px-2 py-0.5 rounded bg-[#202124] hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white border border-[#2e3135] flex items-center gap-1 flex-shrink-0 transition active:scale-95 text-xs font-mono"
+                  title={`${c.name} (${prefix}:)`}
+                >
+                  <span className="text-[#8ab4f8] font-bold">+{prefix}:</span>
+                  <span className="text-[10px] opacity-70">{c.name}</span>
+                </button>
+              );
+            })}
 
             <div className="h-3 w-px bg-[#2e3135] mx-1 flex-shrink-0" />
 
             {/* Expressions */}
             {[
-              { id: '[smile]', label: '😊 smile' },
-              { id: '[shock]', label: '⚡ shock' },
-              { id: '[trouble]', label: '💦 trouble' },
-              { id: '[angry]', label: '💢 angry' },
+              { id: '[smile]', label: '笑顔 [smile]' },
+              { id: '[shock]', label: '驚き [shock]' },
+              { id: '[trouble]', label: '困り [trouble]' },
+              { id: '[angry]', label: '怒り [angry]' },
             ].map((expr) => (
               <button
                 key={expr.id}
@@ -330,14 +357,14 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   handleInsertSnippet('  ');
                 }
               }}
-              placeholder={`# Write or paste entire script in batch:\nずんだもん: 今回はLinuxで最強の動画を作るのだ！\n四国めたん[smile]: ついに完成に近づいてきましたね。`}
-              className="w-full h-full bg-transparent text-[#e3e3e3] font-mono text-xs leading-relaxed resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white"
+              placeholder={`# スクリプト一括入力 (短縮入力・カギ括弧・TSVに対応):\nず: 今回はLinuxで最強の動画を作るのだ！\nめ: ついに完成に近づいてきましたね。\nず[shock]: え！？もう動くのだ！？\nめ[smile]: 当然ですわ。`}
+              className="w-full h-full bg-transparent text-[#e3e3e3] font-mono text-xs leading-relaxed resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266]"
               spellCheck={false}
             />
           </div>
 
           {/* RAW Footer / Status Bar */}
-          <div className="px-3 py-2 bg-[#17181a] border-t border-[#242628] flex items-center justify-between text-[11px] text-[#8e918f] font-mono">
+          <div className="px-3 py-1.5 bg-[#17181a] border-t border-[#242628] flex items-center justify-between text-[11px] text-[#8e918f] font-mono">
             <div className="flex items-center gap-3">
               <span>
                 {rawText.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#')).length} lines
@@ -351,7 +378,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               )}
             </div>
             <div className="text-[10px] text-[#6b6e70]">
-              Format: <code className="text-[#a8aaa8]">Speaker[expression]: Text</code> (Ctrl+Enter to apply)
+              入力例: <code className="text-[#a8aaa8]">ず: セリフ</code> または <code className="text-[#a8aaa8]">ずんだもん「セリフ」</code> (Ctrl+Enterでタイムライン反映)
             </div>
           </div>
         </div>
@@ -420,23 +447,13 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         </button>
                       </div>
 
-                      {/* Actions */}
+                      {/* Actions (シンプル・必要最小限) */}
                       <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
-                          className={`p-1.5 rounded-full transition ${
-                            isExpanded ? 'bg-[#004a77] text-[#c2e7ff]' : 'hover:bg-[#282a2e] text-[#8e918f]'
-                          }`}
-                          title="Voice tuning (Speed & Pitch)"
-                        >
-                          <Sliders className="w-3.5 h-3.5" />
-                        </button>
-
                         <button
                           onClick={() => onPlaySingle(item)}
                           disabled={item.isSynthesizing}
-                          className="p-1.5 rounded-full hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white transition disabled:opacity-40"
-                          title="Play audio preview"
+                          className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white transition disabled:opacity-40"
+                          title="音声を試聴"
                         >
                           {item.isSynthesizing ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#8ab4f8]" />
@@ -446,25 +463,35 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         </button>
 
                         <button
+                          onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
+                          className={`p-1.5 rounded-lg transition ${
+                            isExpanded ? 'bg-[#004a77] text-[#c2e7ff]' : 'hover:bg-[#282a2e] text-[#8e918f]'
+                          }`}
+                          title="話速・音高パラメータ調整"
+                        >
+                          <Sliders className="w-3.5 h-3.5" />
+                        </button>
+
+                        <button
                           onClick={() => onDuplicateItem(item.id)}
-                          className="p-1.5 rounded-full hover:bg-[#282a2e] text-[#8e918f] hover:text-white transition"
-                          title="Duplicate caption"
+                          className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#8e918f] hover:text-[#c4c7c5] transition"
+                          title="アイテムを複製"
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
 
                         <button
-                          onClick={() => onSplitItem(item.id, currentTime)}
-                          className="p-1.5 rounded-full hover:bg-[#282a2e] text-[#8e918f] hover:text-white transition"
-                          title="Split caption at playhead"
+                          onClick={() => onSplitItem(item.id, item.startTime + (item.duration || 1) / 2)}
+                          className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#8e918f] hover:text-[#c4c7c5] transition"
+                          title="中央で分割"
                         >
                           <Scissors className="w-3.5 h-3.5" />
                         </button>
 
                         <button
                           onClick={() => onDeleteItem(item.id)}
-                          className="p-1.5 rounded-full hover:bg-red-500/10 text-[#8e918f] hover:text-red-400 transition"
-                          title="Delete"
+                          className="p-1.5 rounded-lg hover:bg-red-500/10 text-[#8e918f] hover:text-red-400 transition"
+                          title="削除"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>

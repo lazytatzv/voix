@@ -113,6 +113,18 @@ export function App() {
     return saved ? Math.max(130, Math.min(450, parseInt(saved))) : 200;
   });
 
+  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split'>(() => {
+    return (localStorage.getItem('voix_layout_mode') as 'stacked' | 'split') || 'stacked';
+  });
+
+  const handleToggleLayoutMode = () => {
+    setLayoutMode((prev) => {
+      const next = prev === 'stacked' ? 'split' : 'stacked';
+      localStorage.setItem('voix_layout_mode', next);
+      return next;
+    });
+  };
+
   const handleToggleScriptCollapsed = () => {
     setIsScriptCollapsed((prev) => {
       const next = !prev;
@@ -798,7 +810,7 @@ export function App() {
   const voiceItems = items.filter((it): it is VoiceItem => it.type === 'voice');
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#131314] text-[#e3e3e3] overflow-hidden select-none font-sans">
+    <div className="h-screen w-screen flex flex-col bg-[#101112] text-[#e3e3e3] overflow-hidden select-none font-sans">
       <Header
         projectName={projectName}
         onProjectNameChange={setProjectName}
@@ -806,103 +818,151 @@ export function App() {
         onAutoTranscribe={handleAutoTranscribe}
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
-        onOpenTtsSettings={() => setIsTtsModalOpen(true)}
         onExportVideo={() => setIsExportModalOpen(true)}
-        onSaveProject={handleSaveProject}
-        onLoadProject={handleLoadProject}
         onOpenAiVideoGenerator={() => setIsAiVideoModalOpen(true)}
-        onOpenTachieImport={() => setIsTachieModalOpen(true)}
         hasVideo={!!videoSrc}
         itemCount={items.length}
         isTranscribing={isTranscribing}
-        isScriptCollapsed={isScriptCollapsed}
-        onToggleScriptCollapsed={handleToggleScriptCollapsed}
-        isTimelineCollapsed={isTimelineCollapsed}
-        onToggleTimelineCollapsed={handleToggleTimelineCollapsed}
+        layoutMode={layoutMode}
+        onToggleLayoutMode={handleToggleLayoutMode}
+        onSaveProject={handleSaveProject}
+        onLoadProject={handleLoadProject}
       />
 
-      <main className="flex-1 flex overflow-hidden p-4 gap-0 min-h-0">
-        {/* Left: Video Preview (可変幅 & フレキシブル展開) */}
-        <div className="flex-1 flex flex-col justify-start min-w-0 pr-1 overflow-hidden">
-          <VideoPreview
-            videoSrc={videoSrc}
-            items={items}
-            characters={characters}
-            currentTime={currentTime}
-            duration={totalDuration}
-            isPlaying={isPlaying}
-            onTogglePlay={handleTogglePlay}
-            onSeek={handleSeek}
-            onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
-            onVideoDrop={handleVideoSelect}
-            activeAudioUrl={activeAudioUrl}
-          />
-        </div>
+      <main className="flex-1 flex overflow-hidden p-3 gap-3 min-h-0">
+        {layoutMode === 'stacked' ? (
+          /* ================= STACKED LAYOUT (上下分割: ビデオ上・台本下 / 圧倒的見やすさ) ================= */
+          <div className="flex-1 flex flex-col min-h-0 overflow-hidden gap-2">
+            {/* Top: Video Preview (自然なアスペクト比で中央配置) */}
+            <div className="h-[46vh] min-h-[220px] max-h-[58vh] flex flex-col justify-center items-center overflow-hidden">
+              <VideoPreview
+                videoSrc={videoSrc}
+                items={items}
+                characters={characters}
+                currentTime={currentTime}
+                duration={totalDuration}
+                isPlaying={isPlaying}
+                onTogglePlay={handleTogglePlay}
+                onSeek={handleSeek}
+                onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
+                onVideoDrop={handleVideoSelect}
+                activeAudioUrl={activeAudioUrl}
+              />
+            </div>
 
-        {/* 水平リサイズハンドル (ドラッグでScript & Captionsの幅を自由変更) */}
-        {!isScriptCollapsed && (
-          <div
-            onMouseDown={handleStartHorizontalResize}
-            className="w-2 hover:w-2.5 transition-all flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-1 flex-shrink-0"
-            title="ドラッグしてScriptパネル幅を変更 (ダブルクリックで初期幅460pxにリセット)"
-            onDoubleClick={() => setScriptWidth(460)}
-          >
-            <div className="w-1 h-12 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
-          </div>
-        )}
-
-        {/* Right: Script & Captions (開閉 & 自由リサイズ対応) */}
-        {!isScriptCollapsed ? (
-          <div
-            style={{ width: `${scriptWidth}px` }}
-            className="flex flex-col flex-shrink-0 min-w-0 h-full"
-          >
-            <ScriptEditor
-              items={voiceItems}
-              characters={characters}
-              currentTime={currentTime}
-              onAddItem={handleAddVoiceItem}
-              onUpdateItem={handleUpdateItem}
-              onDeleteItem={handleDeleteItem}
-              onDuplicateItem={handleDuplicateItem}
-              onSplitItem={handleSplitItem}
-              onSeek={handleSeek}
-              onPlaySingle={handlePlaySingle}
-              onSynthesizeItem={handleSynthesizeItem}
-              onBatchApplyScript={handleBatchApplyScript}
-            />
+            {/* Bottom: Script & Captions (全幅表示でスクリプトが改行されず極めて読みやすい) */}
+            <div className="flex-1 min-h-[160px] flex flex-col overflow-hidden">
+              <ScriptEditor
+                items={voiceItems}
+                characters={characters}
+                currentTime={currentTime}
+                onAddItem={handleAddVoiceItem}
+                onUpdateItem={handleUpdateItem}
+                onDeleteItem={handleDeleteItem}
+                onDuplicateItem={handleDuplicateItem}
+                onSplitItem={handleSplitItem}
+                onSeek={handleSeek}
+                onPlaySingle={handlePlaySingle}
+                onSynthesizeItem={handleSynthesizeItem}
+                onBatchApplyScript={handleBatchApplyScript}
+              />
+            </div>
           </div>
         ) : (
-          /* パネル折りたたみ時の再展開ボタン */
-          <button
-            type="button"
-            onClick={handleToggleScriptCollapsed}
-            className="w-5 h-16 self-center rounded-l-lg bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
-            title="Script & Captions パネルを展開"
-          >
-            <PanelRightOpen className="w-3.5 h-3.5" />
-          </button>
+          /* ================= SPLIT LAYOUT (左右分割) ================= */
+          <>
+            {/* Left: Video Preview */}
+            <div className="flex-1 flex flex-col justify-start min-w-0 pr-1 overflow-hidden">
+              <VideoPreview
+                videoSrc={videoSrc}
+                items={items}
+                characters={characters}
+                currentTime={currentTime}
+                duration={totalDuration}
+                isPlaying={isPlaying}
+                onTogglePlay={handleTogglePlay}
+                onSeek={handleSeek}
+                onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
+                onVideoDrop={handleVideoSelect}
+                activeAudioUrl={activeAudioUrl}
+              />
+            </div>
+
+            {/* 水平リサイズハンドル */}
+            {!isScriptCollapsed && (
+              <div
+                onMouseDown={handleStartHorizontalResize}
+                className="w-2 hover:w-2.5 transition-all flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-1 flex-shrink-0"
+                title="ドラッグしてScriptパネル幅を変更"
+                onDoubleClick={() => setScriptWidth(460)}
+              >
+                <div className="w-1 h-12 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+              </div>
+            )}
+
+            {/* Right: Script & Captions */}
+            {!isScriptCollapsed ? (
+              <div
+                style={{ width: `${scriptWidth}px` }}
+                className="flex flex-col flex-shrink-0 min-w-0 h-full"
+              >
+                <ScriptEditor
+                  items={voiceItems}
+                  characters={characters}
+                  currentTime={currentTime}
+                  onAddItem={handleAddVoiceItem}
+                  onUpdateItem={handleUpdateItem}
+                  onDeleteItem={handleDeleteItem}
+                  onDuplicateItem={handleDuplicateItem}
+                  onSplitItem={handleSplitItem}
+                  onSeek={handleSeek}
+                  onPlaySingle={handlePlaySingle}
+                  onSynthesizeItem={handleSynthesizeItem}
+                  onBatchApplyScript={handleBatchApplyScript}
+                />
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleToggleScriptCollapsed}
+                className="w-5 h-16 self-center rounded-l-lg bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
+                title="Script & Captions パネルを展開"
+              >
+                <PanelRightOpen className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </>
         )}
       </main>
 
-      {/* 垂直リサイズハンドル (ドラッグでタイムラインの高さを自由変更) */}
+      {/* 垂直リサイズハンドル (タイムライン調整) */}
       {!isTimelineCollapsed && (
         <div
           onMouseDown={handleStartVerticalResize}
-          className="h-2 hover:h-2.5 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0"
-          title="ドラッグしてタイムライン高さを変更 (ダブルクリックで初期高200pxにリセット)"
+          className="h-1.5 hover:h-2 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0"
+          title="ドラッグしてタイムライン高さを変更 (ダブルクリックで初期化)"
           onDoubleClick={() => setTimelineHeight(200)}
         >
-          <div className="h-1 w-16 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+          <div className="h-1 w-16 rounded-full bg-[#222427] group-hover:bg-[#8ab4f8] transition-colors" />
         </div>
       )}
 
       {/* Bottom: Timeline (開閉 & 自由リサイズ対応) */}
-      {!isTimelineCollapsed && (
+      {!isTimelineCollapsed ? (
         <div
           style={{ height: `${timelineHeight}px` }}
-          className="px-4 pb-4 flex-shrink-0 overflow-hidden"
+          className="px-4 pb-4 flex-shrink-0 overflow-hidden relative group"
         >
+          <div className="absolute right-6 top-1 z-20 opacity-0 group-hover:opacity-100 transition">
+            <button
+              type="button"
+              onClick={handleToggleTimelineCollapsed}
+              className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#8e918f] hover:text-[#c4c7c5] border border-[#2e3135]"
+              title="タイムラインを折りたたむ"
+            >
+              ▼ Collapse
+            </button>
+          </div>
           <Timeline
             items={items}
             characters={characters}
@@ -915,6 +975,17 @@ export function App() {
               )
             }
           />
+        </div>
+      ) : (
+        <div className="h-6 mx-4 mb-2 flex items-center justify-between px-3 bg-[#131416] border border-[#222426] rounded-md text-[11px] text-[#8e918f]">
+          <span className="font-mono">Timeline (Collapsed)</span>
+          <button
+            type="button"
+            onClick={handleToggleTimelineCollapsed}
+            className="text-[#8ab4f8] hover:underline"
+          >
+            ▲ Expand
+          </button>
         </div>
       )}
 
