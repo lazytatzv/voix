@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown, Check } from 'lucide-react';
+import { toAssetUrl } from '../utils/imageUtils';
 
 export interface SelectOption {
   value: string | number;
@@ -54,7 +55,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       >
         {selectedOption?.icon && (
           <div className="w-3.5 h-3.5 rounded-full overflow-hidden bg-black/40 flex-shrink-0">
-            <img src={selectedOption.icon} alt="" className="w-full h-full object-cover" />
+            <img src={toAssetUrl(selectedOption.icon)} alt="" className="w-full h-full object-cover" />
           </div>
         )}
         <span className="truncate max-w-[120px]">{selectedOption?.label}</span>
@@ -87,7 +88,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
                 <div className="flex items-center gap-2 truncate">
                   {opt.icon && (
                     <div className="w-4 h-4 rounded-full overflow-hidden bg-black/30 flex-shrink-0">
-                      <img src={opt.icon} alt="" className="w-full h-full object-cover" />
+                      <img src={toAssetUrl(opt.icon)} alt="" className="w-full h-full object-cover" />
                     </div>
                   )}
                   <span className="truncate">{opt.label}</span>

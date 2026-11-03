@@ -199,14 +199,22 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
         new_width = max(1, int(im.width * scale))
         im = im.resize((new_width, max_height), Image.Resampling.LANCZOS)
 
-    buf = io.BytesIO()
-    im.save(buf, format="PNG")
-    b64 = base64.b64encode(buf.getvalue()).decode("ascii")
-    avatar_data_url = f"data:image/png;base64,{b64}"
+    char_info = detect_character_info(effective_path, inner_names)
 
-    # Try extracting open talking mouth layer for lip flap (口パク差分) and expressions
-    speaking_data_url = avatar_data_url
+    # 抽出画像をローカルLinuxの ~/.config/voix/characters/ へ直接PNG保存 (base64肥大化・フリーズ防止)
+    output_base = os.path.expanduser("~/.config/voix/characters")
+    safe_name = "".join(c for c in char_info["name"] if c.isalnum() or c in ("_", "-")).strip() or "character"
+    import time
+    char_dir = os.path.join(output_base, f"{safe_name}_{int(time.time())}")
+    os.makedirs(char_dir, exist_ok=True)
+
+    idle_path = os.path.join(char_dir, "idle.png")
+    im.save(idle_path, format="PNG", optimize=True)
+
+    avatar_data_url = idle_path
+    speaking_data_url = idle_path
     expressions = {}
+
     if effective_psd_path and os.path.exists(effective_psd_path):
         try:
             import subprocess
@@ -235,7 +243,7 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
                 elif any(k in decoded for k in ['おこ', '怒り']):
                     expr_candidates['angry'].append(i)
 
-            def make_composite(layer_indices):
+            def make_composite(layer_indices, output_filename):
                 comp = im.copy()
                 for idx in layer_indices:
                     geom = subprocess.check_output(['magick', 'identify', '-format', '%w %h %X %Y', f'{effective_psd_path}[{idx}]'], stderr=subprocess.DEVNULL).decode().strip().split()
@@ -248,20 +256,18 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
                         sy = int(raw_y * scale_factor)
                         sl = l_im.resize((max(1, int(l_im.width * scale_factor)), max(1, int(l_im.height * scale_factor))), Image.Resampling.LANCZOS)
                         comp.paste(sl, (sx, sy), sl)
-                buf_c = io.BytesIO()
-                comp.save(buf_c, format='PNG')
-                return f"data:image/png;base64,{base64.b64encode(buf_c.getvalue()).decode('ascii')}"
+                out_path = os.path.join(char_dir, output_filename)
+                comp.save(out_path, format='PNG', optimize=True)
+                return out_path
 
             if target_idx is not None:
-                speaking_data_url = make_composite([target_idx])
+                speaking_data_url = make_composite([target_idx], "speaking.png")
 
             for k, indices in expr_candidates.items():
                 if indices:
-                    expressions[k] = make_composite(indices[:3])
-        except Exception:
-            pass
-
-    char_info = detect_character_info(effective_path, inner_names)
+                    expressions[k] = make_composite(indices[:3], f"{k}.png")
+        except Exception as e:
+            sys.stderr.write(f"Expression composite notice: {e}\n")
 
     return {
         "character_name": char_info["name"],

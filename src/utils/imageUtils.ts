@@ -1,3 +1,23 @@
+import { convertFileSrc } from '@tauri-apps/api/core';
+
+/**
+ * ファイルパスまたはURLを安全なアセットURLに変換
+ */
+export function toAssetUrl(filePathOrUrl: string): string {
+  if (!filePathOrUrl) return '';
+  if (
+    filePathOrUrl.startsWith('http://') ||
+    filePathOrUrl.startsWith('https://') ||
+    filePathOrUrl.startsWith('data:') ||
+    filePathOrUrl.startsWith('blob:') ||
+    filePathOrUrl.startsWith('asset://') ||
+    filePathOrUrl.startsWith('/characters/')
+  ) {
+    return filePathOrUrl;
+  }
+  return convertFileSrc(filePathOrUrl);
+}
+
 /**
  * 白ベタ塗り背景（非透過PNGやJPG）の外周を検出し、自動で透明化するユーティリティ
  */

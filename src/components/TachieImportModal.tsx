@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Upload, Loader2, Check, FileArchive, ArrowRight, FolderOpen, UserPlus } from 'lucide-react';
+import { X, Loader2, Check, FileArchive, ArrowRight, FolderOpen, UserPlus } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { importTachieFile, TachieImportResult } from '../services/tachieService';
+import { toAssetUrl } from '../utils/imageUtils';
 
 interface TachieImportModalProps {
   isOpen: boolean;
@@ -26,7 +27,18 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
     setError(null);
     try {
       const res = await importTachieFile(pathOrData, hint);
-      setPreviewResult(res);
+      // ローカルパスを安全・軽量なアセットURLに変換 (メモリ枯渇・フリーズ防止)
+      const converted: TachieImportResult = {
+        ...res,
+        avatar_data_url: toAssetUrl(res.avatar_data_url),
+        speaking_data_url: res.speaking_data_url ? toAssetUrl(res.speaking_data_url) : undefined,
+        expressions: res.expressions
+          ? Object.fromEntries(
+              Object.entries(res.expressions).map(([k, v]) => [k, toAssetUrl(v)])
+            )
+          : undefined,
+      };
+      setPreviewResult(converted);
     } catch (e: unknown) {
       const err = e as { message?: string } | string;
       const msg = typeof err === 'string' ? err : err?.message || 'Failed to extract tachie';
@@ -55,29 +67,6 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
     } catch (e) {
       console.warn('Native dialog error:', e);
     }
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Check if real file path exists on the file object
-    const p = (file as unknown as { path?: string }).path;
-    if (p && typeof p === 'string') {
-      setFilePath(p);
-      handleProcess(p, file.name);
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      const b64 = reader.result as string;
-      handleProcess(b64, file.name);
-    };
-    reader.onerror = () => {
-      setError('Failed to read file from disk');
-    };
-    reader.readAsDataURL(file);
   };
 
   const handleConfirm = () => {
@@ -177,20 +166,20 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
             </div>
           </div>
 
-          {/* Or File Drop Area */}
-          <div className="relative border border-dashed border-[#3c4043] hover:border-[#8ab4f8] rounded-xl p-4 text-center transition group bg-[#131415]/50">
-            <input
-              type="file"
-              accept=".zip,.psd,.png,.webp"
-              onChange={handleFileUpload}
-              className="absolute inset-0 opacity-0 cursor-pointer"
-            />
-            <div className="flex flex-col items-center justify-center gap-1 text-xs text-[#8e918f]">
-              <Upload className="w-4 h-4 text-[#8ab4f8] transition" />
-              <span>Drag & drop archive or image here</span>
-              <span className="text-[10px] text-[#5e6265]">Automatically parses Shift-JIS (CP932) and PSD layer structures</span>
-            </div>
-          </div>
+          {/* File Select Area (Native Linux Dialog / Zero Memory Freeze) */}
+          <button
+            type="button"
+            onClick={handleNativeBrowse}
+            className="w-full border border-dashed border-[#3c4043] hover:border-[#8ab4f8] rounded-xl p-4 text-center transition group bg-[#131415]/50 flex flex-col items-center justify-center gap-1.5 text-xs text-[#8e918f] cursor-pointer hover:bg-[#18191c] active:scale-[0.99]"
+          >
+            <FolderOpen className="w-5 h-5 text-[#8ab4f8] transition group-hover:scale-110" />
+            <span className="font-medium text-[#e3e3e3]">
+              クリックしてZIPまたはPSDを選択 (Select ZIP or PSD File)
+            </span>
+            <span className="text-[10px] text-[#5e6265]">
+              Direct filesystem access — extracts PSD layers & expressions without memory limits
+            </span>
+          </button>
 
           {/* Error Message */}
           {error && (

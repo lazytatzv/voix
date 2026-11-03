@@ -4,7 +4,7 @@ import { Character, Speaker } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
 import { CustomSelect } from './CustomSelect';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
-import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
+import { removeWhiteBackgroundFromDataUrl, toAssetUrl } from '../utils/imageUtils';
 
 interface CharacterModalProps {
   isOpen: boolean;
@@ -68,12 +68,12 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
 
   const handleCleanCurrentAvatar = async () => {
     if (!char?.avatar?.idle) return;
-    const cleaned = await removeWhiteBackgroundFromDataUrl(char.avatar.idle);
+    const cleaned = await removeWhiteBackgroundFromDataUrl(toAssetUrl(char.avatar.idle));
     onUpdateCharacter(char.id, {
       avatar: {
         ...char.avatar,
         idle: cleaned,
-        speaking: char.avatar.speaking ? await removeWhiteBackgroundFromDataUrl(char.avatar.speaking) : cleaned,
+        speaking: char.avatar.speaking ? await removeWhiteBackgroundFromDataUrl(toAssetUrl(char.avatar.speaking)) : cleaned,
       },
     });
   };
@@ -155,7 +155,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                 >
                   <div className="flex items-center gap-2.5 truncate">
                     <div className="w-6 h-6 rounded-full overflow-hidden bg-[#131314] flex-shrink-0 border border-white/10">
-                      <img src={c.avatar.idle} alt="" className="w-full h-full object-cover" />
+                      <img src={toAssetUrl(c.avatar.idle)} alt="" className="w-full h-full object-cover" />
                     </div>
                     <span className="truncate">{c.name}</span>
                   </div>
@@ -252,7 +252,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                 </label>
                 <div className="flex items-center gap-4 bg-[#131314] p-3.5 rounded-2xl border border-[#282a2c]">
                   <div className="w-14 h-16 bg-[#1e1f20] rounded-xl overflow-hidden border border-[#3c4043] flex items-center justify-center flex-shrink-0">
-                    <img src={char.avatar.idle} alt="" className="w-full h-full object-contain" />
+                    <img src={toAssetUrl(char.avatar.idle)} alt="" className="w-full h-full object-contain" />
                   </div>
                   <div className="flex-1 space-y-1">
                     <p className="text-xs text-[#e3e3e3] font-medium">{char.name}'s visual avatar</p>
@@ -311,7 +311,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                             className="bg-[#1c1d1f] border border-[#333538] hover:border-[#8ab4f8] rounded-lg p-1.5 flex flex-col items-center gap-1 transition"
                           >
                             <div className="w-12 h-14 overflow-hidden rounded flex items-center justify-center bg-[#131415]">
-                              <img src={exprUrl} alt={exprName} className="w-full h-full object-contain" />
+                              <img src={toAssetUrl(exprUrl)} alt={exprName} className="w-full h-full object-contain" />
                             </div>
                             <span className="text-[10px] text-[#a8aaa8] font-medium">
                               {labels[exprName] || exprName}

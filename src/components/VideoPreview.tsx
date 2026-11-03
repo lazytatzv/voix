@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User } from 'lucide-react';
 import { Character, VoiceItem, TimelineItem } from '../types';
 import { parsePronunciationTokens, getSubtitleDisplayText } from '../utils/pronunciation';
+import { toAssetUrl } from '../utils/imageUtils';
 
 interface VideoPreviewProps {
   videoSrc: string | null;
@@ -93,7 +94,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       const loadImg = (key: string, src?: string) => {
         if (!src) return;
         const img = new Image();
-        img.src = src;
+        img.src = toAssetUrl(src);
         img.onload = () => {
           setImagesLoaded((prev) => ({ ...prev, [key]: img }));
         };
