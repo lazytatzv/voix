@@ -249,53 +249,100 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       ctx.fillText('Supports MP4, MKV, WebM, MOV', width / 2, height / 2 + 18);
     }
 
-    // 2. 立ち絵キャラクター描画 (表情差分・100%不透明・口パク)
+    // 2. 立ち絵キャラクター描画 (表情差分・100%不透明・口パク・2重重なり防止)
     if (showAvatar) {
+      // スロット（left, right, center）ごとにキャラクターを分類
+      const slots: Record<'left' | 'right' | 'center', Character[]> = {
+        left: [],
+        right: [],
+        center: [],
+      };
+
       characters.forEach((char) => {
         if (char.position === 'hidden') return;
+        slots[char.position].push(char);
+      });
 
-        const isSpeaking = currentVoiceItem?.characterId === char.id;
-        const expr = (isSpeaking && currentVoiceItem?.expression) || 'default';
-        const exprImg = expr !== 'default' ? imagesLoaded[`${char.id}_expr_${expr}`] : null;
+      // 各位置について重複を除去して描画
+      (Object.keys(slots) as Array<'left' | 'right' | 'center'>).forEach((pos) => {
+        const charsInPos = slots[pos];
+        if (charsInPos.length === 0) return;
 
-        // 口パク判定: 発話中、7〜8Hzの周期で口を開閉
-        const isMouthOpen = isSpeaking && Math.floor(currentTime * 7.5) % 2 === 0;
+        // 1. 同一スピーカー（ずんだもんの2重登録等）の重複を完全除去
+        const uniqueChars: Character[] = [];
+        const seenSpeakerKeys = new Set<string>();
 
-        const speakingImg = imagesLoaded[`${char.id}_speaking`];
-        const idleImg = exprImg || imagesLoaded[char.id];
-        const activeImg =
-          isMouthOpen && speakingImg && speakingImg.complete
-            ? speakingImg
-            : (idleImg || imagesLoaded[char.id]);
+        // 発話中キャラクターを最優先
+        const speakingChar = charsInPos.find((c) => c.id === currentVoiceItem?.characterId);
 
-        if (activeImg && activeImg.complete) {
-          ctx.save();
+        if (speakingChar) {
+          const speakKey = `${speakingChar.speakerId}_${speakingChar.name.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '')}`;
+          seenSpeakerKeys.add(speakKey);
+          uniqueChars.push(speakingChar);
 
-          // 透過バグ修正: キャラクターは常に100%不透明
-          ctx.globalAlpha = 1.0;
-
-          // 発話していないキャラクターは透過させず、わずかにトーンを落とす
-          if (!isSpeaking) {
-            ctx.filter = 'brightness(0.88)';
-          } else {
-            ctx.filter = 'none';
-          }
-
-          const charHeight = height * 0.54;
-          const charWidth = (activeImg.width / activeImg.height) * charHeight;
-
-          let charX = 80;
-          if (char.position === 'right') {
-            charX = width - charWidth - 80;
-          } else if (char.position === 'center') {
-            charX = (width - charWidth) / 2;
-          }
-
-          const charY = height - charHeight;
-          ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
-
-          ctx.restore();
+          charsInPos.forEach((c) => {
+            const k = `${c.speakerId}_${c.name.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '')}`;
+            if (c.id !== speakingChar.id && !seenSpeakerKeys.has(k)) {
+              seenSpeakerKeys.add(k);
+              uniqueChars.push(c);
+            }
+          });
+        } else {
+          charsInPos.forEach((c) => {
+            const k = `${c.speakerId}_${c.name.replace(/[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF]/g, '')}`;
+            if (!seenSpeakerKeys.has(k)) {
+              seenSpeakerKeys.add(k);
+              uniqueChars.push(c);
+            }
+          });
         }
+
+        // 2. 描画 (複数話者が同位置にいる場合は横にオフセットして並べ、重なりを防止)
+        uniqueChars.forEach((char, index) => {
+          const isSpeaking = currentVoiceItem?.characterId === char.id;
+          const expr = (isSpeaking && currentVoiceItem?.expression) || 'default';
+          const exprImg = expr !== 'default' ? imagesLoaded[`${char.id}_expr_${expr}`] : null;
+
+          // 口パク判定: 発話中、7〜8Hzの周期で口を開閉
+          const isMouthOpen = isSpeaking && Math.floor(currentTime * 7.5) % 2 === 0;
+
+          const speakingImg = imagesLoaded[`${char.id}_speaking`];
+          const idleImg = exprImg || imagesLoaded[char.id];
+          const activeImg =
+            isMouthOpen && speakingImg && speakingImg.complete
+              ? speakingImg
+              : (idleImg || imagesLoaded[char.id]);
+
+          if (activeImg && activeImg.complete) {
+            ctx.save();
+
+            // キャラクターは常に100%不透明
+            ctx.globalAlpha = 1.0;
+
+            if (!isSpeaking) {
+              ctx.filter = 'brightness(0.88)';
+            } else {
+              ctx.filter = 'none';
+            }
+
+            const charHeight = height * 0.54;
+            const charWidth = (activeImg.width / activeImg.height) * charHeight;
+
+            // 複数キャラが同スロットにいる場合は横オフセットをつけて並べる (重なりゴースト防止)
+            const offset = index * 120;
+            let charX = 80 + offset;
+            if (char.position === 'right') {
+              charX = width - charWidth - 80 - offset;
+            } else if (char.position === 'center') {
+              charX = (width - charWidth) / 2 + (index - (uniqueChars.length - 1) / 2) * 140;
+            }
+
+            const charY = height - charHeight;
+            ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
+
+            ctx.restore();
+          }
+        });
       });
     }
 

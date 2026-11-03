@@ -15,7 +15,7 @@ interface CharacterModalProps {
   onUpdateCharacter: (id: string, updates: Partial<Character>) => void;
   onAddCharacter: (character: Character) => void;
   onDeleteCharacter: (id: string) => void;
-  onOpenTachieImport?: () => void;
+  onOpenTachieImport?: (targetCharacterId?: string) => void;
 }
 
 export const CharacterModal: React.FC<CharacterModalProps> = ({
@@ -187,7 +187,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
             {onOpenTachieImport && (
               <button
                 type="button"
-                onClick={onOpenTachieImport}
+                onClick={() => onOpenTachieImport()}
                 className="mt-2 w-full py-2 px-3 rounded-xl bg-[#004a77]/30 hover:bg-[#004a77]/50 text-[#c2e7ff] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#004a77] transition"
                 title="Extract tachie from ZIP or PSD"
               >
@@ -284,7 +284,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       {onOpenTachieImport && (
                         <button
                           type="button"
-                          onClick={onOpenTachieImport}
+                          onClick={() => onOpenTachieImport(char.id)}
                           className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#004a77]/40 hover:bg-[#004a77]/60 text-[#c2e7ff] text-xs font-medium rounded-full border border-[#004a77] transition"
                         >
                           <FileArchive className="w-3 h-3 text-[#34d399]" />

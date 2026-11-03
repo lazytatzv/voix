@@ -31,26 +31,36 @@ export function App() {
       try {
         const parsed = JSON.parse(saved);
         if (parsed.characters && parsed.characters.length > 0) {
-          return parsed.characters.map((c: Character) => {
-            const def = defaultCharacters.find((d) => d.id === c.id);
-            if (def) {
-              return {
-                ...def,
-                ...c,
-                avatar: {
-                  ...def.avatar,
-                  ...c.avatar,
-                  speaking: def.avatar.speaking || c.avatar.speaking,
-                  expressions: def.avatar.expressions || c.avatar.expressions,
-                },
-                subtitleStyle: {
-                  ...def.subtitleStyle,
-                  ...c.subtitleStyle,
-                },
-              };
+          const seen = new Set<string>();
+          const deduped: Character[] = [];
+          parsed.characters.forEach((c: Character) => {
+            const isZunda = c.id === 'zundamon' || (c.speakerId === 3 && (c.name.includes('ずんだ') || c.name.includes('zunda')));
+            const key = isZunda ? 'zundamon' : c.id;
+            if (!seen.has(key)) {
+              seen.add(key);
+              const def = defaultCharacters.find((d) => d.id === (isZunda ? 'zundamon' : c.id));
+              if (def) {
+                deduped.push({
+                  ...def,
+                  ...c,
+                  id: def.id,
+                  avatar: {
+                    ...def.avatar,
+                    ...c.avatar,
+                    speaking: def.avatar.speaking || c.avatar.speaking,
+                    expressions: def.avatar.expressions || c.avatar.expressions,
+                  },
+                  subtitleStyle: {
+                    ...def.subtitleStyle,
+                    ...c.subtitleStyle,
+                  },
+                });
+              } else {
+                deduped.push(c);
+              }
             }
-            return c;
           });
+          return deduped;
         }
       } catch {}
     }
@@ -81,6 +91,7 @@ export function App() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [isAiVideoModalOpen, setIsAiVideoModalOpen] = useState(false);
   const [isTachieModalOpen, setIsTachieModalOpen] = useState(false);
+  const [tachieTargetCharId, setTachieTargetCharId] = useState<string | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
@@ -191,31 +202,22 @@ export function App() {
   useEffect(() => {
     loadCharactersFromConfig().then((cfgChars) => {
       if (cfgChars && cfgChars.length > 0) {
-        setCharacters((prev) => {
-          const map = new Map(prev.map((c) => [c.id, c]));
-          cfgChars.forEach((c) => {
-            const existing = map.get(c.id);
-            if (existing) {
-              map.set(c.id, {
-                ...existing,
-                ...c,
-                avatar: {
-                  ...existing.avatar,
-                  ...c.avatar,
-                  speaking: c.avatar.speaking || existing.avatar.speaking,
-                  expressions: c.avatar.expressions || existing.avatar.expressions,
-                },
-                subtitleStyle: {
-                  ...existing.subtitleStyle,
-                  ...c.subtitleStyle,
-                },
-              });
-            } else {
-              map.set(c.id, c);
-            }
-          });
-          return Array.from(map.values());
+        // 重複キャラクター（ずんだもんの2重登録など）を確実にクリーンアップ
+        const seen = new Set<string>();
+        const cleaned: Character[] = [];
+        cfgChars.forEach((c) => {
+          const isZunda = c.id === 'zundamon' || (c.speakerId === 3 && (c.name.includes('ずんだ') || c.name.includes('zunda')));
+          const key = isZunda ? 'zundamon' : c.id;
+          if (!seen.has(key)) {
+            seen.add(key);
+            cleaned.push({
+              ...c,
+              id: isZunda ? 'zundamon' : c.id,
+              name: isZunda && c.name === 'zunda' ? 'ずんだもん' : c.name,
+            });
+          }
         });
+        setCharacters(cleaned);
       }
     });
   }, []);
@@ -730,41 +732,67 @@ export function App() {
   };
 
   // 立ち絵 (ZIP / PSD / PNG) のインポート成功ハンドラー
-  // ※ 既存のずんだもん等のキャラクターは絶対に上書きせず、新しい立ち絵スピーカーとして個別追加
-  const handleTachieImportSuccess = (result: TachieImportResult) => {
-    const newId = `char_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  // 既存キャラクター更新モードまたは新規追加モードに対応（重複防止）
+  const handleTachieImportSuccess = (
+    result: TachieImportResult,
+    mode: 'update' | 'add' = 'add',
+    targetCharId?: string
+  ) => {
+    if (mode === 'update' && targetCharId) {
+      setCharacters((prev) =>
+        prev.map((c) => {
+          if (c.id === targetCharId) {
+            return {
+              ...c,
+              name: c.name || result.character_name,
+              avatar: {
+                idle: result.avatar_data_url,
+                speaking: result.speaking_data_url || result.avatar_data_url,
+                blinking: result.avatar_data_url,
+                expressions: result.expressions || c.avatar.expressions,
+              },
+            };
+          }
+          return c;
+        })
+      );
+    } else {
+      const newId = `char_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
-    const newChar: Character = {
-      id: newId,
-      name: result.character_name,
-      ttsProviderId: 'voicevox',
-      speakerId: result.speaker_id,
-      position: characters.length % 2 === 0 ? 'left' : 'right',
-      avatar: {
-        idle: result.avatar_data_url,
-        speaking: result.speaking_data_url || result.avatar_data_url,
-        expressions: result.expressions,
-      },
-      subtitleStyle: {
-        textColor: '#ffffff',
-        fontSize: 42,
-        fontFamily: "'Noto Sans JP', 'Google Sans', sans-serif",
-        fontWeight: '900',
-        strokeColor: '#0a0a0c',
-        strokeWidth: 8,
-        outerStrokeColor: result.theme_color,
-        outerStrokeWidth: 14,
-        hasShadow: true,
-        shadowColor: 'rgba(0, 0, 0, 0.85)',
-        shadowBlur: 10,
-        shadowOffsetY: 4,
-        bgStyle: 'none',
-        yOffsetPercent: 12,
-        rubyDisplay: 'above',
-      },
-    };
+      const newChar: Character = {
+        id: newId,
+        name: result.character_name,
+        ttsProviderId: 'voicevox',
+        speakerId: result.speaker_id,
+        styleId: result.speaker_id,
+        position: characters.length % 2 === 0 ? 'left' : 'right',
+        avatar: {
+          idle: result.avatar_data_url,
+          speaking: result.speaking_data_url || result.avatar_data_url,
+          blinking: result.avatar_data_url,
+          expressions: result.expressions,
+        },
+        subtitleStyle: {
+          textColor: '#ffffff',
+          fontSize: 42,
+          fontFamily: "'Noto Sans JP', 'Google Sans', sans-serif",
+          fontWeight: '900',
+          strokeColor: '#0a0a0c',
+          strokeWidth: 8,
+          outerStrokeColor: result.theme_color,
+          outerStrokeWidth: 14,
+          hasShadow: true,
+          shadowColor: 'rgba(0, 0, 0, 0.85)',
+          shadowBlur: 10,
+          shadowOffsetY: 4,
+          bgStyle: 'none',
+          yOffsetPercent: 12,
+          rubyDisplay: 'above',
+        },
+      };
 
-    setCharacters((prev) => [...prev, newChar]);
+      setCharacters((prev) => [...prev, newChar]);
+    }
   };
 
   const voiceItems = items.filter((it): it is VoiceItem => it.type === 'voice');
@@ -897,7 +925,10 @@ export function App() {
         onUpdateCharacter={handleUpdateCharacter}
         onAddCharacter={(c) => setCharacters((prev) => [...prev, c])}
         onDeleteCharacter={(id) => setCharacters((prev) => prev.filter((c) => c.id !== id))}
-        onOpenTachieImport={() => setIsTachieModalOpen(true)}
+        onOpenTachieImport={(targetId?: string) => {
+          setTachieTargetCharId(targetId || null);
+          setIsTachieModalOpen(true);
+        }}
       />
 
       <AiVideoGeneratorModal
@@ -912,7 +943,12 @@ export function App() {
 
       <TachieImportModal
         isOpen={isTachieModalOpen}
-        onClose={() => setIsTachieModalOpen(false)}
+        onClose={() => {
+          setIsTachieModalOpen(false);
+          setTachieTargetCharId(null);
+        }}
+        characters={characters}
+        targetCharacterId={tachieTargetCharId}
         onImportSuccess={handleTachieImportSuccess}
       />
 

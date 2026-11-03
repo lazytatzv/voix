@@ -1,25 +1,49 @@
-import React, { useState } from 'react';
-import { X, Loader2, Check, FileArchive, ArrowRight, FolderOpen, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, Loader2, Check, FileArchive, ArrowRight, FolderOpen, UserPlus, RefreshCw } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { importTachieFile, TachieImportResult } from '../services/tachieService';
 import { resolveImageToDataUrl } from '../utils/imageUtils';
 import { SafeAvatarImg } from './SafeAvatarImg';
+import { Character } from '../types';
 
 interface TachieImportModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onImportSuccess: (result: TachieImportResult) => void;
+  characters?: Character[];
+  targetCharacterId?: string | null;
+  onImportSuccess: (result: TachieImportResult, mode: 'update' | 'add', targetCharId?: string) => void;
 }
 
 export const TachieImportModal: React.FC<TachieImportModalProps> = ({
   isOpen,
   onClose,
+  characters = [],
+  targetCharacterId,
   onImportSuccess,
 }) => {
   const [filePath, setFilePath] = useState('/home/tatsv/Downloads/四国めたん立ち絵素材2.1.zip');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<TachieImportResult | null>(null);
+  const [importMode, setImportMode] = useState<'update' | 'add'>('update');
+
+  const matchingChar = targetCharacterId
+    ? characters.find((c) => c.id === targetCharacterId)
+    : previewResult
+    ? characters.find(
+        (c) =>
+          c.speakerId === previewResult.speaker_id ||
+          (c.name && previewResult.character_name && (c.name.includes(previewResult.character_name) || previewResult.character_name.includes(c.name)))
+      )
+    : null;
+
+  useEffect(() => {
+    if (matchingChar) {
+      setImportMode('update');
+    } else {
+      setImportMode('add');
+    }
+  }, [matchingChar?.id, previewResult?.character_name]);
 
   if (!isOpen) return null;
 
@@ -71,7 +95,8 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
 
   const handleConfirm = () => {
     if (!previewResult) return;
-    onImportSuccess(previewResult);
+    const mode = matchingChar ? importMode : 'add';
+    onImportSuccess(previewResult, mode, matchingChar?.id);
     onClose();
   };
 
@@ -219,8 +244,50 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
 
                 <div className="pt-1 flex items-center gap-1.5 text-[11px] text-[#10b981]">
                   <Check className="w-3.5 h-3.5" />
-                  <span>Ready to add to project speakers</span>
+                  <span>Ready to apply to project</span>
                 </div>
+
+                {/* 既存キャラクターへの更新か新規追加かを選択 (2重登録防止) */}
+                {matchingChar && (
+                  <div className="pt-2.5 mt-2 border-t border-[#282a2c] space-y-1.5">
+                    <span className="text-[11px] text-[#c4c7c5] font-medium block">
+                      インポート方法の選択 (重複防止)
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setImportMode('update')}
+                        className={`p-2 rounded-lg text-left text-xs transition border flex flex-col gap-0.5 cursor-pointer ${
+                          importMode === 'update'
+                            ? 'bg-[#004a77] border-[#8ab4f8] text-white shadow-xs font-semibold'
+                            : 'bg-[#18191b] border-[#3c4043] text-[#8e918f] hover:text-[#e3e3e3]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <Check className="w-3.5 h-3.5 text-[#10b981]" />
+                          「{matchingChar.name}」を更新
+                        </span>
+                        <span className="text-[10px] text-[#8ab4f8] opacity-80">推奨・既存キャラの立ち絵を変更</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setImportMode('add')}
+                        className={`p-2 rounded-lg text-left text-xs transition border flex flex-col gap-0.5 cursor-pointer ${
+                          importMode === 'add'
+                            ? 'bg-[#004a77] border-[#8ab4f8] text-white shadow-xs font-semibold'
+                            : 'bg-[#18191b] border-[#3c4043] text-[#8e918f] hover:text-[#e3e3e3]'
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <UserPlus className="w-3.5 h-3.5" />
+                          新しい話者として追加
+                        </span>
+                        <span className="text-[10px] opacity-70">個別キャラとしてリストへ追加</span>
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -240,9 +307,18 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
             disabled={!previewResult || isLoading}
             className="px-5 py-2 rounded-lg bg-[#10b981] hover:bg-[#059669] text-white text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-30 shadow-sm"
           >
-            <UserPlus className="w-3.5 h-3.5" />
-            Add to Speakers
-            <ArrowRight className="w-3.5 h-3.5" />
+            {matchingChar && importMode === 'update' ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5" />
+                「{matchingChar.name}」の立ち絵を更新
+              </>
+            ) : (
+              <>
+                <UserPlus className="w-3.5 h-3.5" />
+                Add to Speakers
+                <ArrowRight className="w-3.5 h-3.5" />
+              </>
+            )}
           </button>
         </div>
       </div>
