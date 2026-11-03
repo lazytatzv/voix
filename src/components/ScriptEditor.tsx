@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
-import { Trash2, Volume2, Loader2, Send, Sliders, Copy, Scissors } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Trash2, Volume2, Loader2, Send, Sliders, Copy, Scissors, Sparkles, Languages, Wand2 } from 'lucide-react';
 import { Character, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
+import { processAiAction, AiAction } from '../services/aiService';
 
 interface ScriptEditorProps {
   items: VoiceItem[];
@@ -33,11 +34,26 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const [inputText, setInputText] = useState('');
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>(characters[0]?.id || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+  const aiMenuRef = useRef<HTMLDivElement | null>(null);
 
   const activeCharId = characters.some((c) => c.id === selectedCharacterId)
     ? selectedCharacterId
     : characters[0]?.id || '';
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) {
+        setIsAiMenuOpen(false);
+      }
+    };
+    if (isAiMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isAiMenuOpen]);
 
   const handleAdd = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -66,6 +82,19 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     }
   };
 
+  // AIアクション実行
+  const handleTriggerAi = async (action: AiAction) => {
+    setIsAiProcessing(true);
+    setIsAiMenuOpen(false);
+    try {
+      const targetText = inputText.trim() || 'Hello everyone! Today we are playing a game.';
+      const result = await processAiAction({ action, text: targetText });
+      setInputText(result);
+    } finally {
+      setIsAiProcessing(false);
+    }
+  };
+
   const selectedChar = characters.find((c) => c.id === activeCharId) || characters[0];
 
   return (
@@ -75,9 +104,11 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         <h2 className="font-semibold text-sm text-[#e3e3e3] tracking-tight">
           Script & Captions
         </h2>
-        <span className="text-xs text-[#8e918f]">
-          {items.length} clips
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-[#8e918f]">
+            {items.length} clips
+          </span>
+        </div>
       </div>
 
       {/* Script List */}
@@ -86,7 +117,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
           <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#8e918f]">
             <p className="text-sm font-medium text-[#c4c7c5]">No captions yet</p>
             <p className="text-xs mt-1.5 text-[#8e918f] max-w-xs leading-relaxed">
-              Type in the prompt bar below and hit Enter to generate voice and caption sync.
+              Type below in English or Japanese. Click <strong className="text-[#8ab4f8]">✨ AI</strong> to translate or generate lines!
             </p>
           </div>
         ) : (
@@ -130,7 +161,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
                   {/* Actions */}
                   <div className="flex items-center gap-1">
-                    {/* Voice Tuning */}
                     <button
                       onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
                       className={`p-1.5 rounded-full transition ${
@@ -141,7 +171,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                       <Sliders className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* Play Audio */}
                     <button
                       onClick={() => onPlaySingle(item)}
                       disabled={item.isSynthesizing}
@@ -155,7 +184,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                       )}
                     </button>
 
-                    {/* Duplicate */}
                     <button
                       onClick={() => onDuplicateItem(item.id)}
                       className="p-1.5 rounded-full hover:bg-[#2e3134] text-[#8e918f] hover:text-white transition"
@@ -164,7 +192,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                       <Copy className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* Split */}
                     <button
                       onClick={() => onSplitItem(item.id, currentTime)}
                       className="p-1.5 rounded-full hover:bg-[#2e3134] text-[#8e918f] hover:text-white transition"
@@ -173,7 +200,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                       <Scissors className="w-3.5 h-3.5" />
                     </button>
 
-                    {/* Delete */}
                     <button
                       onClick={() => onDeleteItem(item.id)}
                       className="p-1.5 rounded-full hover:bg-red-500/10 text-[#8e918f] hover:text-red-400 transition"
@@ -243,7 +269,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         )}
       </div>
 
-      {/* Footer: Prompt Input Bar */}
+      {/* Footer: Prompt Input Bar with ✨ AI Assistant */}
       <div className="p-4 bg-[#1e1f20] border-t border-[#282a2c] space-y-2.5">
         <div className="flex items-center gap-2 overflow-x-auto pb-1">
           {characters.map((c) => (
@@ -263,15 +289,74 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         </div>
 
         <form onSubmit={handleAdd} className="relative flex items-center">
+          {/* ✨ AI Assistant Popover Button */}
+          <div ref={aiMenuRef} className="absolute left-2 z-20">
+            <button
+              type="button"
+              onClick={() => setIsAiMenuOpen(!isAiMenuOpen)}
+              disabled={isAiProcessing}
+              className="p-1.5 rounded-full bg-[#282a2c] hover:bg-[#333538] text-[#8ab4f8] border border-[#3c4043] transition flex items-center gap-1 text-[11px] font-medium"
+              title="AI Assistant Tools"
+            >
+              {isAiProcessing ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="w-3.5 h-3.5" />
+              )}
+            </button>
+
+            {/* AI Menu Popover */}
+            {isAiMenuOpen && (
+              <div className="absolute bottom-10 left-0 w-60 bg-[#1e1f20] border border-[#3c4043] rounded-2xl shadow-2xl p-1.5 space-y-1 backdrop-blur-xl animate-in fade-in duration-100">
+                <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2.5 py-1 block">
+                  AI Script Tools
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleTriggerAi('translate_en')}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2c] hover:text-white transition text-left"
+                >
+                  <Languages className="w-3.5 h-3.5 text-[#8ab4f8]" />
+                  <span>Translate to English</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTriggerAi('zundamon')}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2c] hover:text-white transition text-left"
+                >
+                  <span className="text-sm">🥑</span>
+                  <span>Zundamon-ify (〜なのだ)</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTriggerAi('reaction')}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2c] hover:text-white transition text-left"
+                >
+                  <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Generate Reaction Line</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleTriggerAi('shorten')}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2c] hover:text-white transition text-left"
+                >
+                  <Scissors className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Shorten & Punchy</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           <input
             type="text"
-            placeholder={`Type for ${selectedChar?.name || 'speaker'}...`}
+            placeholder={`Type for ${selectedChar?.name || 'speaker'} in English or Japanese...`}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}
             disabled={isSubmitting}
-            className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-full pl-4 pr-12 py-2.5 text-sm text-[#e3e3e3] placeholder-[#8e918f] outline-none transition shadow-inner"
+            className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-full pl-11 pr-12 py-2.5 text-sm text-[#e3e3e3] placeholder-[#8e918f] outline-none transition shadow-inner"
           />
+
           <button
             type="submit"
             disabled={!inputText.trim() || isSubmitting}
