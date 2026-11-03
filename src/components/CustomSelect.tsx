@@ -47,7 +47,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
 
   return (
     <div ref={dropdownRef} className={`relative inline-block ${className}`}>
-      {/* トリガーボタン (100%ダークワークステーション仕様) */}
+      {/* Trigger button */}
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
@@ -66,7 +66,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
         />
       </button>
 
-      {/* ドロップダウンメニュー (絶対に白くならない高コントラストダーク設計) */}
+      {/* Dropdown Menu */}
       {isOpen && (
         <div className="absolute left-0 mt-1 w-48 bg-[#18191b] border border-[#2e3135] rounded-xl shadow-2xl py-1 z-50 animate-in fade-in duration-100 max-h-60 overflow-y-auto">
           {options.map((opt) => {

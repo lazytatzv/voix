@@ -21,7 +21,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
   targetCharacterId,
   onImportSuccess,
 }) => {
-  const [filePath, setFilePath] = useState('/home/tatsv/Downloads/四国めたん立ち絵素材2.1.zip');
+  const [filePath, setFilePath] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [previewResult, setPreviewResult] = useState<TachieImportResult | null>(null);
@@ -175,7 +175,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                 }}
                 className="text-[10px] px-2 py-0.5 rounded bg-[#202124] border border-[#3c4043] text-[#ec4899] hover:bg-[#282a2c] font-medium transition"
               >
-                四国めたん立ち絵素材2.1.zip
+                Metan Tachie (ZIP)
               </button>
               <button
                 type="button"
@@ -186,7 +186,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                 }}
                 className="text-[10px] px-2 py-0.5 rounded bg-[#202124] border border-[#3c4043] text-[#34d399] hover:bg-[#282a2c] font-medium transition"
               >
-                ずんだもん立ち絵素材2.3.zip
+                Zundamon Tachie (ZIP)
               </button>
             </div>
           </div>
@@ -199,7 +199,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
           >
             <FolderOpen className="w-5 h-5 text-[#8ab4f8] transition group-hover:scale-110" />
             <span className="font-medium text-[#e3e3e3]">
-              クリックしてZIPまたはPSDを選択 (Select ZIP or PSD File)
+              Click to select ZIP or PSD file
             </span>
             <span className="text-[10px] text-[#5e6265]">
               Direct filesystem access — extracts PSD layers & expressions without memory limits
@@ -239,7 +239,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                 <div className="text-[11px] text-[#8e918f] space-y-0.5 font-mono">
                   <p>VOICEVOX ID: <span className="text-[#e3e3e3] font-semibold">{previewResult.speaker_id}</span></p>
                   <p>Dimensions: <span className="text-[#e3e3e3]">{previewResult.width} x {previewResult.height} px</span></p>
-                  <p>Mouth Flap: <span className="text-[#10b981]">{previewResult.speaking_data_url ? 'Active (口パク差分抽出済)' : 'Idle only'}</span></p>
+                  <p>Mouth Flap: <span className="text-[#10b981]">{previewResult.speaking_data_url ? 'Active (Extracted)' : 'Idle only'}</span></p>
                 </div>
 
                 <div className="pt-1 flex items-center gap-1.5 text-[11px] text-[#10b981]">
@@ -247,11 +247,11 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                   <span>Ready to apply to project</span>
                 </div>
 
-                {/* 既存キャラクターへの更新か新規追加かを選択 (2重登録防止) */}
+                {/* Existing Character Update or Add New */}
                 {matchingChar && (
                   <div className="pt-2.5 mt-2 border-t border-[#282a2c] space-y-1.5">
                     <span className="text-[11px] text-[#c4c7c5] font-medium block">
-                      インポート方法の選択 (重複防止)
+                      Import Mode (Prevent Duplicates)
                     </span>
                     <div className="grid grid-cols-2 gap-2">
                       <button
@@ -265,9 +265,9 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                       >
                         <span className="flex items-center gap-1.5">
                           <Check className="w-3.5 h-3.5 text-[#10b981]" />
-                          「{matchingChar.name}」を更新
+                          Update "{matchingChar.name}"
                         </span>
-                        <span className="text-[10px] text-[#8ab4f8] opacity-80">推奨・既存キャラの立ち絵を変更</span>
+                        <span className="text-[10px] text-[#8ab4f8] opacity-80">Recommended: update existing avatar</span>
                       </button>
 
                       <button
@@ -281,9 +281,9 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                       >
                         <span className="flex items-center gap-1.5">
                           <UserPlus className="w-3.5 h-3.5" />
-                          新しい話者として追加
+                          Add as New Speaker
                         </span>
-                        <span className="text-[10px] opacity-70">個別キャラとしてリストへ追加</span>
+                        <span className="text-[10px] opacity-70">Add as separate character</span>
                       </button>
                     </div>
                   </div>
@@ -310,7 +310,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
             {matchingChar && importMode === 'update' ? (
               <>
                 <RefreshCw className="w-3.5 h-3.5" />
-                「{matchingChar.name}」の立ち絵を更新
+                Update "{matchingChar.name}" Avatar
               </>
             ) : (
               <>

@@ -17,11 +17,11 @@ export type RawScriptFormat = 'yaml';
  */
 export function getCharacterShortPrefix(char: Character, index: number): string {
   const name = char.name.trim();
-  if (name.includes('ずんだ') || name.toLowerCase().includes('zunda')) return 'ず';
-  if (name.includes('めたん') || name.toLowerCase().includes('metan')) return 'め';
-  if (name.includes('つむぎ') || name.toLowerCase().includes('tsumugi')) return 'つ';
-  if (name.includes('リツ') || name.toLowerCase().includes('ritsu')) return 'り';
-  if (name.length > 0) return name[0];
+  if (name.includes('ずんだ') || name.toLowerCase().includes('zunda')) return 'z';
+  if (name.includes('めたん') || name.toLowerCase().includes('metan')) return 'm';
+  if (name.includes('つむぎ') || name.toLowerCase().includes('tsumugi')) return 't';
+  if (name.includes('リツ') || name.toLowerCase().includes('ritsu')) return 'r';
+  if (name.length > 0) return name[0].toLowerCase();
   return String(index + 1);
 }
 
@@ -60,19 +60,12 @@ export function itemsToRawText(
   _format?: string
 ): string {
   if (items.length === 0) {
-    return [
-      '# 台本をYAML形式で記述（Ctrl+Enter でタイムラインに反映）',
-      '- speaker: ずんだもん',
-      '  text: 今回はYAML形式で台本を作っていくのだ！',
-      '- speaker: 四国めたん',
-      '  emotion: smile',
-      '  text: パラメータ（話速や感情）も綺麗に構造化できますね。',
-    ].join('\n');
+    return '';
   }
 
   const data = items.map((item) => {
     const char = characters.find((c) => c.id === item.characterId) || characters[0];
-    const speakerName = char ? char.name : 'ずんだもん';
+    const speakerName = char ? char.name : 'Zundamon';
     const entry: Record<string, unknown> = {
       speaker: speakerName,
     };
@@ -134,7 +127,7 @@ function extractLinesFromYaml(data: unknown): ParsedScriptLine[] {
       const emotion = rec.emotion || rec.expression || exprFromSpk;
 
       result.push({
-        speaker: speaker || 'ずんだもん',
+        speaker: speaker || 'Zundamon',
         expression: normalizeExpressionTag(String(emotion || 'default')),
         text: rawText,
         startTime:
@@ -179,18 +172,18 @@ function parseFallbackLines(trimmed: string): ParsedScriptLine[] {
       line = line.slice(2).trim();
     }
 
-    // カギ括弧記法: ずんだもん「セリフ」
+    // Bracket notation: Zundamon「dialogue」 or Zundamon[dialogue]
     const bracketMatch = line.match(/^(.*?)[「『](.*?)[」』](.*)$/);
     if (bracketMatch) {
       const speakerPart = bracketMatch[1].trim();
       const textPart = bracketMatch[2].trim();
-      const { speaker, expression } = extractSpeakerAndExpression(speakerPart || lastSpeaker || 'ずんだもん');
+      const { speaker, expression } = extractSpeakerAndExpression(speakerPart || lastSpeaker || 'Zundamon');
       lastSpeaker = speaker;
       result.push({ speaker, expression, text: textPart });
       continue;
     }
 
-    // コロン記法: speaker: text
+    // Colon notation: speaker: text
     const colonIdx = line.search(/[:：]/);
     if (colonIdx !== -1) {
       const leftPart = line.slice(0, colonIdx).trim();
@@ -202,7 +195,7 @@ function parseFallbackLines(trimmed: string): ParsedScriptLine[] {
       }
       if (/^(text|dialogue|content)$/i.test(leftPart)) {
         if (rightPart) {
-          result.push({ speaker: lastSpeaker || 'ずんだもん', expression: 'default', text: rightPart });
+          result.push({ speaker: lastSpeaker || 'Zundamon', expression: 'default', text: rightPart });
         }
         continue;
       }

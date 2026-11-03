@@ -8,8 +8,6 @@ import {
   Layers,
   Settings,
   User,
-  Rows,
-  Columns,
   Save,
   FolderOpen,
 } from 'lucide-react';
@@ -27,8 +25,6 @@ interface HeaderProps {
   hasVideo: boolean;
   itemCount: number;
   isTranscribing: boolean;
-  layoutMode?: 'stacked' | 'split';
-  onToggleLayoutMode?: () => void;
   onSaveProject?: () => void;
   onLoadProject?: (file: File) => void;
 }
@@ -45,8 +41,6 @@ export const Header: React.FC<HeaderProps> = ({
   hasVideo,
   itemCount,
   isTranscribing,
-  layoutMode = 'stacked',
-  onToggleLayoutMode,
   onSaveProject,
   onLoadProject,
 }) => {
@@ -127,7 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={onSaveProject}
               className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-[#c4c7c5] transition"
-              title="プロジェクト保存 (Ctrl+S)"
+              title="Save Project (Ctrl+S)"
             >
               <Save className="w-3.5 h-3.5" />
             </button>
@@ -137,7 +131,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={() => projectInputRef.current?.click()}
               className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-[#c4c7c5] transition"
-              title="プロジェクト読込 (.json)"
+              title="Load Project (.json)"
             >
               <FolderOpen className="w-3.5 h-3.5" />
             </button>
@@ -158,7 +152,7 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={handlePickVideo}
           className="px-2.5 py-1 bg-[#18191b] hover:bg-[#222427] text-[#e3e3e3] text-xs font-medium rounded-lg border border-[#2e3135] flex items-center gap-1.5 transition active:scale-95"
-          title="動画ファイルを選択または変更"
+          title="Select or change video file"
         >
           {hasVideo ? <Video className="w-3.5 h-3.5 text-[#8ab4f8]" /> : <Upload className="w-3.5 h-3.5 text-[#8ab4f8]" />}
           <span>{hasVideo ? 'Change Video' : '+ Video'}</span>
@@ -170,7 +164,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={onAutoTranscribe}
             disabled={isTranscribing}
             className="px-2.5 py-1 bg-[#18191b] hover:bg-[#222427] text-[#8ab4f8] text-xs font-medium rounded-lg border border-[#2e3135] flex items-center gap-1.5 transition active:scale-95 disabled:opacity-30"
-            title="動画の音声を解析して字幕を自動生成"
+            title="Transcribe speech from video automatically"
           >
             <Layers className={`w-3.5 h-3.5 ${isTranscribing ? 'animate-spin' : ''}`} />
             <span>{isTranscribing ? 'Transcribing...' : 'Auto Captions'}</span>
@@ -181,28 +175,15 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={onOpenAiVideoGenerator}
           className="px-2.5 py-1 bg-[#18191b] hover:bg-[#222427] text-[#c4c7c5] hover:text-white text-xs font-medium rounded-lg border border-[#2e3135] flex items-center gap-1.5 transition active:scale-95"
-          title="AI対話スクリプト生成"
+          title="Generate AI dialogue script"
         >
           <Bot className="w-3.5 h-3.5 text-[#34d399]" />
           <span>AI Script</span>
         </button>
       </div>
 
-      {/* Right: Layout Switcher, Tools & Export */}
+      {/* Right: Tools & Export */}
       <div className="flex items-center gap-1.5">
-        {/* Layout Toggle (上下分割 ⬒ / 左右分割 ◫) */}
-        {onToggleLayoutMode && (
-          <button
-            type="button"
-            onClick={onToggleLayoutMode}
-            className="px-2 py-1 rounded-lg bg-[#18191b] hover:bg-[#222427] text-[#8e918f] hover:text-[#e3e3e3] border border-[#2e3135] text-xs font-mono flex items-center gap-1.5 transition"
-            title={layoutMode === 'stacked' ? '左右分割レイアウトへ切替' : '上下分割レイアウトへ切替 (推奨)'}
-          >
-            {layoutMode === 'stacked' ? <Rows className="w-3.5 h-3.5 text-[#8ab4f8]" /> : <Columns className="w-3.5 h-3.5 text-[#8ab4f8]" />}
-            <span className="text-[11px]">{layoutMode === 'stacked' ? '上下分割' : '左右分割'}</span>
-          </button>
-        )}
-
         {/* Characters */}
         <button
           type="button"
@@ -231,7 +212,7 @@ export const Header: React.FC<HeaderProps> = ({
           onClick={onExportVideo}
           disabled={itemCount === 0}
           className="ml-1 px-3 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] text-xs font-semibold rounded-lg border border-[#004a77] shadow-xs transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
-          title="動画のレンダリング・書き出し"
+          title="Render and export video"
         >
           <Download className="w-3 h-3" />
           <span>Export</span>

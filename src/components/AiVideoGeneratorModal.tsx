@@ -24,7 +24,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   rawVideoPath,
   hasVideo,
 }) => {
-  const [topic, setTopic] = useState('マインクラフトでダイヤモンドを発見した時のリアクション');
+  const [topic, setTopic] = useState('Reaction when finding diamonds in Minecraft');
   const [style, setStyle] = useState<'gaming' | 'tech_review' | 'comedy_banter' | 'shorts_hook'>('gaming');
   const [lineCount, setLineCount] = useState<number>(6);
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>(() =>
@@ -43,7 +43,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   const [useVideoVision, setUseVideoVision] = useState(!!hasVideo);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // ~/.config/voix/settings.json からロード
+  // Load from ~/.config/voix/settings.json
   useEffect(() => {
     if (isOpen) {
       loadSettingsFromConfig().then((s) => {
@@ -61,10 +61,10 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   if (!isOpen) return null;
 
   const quickTopics = [
-    { label: '🎮 Gaming: Minecraft', text: 'マインクラフトでダイヤを見つけた時のリアクション' },
-    { label: '🥑 Comedy: Zunda & Metan', text: 'ずんだもんとめたんの笑える日常の掛け合い漫才' },
-    { label: '💡 Tech: AI Workstation', text: '最新のAI技術と動画編集アプリVoixの凄さについて解説' },
-    { label: '⚡ Shorts: Lifehack Tips', text: '9割の人が知らないゲームの秘密の裏技' },
+    { label: '🎮 Gaming: Minecraft', text: 'Reaction when finding diamonds in Minecraft' },
+    { label: '🥑 Comedy: Zunda & Metan', text: 'Funny everyday comedy banter between Zundamon and Metan' },
+    { label: '💡 Tech: AI Workstation', text: 'Introduction to cutting-edge AI technology and Voix' },
+    { label: '⚡ Shorts: Lifehack Tips', text: 'Secret tricks and gaming tips 90% of people don’t know' },
   ];
 
   const handleToggleChar = (id: string) => {
@@ -246,7 +246,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             )}
           </div>
 
-          {/* Multimodal Video Vision Toggle ("動画を見て字幕生成") */}
+          {/* Multimodal Video Vision Toggle */}
           {hasVideo && rawVideoPath && (
             <div className="bg-[#131415] border border-[#282a2c] rounded-xl p-3 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
@@ -255,7 +255,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-[#e3e3e3] flex items-center gap-1.5">
-                    Watch Loaded Video (動画解析モード)
+                    Watch Loaded Video (Vision Analysis Mode)
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#3b82f6]/20 text-[#60a5fa] font-mono">
                       Vision
                     </span>
@@ -283,13 +283,13 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           <div>
             <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5 flex items-center justify-between">
               <span>Topic or Prompt Directive</span>
-              <span className="text-[10px] text-[#8e918f]">Japanese or English</span>
+              <span className="text-[10px] text-[#8e918f]">Any language</span>
             </label>
             <textarea
               rows={2}
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. マインクラフトでダイヤモンドを発見した時のずんだもんとめたんの実況"
+              placeholder="e.g. Reaction when discovering diamonds in Minecraft..."
               className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg p-3 text-xs text-[#e3e3e3] outline-none transition resize-none font-normal"
             />
 
@@ -355,8 +355,8 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
               <div className="grid grid-cols-2 gap-1.5">
                 {[
                   { id: 'gaming', label: '🎮 Gaming' },
-                  { id: 'tech_review', label: '💡 Tech / 解説' },
-                  { id: 'comedy_banter', label: '🥑 漫才・掛け合い' },
+                  { id: 'tech_review', label: '💡 Tech / Explainer' },
+                  { id: 'comedy_banter', label: '🥑 Comedy / Banter' },
                   { id: 'shorts_hook', label: '⚡ Shorts' },
                 ].map((s) => (
                   <button

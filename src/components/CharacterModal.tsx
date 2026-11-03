@@ -298,36 +298,36 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         title="Remove white backdrop and make background transparent"
                       >
                         <Wand2 className="w-3 h-3 text-amber-400" />
-                        白背景を透過
+                        Remove White BG
                       </button>
                       {defaultCharacters.some((d) => d.id === char.id) && (
                         <button
                           type="button"
                           onClick={handleResetToDefault}
                           className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#282a2c] hover:bg-[#333538] text-[#8e918f] hover:text-white text-xs font-medium rounded-full border border-[#3c4043] transition"
-                          title="公式の初期状態（立ち絵・名前・字幕）にリセット"
+                          title="Reset to official default (Avatar, Name, Subtitles)"
                         >
                           <RotateCcw className="w-3 h-3 text-[#f59e0b]" />
-                          デフォルトに戻す
+                          Reset to Default
                         </button>
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Expression Variations (表情差分ギャラリー) */}
+                {/* Expression Variations */}
                 {char.avatar.expressions && Object.keys(char.avatar.expressions).length > 0 && (
                   <div className="bg-[#131314] p-3 rounded-xl border border-[#282a2c] space-y-1.5">
                     <span className="text-[11px] font-medium text-[#c4c7c5] block">
-                      PSD Expression Variations (立ち絵 表情差分)
+                      PSD Expression Variations
                     </span>
                     <div className="grid grid-cols-4 gap-2">
                       {Object.entries(char.avatar.expressions).map(([exprName, exprUrl]) => {
                         const labels: Record<string, string> = {
-                          smile: '笑顔 (Smile)',
-                          shock: '驚き (Shock)',
-                          trouble: '困り (Trouble)',
-                          angry: '怒り (Angry)',
+                          smile: 'Smile',
+                          shock: 'Shock',
+                          trouble: 'Troubled',
+                          angry: 'Angry',
                         };
                         return (
                           <div
@@ -348,7 +348,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                 )}
               </div>
 
-              {/* Caption Presets (ワンクリックで極上テロップに) */}
+              {/* Caption Presets */}
               <div className="space-y-2">
                 <label className="text-xs font-medium text-[#8e918f] block flex items-center gap-1.5">
                   <Type className="w-3.5 h-3.5 text-[#8ab4f8]" /> Quick Caption Presets
@@ -362,7 +362,6 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         onUpdateCharacter(char.id, {
                           subtitleStyle: {
                             ...preset.style,
-                            // キャラクターの外側色だけ維持するかプリセット適用
                             outerStrokeColor: char.subtitleStyle.outerStrokeColor || preset.style.outerStrokeColor,
                           },
                         });
@@ -497,7 +496,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                   <div className="pt-3 border-t border-[#282a2c] flex items-center justify-between">
                     <div>
                       <span className="text-xs text-[#e3e3e3] font-medium block">Ruby (Reading) Display</span>
-                      <span className="text-[11px] text-[#8e918f]">Reading annotations like France(フランス)</span>
+                      <span className="text-[11px] text-[#8e918f]">Reading annotations (e.g. word(reading))</span>
                     </div>
                     <div className="flex items-center gap-1 bg-[#1e1f20] p-1 rounded-xl border border-[#3c4043]">
                       {(['above', 'hidden', 'inline'] as const).map((mode) => (

@@ -366,7 +366,7 @@ function generateDynamicScript(
 ): ScriptLinePrompt[] {
   const c1 = characters[0];
   const c2 = characters.length > 1 ? characters[1] : characters[0];
-  const cleanTopic = topic.trim() || 'マインクラフト';
+  const cleanTopic = topic.trim() || 'Minecraft';
 
   let templates: { speakerIsFirst: boolean; baseText: string }[] = [];
 

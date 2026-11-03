@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Trash2,
   Volume2,
@@ -10,12 +10,7 @@ import {
   Languages,
   Wand2,
   Tag,
-  Code2,
-  Play,
-  RotateCcw,
   Check,
-  FileText,
-  Sparkles,
 } from 'lucide-react';
 import { Character, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
@@ -39,7 +34,7 @@ interface ScriptEditorProps {
   onSeek: (time: number) => void;
   onPlaySingle: (item: VoiceItem) => void;
   onSynthesizeItem: (id: string) => Promise<void>;
-  onBatchApplyScript?: (lines: ParsedScriptLine[], mode?: 'replace' | 'append') => Promise<void>;
+  onSyncFromYaml?: (lines: ParsedScriptLine[]) => Promise<void>;
 }
 
 export const ScriptEditor: React.FC<ScriptEditorProps> = ({
@@ -54,13 +49,13 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   onSeek,
   onPlaySingle,
   onSynthesizeItem,
-  onBatchApplyScript,
+  onSyncFromYaml,
 }) => {
-  const [viewMode, setViewMode] = useState<'cards' | 'raw'>('cards');
-  const [rawText, setRawText] = useState<string>('');
-  const [isApplyingRaw, setIsApplyingRaw] = useState(false);
-  const [rawStatusMessage, setRawStatusMessage] = useState<string | null>(null);
-  const [hasCopied, setHasCopied] = useState(false);
+  const [tab, setTab] = useState<'cards' | 'yaml'>('cards');
+  const [yamlText, setYamlText] = useState<string>(() => itemsToRawText(items, characters));
+  const [isSyncing, setIsSyncing] = useState(false);
+  const debounceTimerRef = useRef<number | null>(null);
+  const isEditingYamlRef = useRef(false);
 
   const [inputText, setInputText] = useState('');
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>(characters[0]?.id || '');
@@ -69,104 +64,79 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const aiMenuRef = useRef<HTMLDivElement | null>(null);
-  const rawTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const activeCharId = characters.some((c) => c.id === selectedCharacterId)
     ? selectedCharacterId
     : characters[0]?.id || '';
 
-  // RAWモード切り替え時にタイムラインの最新状態を反映 (YAML)
-  const handleSwitchToRaw = () => {
-    setRawText(itemsToRawText(items, characters));
-    setViewMode('raw');
-    setRawStatusMessage(null);
-  };
+  // Cards -> YAML 自動同期: Cards編集時、YAMLテキストを自動更新
+  useEffect(() => {
+    if (tab === 'cards' && !isEditingYamlRef.current) {
+      setYamlText(itemsToRawText(items, characters));
+    }
+  }, [items, characters, tab]);
 
-  const handleSwitchToCards = () => {
-    setViewMode('cards');
-  };
-
-  // RAWスクリプトの適用 (全置換 または 末尾追記)
-  const handleApplyRawScript = async (mode: 'replace' | 'append' = 'replace') => {
-    if (!onBatchApplyScript) return;
-    setIsApplyingRaw(true);
-    setRawStatusMessage(
-      mode === 'append'
-        ? 'タイムライン末尾にセリフを追記中...'
-        : 'タイムラインへスクリプトを一括反映中...'
-    );
-
-    try {
-      const parsed = parseRawScript(rawText);
-      if (parsed.length === 0) {
-        setRawStatusMessage('有効なセリフが見つかりませんでした。');
-        setIsApplyingRaw(false);
-        return;
+  // YAML -> Cards 自動同期
+  const syncYamlToItems = useCallback(
+    async (textToSync: string) => {
+      if (!onSyncFromYaml) return;
+      try {
+        setIsSyncing(true);
+        const parsed = parseRawScript(textToSync);
+        await onSyncFromYaml(parsed);
+      } catch (err) {
+        console.warn('Auto-sync YAML error:', err);
+      } finally {
+        setIsSyncing(false);
       }
-      await onBatchApplyScript(parsed, mode);
-      setRawStatusMessage(
-        mode === 'append'
-          ? `末尾に ${parsed.length} 件のセリフを追加しました。`
-          : `タイムラインに ${parsed.length} 件のセリフを反映しました。`
-      );
-      setTimeout(() => setRawStatusMessage(null), 3500);
-    } catch (err: unknown) {
-      console.error('Failed to apply raw script:', err);
-      setRawStatusMessage(`Error: ${String(err)}`);
-    } finally {
-      setIsApplyingRaw(false);
-    }
-  };
+    },
+    [onSyncFromYaml]
+  );
 
-  // 縦に新しいセリフブロックを末尾へ追記 (YAML形式)
-  const handleAppendNewBlock = (charName?: string, expr?: string) => {
-    const targetChar =
-      charName || (characters.find((c) => c.id === activeCharId) || characters[0])?.name || 'ずんだもん';
-    const lines = [`- speaker: ${targetChar}`];
-    if (expr && expr !== 'default') {
-      lines.push(`  emotion: ${expr}`);
-    }
-    lines.push('  text: ');
-    const snippet = lines.join('\n');
+  // タブ切り替え（手動操作不要で常に自動同期）
+  const handleSwitchTab = async (newTab: 'cards' | 'yaml') => {
+    if (newTab === tab) return;
 
-    setRawText((prev) => {
-      const base = prev.trimEnd();
-      return base ? `${base}\n${snippet}` : snippet;
-    });
-
-    setTimeout(() => {
-      if (rawTextareaRef.current) {
-        rawTextareaRef.current.focus();
-        rawTextareaRef.current.scrollTop = rawTextareaRef.current.scrollHeight;
-        const len = rawTextareaRef.current.value.length;
-        rawTextareaRef.current.setSelectionRange(len, len);
+    if (newTab === 'yaml') {
+      // YAMLタブへ: 最新のCards状態からYAMLを生成
+      setYamlText(itemsToRawText(items, characters));
+      setTab('yaml');
+    } else {
+      // Cardsタブへ: 保留中のYAML編集を即座に反映
+      if (debounceTimerRef.current) {
+        window.clearTimeout(debounceTimerRef.current);
+        debounceTimerRef.current = null;
       }
-    }, 20);
-  };
-
-  // RAWテキストへのスニペット挿入
-  const handleInsertSnippet = (snippet: string) => {
-    if (!rawTextareaRef.current) {
-      setRawText((prev) => prev + (prev.endsWith('\n') || prev === '' ? '' : '\n') + snippet);
-      return;
+      isEditingYamlRef.current = false;
+      await syncYamlToItems(yamlText);
+      setTab('cards');
     }
-    const textarea = rawTextareaRef.current;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const text = rawText;
-    const nextText = text.substring(0, start) + snippet + text.substring(end);
-    setRawText(nextText);
-
-    setTimeout(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start + snippet.length, start + snippet.length);
-    }, 10);
   };
 
-  const handleCopyRaw = () => {
-    navigator.clipboard.writeText(rawText);
-    setHasCopied(true);
-    setTimeout(() => setHasCopied(false), 2000);
+  // YAML入力変更 (自動同期 debounce)
+  const handleYamlChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setYamlText(val);
+    isEditingYamlRef.current = true;
+
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+    }
+
+    setIsSyncing(true);
+    debounceTimerRef.current = window.setTimeout(async () => {
+      await syncYamlToItems(val);
+      isEditingYamlRef.current = false;
+    }, 600);
+  };
+
+  const handleYamlBlur = async () => {
+    if (debounceTimerRef.current) {
+      window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
+    }
+    await syncYamlToItems(yamlText);
+    isEditingYamlRef.current = false;
   };
 
   useEffect(() => {
@@ -208,7 +178,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     }
   };
 
-  // AIアクション実行
+  // AI action execution
   const handleTriggerAi = async (action: AiAction) => {
     setIsAiProcessing(true);
     setIsAiMenuOpen(false);
@@ -225,8 +195,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#18191b] border border-[#2e3135] rounded-2xl overflow-hidden shadow-xl">
-      {/* Header: Mode Selector & Stats */}
-      <div className="px-4 py-3 bg-[#141517] border-b border-[#242628] flex items-center justify-between select-none">
+      {/* Header: Tab Switcher & Auto-Sync Indicator */}
+      <div className="px-4 py-2.5 bg-[#141517] border-b border-[#242628] flex items-center justify-between select-none">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="font-semibold text-xs text-[#e3e3e3] tracking-tight">
@@ -237,212 +207,79 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
             </span>
           </div>
 
-          {/* Mode Switcher Pills */}
+          {/* Simple Tab Switcher: Cards | YAML */}
           <div className="flex items-center bg-[#1e2023] p-0.5 rounded-lg border border-[#2e3135]">
             <button
               type="button"
-              onClick={handleSwitchToCards}
+              onClick={() => handleSwitchTab('cards')}
               className={`px-2.5 py-1 text-xs rounded-md font-medium transition flex items-center gap-1.5 ${
-                viewMode === 'cards'
+                tab === 'cards'
                   ? 'bg-[#2b2d31] text-white shadow-xs'
                   : 'text-[#8e918f] hover:text-[#c4c7c5]'
               }`}
             >
-              <FileText className="w-3 h-3 text-[#8ab4f8]" />
               Cards
             </button>
             <button
               type="button"
-              onClick={() => handleSwitchToRaw()}
+              onClick={() => handleSwitchTab('yaml')}
               className={`px-2.5 py-1 text-xs rounded-md font-medium transition flex items-center gap-1.5 ${
-                viewMode === 'raw'
+                tab === 'yaml'
                   ? 'bg-[#004a77] text-[#c2e7ff] shadow-xs'
                   : 'text-[#8e918f] hover:text-[#c4c7c5]'
               }`}
             >
-              <Code2 className="w-3 h-3 text-[#34d399]" />
-              RAW (YAML)
+              YAML
             </button>
           </div>
         </div>
 
-        {/* View Mode Action Header */}
-        {viewMode === 'raw' ? (
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#202124] text-[#34d399] border border-[#2e3135] font-semibold">
-              YAML
+        {/* Right: Sync Status & Timestamp */}
+        <div className="flex items-center gap-2">
+          {isSyncing ? (
+            <span className="text-[10px] text-[#8ab4f8] flex items-center gap-1 font-mono">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              Syncing...
             </span>
-
-            <button
-              type="button"
-              onClick={handleCopyRaw}
-              className="px-2 py-1 rounded-md text-[11px] text-[#8e918f] hover:text-white bg-[#202124] hover:bg-[#282a2e] border border-[#2e3135] transition flex items-center gap-1"
-              title="Copy YAML script"
-            >
-              {hasCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-              {hasCopied ? 'Copied' : 'Copy'}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleSwitchToRaw()}
-              className="px-2 py-1 rounded-md text-[11px] text-[#8e918f] hover:text-white bg-[#202124] hover:bg-[#282a2e] border border-[#2e3135] transition flex items-center gap-1"
-              title="タイムラインの最新状態を同期"
-            >
-              <RotateCcw className="w-3 h-3" />
-              Sync
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleApplyRawScript('append')}
-              disabled={isApplyingRaw}
-              className="px-2.5 py-1 rounded-md text-xs font-medium text-[#c4c7c5] hover:text-white bg-[#202124] hover:bg-[#2b2d31] border border-[#2e3135] active:scale-95 transition flex items-center gap-1 disabled:opacity-50"
-              title="末尾に追記 (Ctrl+Shift+Enter)"
-            >
-              <span>+ 追記反映</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleApplyRawScript('replace')}
-              disabled={isApplyingRaw}
-              className="px-3 py-1 rounded-md text-xs font-semibold text-white bg-[#004a77] hover:bg-[#005a92] active:scale-95 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm border border-[#004a77]"
-              title="タイムライン全反映 (Ctrl+Enter)"
-            >
-              {isApplyingRaw ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Play className="w-3 h-3 fill-current" />
-              )}
-              反映 (Ctrl+Enter)
-            </button>
-          </div>
-        ) : (
+          ) : (
+            <span className="text-[10px] text-[#10b981] flex items-center gap-1 font-mono">
+              <Check className="w-3 h-3" />
+              Auto-synced
+            </span>
+          )}
+          <span className="text-[#3c4043] font-mono text-xs">|</span>
           <span className="text-[11px] text-[#8e918f] font-mono">
             {currentTime.toFixed(2)}s
           </span>
-        )}
+        </div>
       </div>
 
-      {/* Main Content Area: Cards vs RAW */}
-      {viewMode === 'raw' ? (
-        /* ================= RAW BATCH SCRIPT EDITOR (Linux / Engineer Grade) ================= */
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#121314]">
-          {/* Quick Snippet Insert Bar */}
-          <div className="px-3 py-1.5 bg-[#17181a] border-b border-[#242628] flex items-center gap-1.5 overflow-x-auto text-[11px]">
-            {/* 縦にセリフを追加するクイックボタン */}
-            <button
-              type="button"
-              onClick={() => handleAppendNewBlock()}
-              className="px-2.5 py-0.5 rounded bg-[#004a77]/50 hover:bg-[#004a77] text-[#c2e7ff] hover:text-white border border-[#004a77] flex items-center gap-1 flex-shrink-0 transition active:scale-95 text-xs font-semibold"
-              title="末尾に新しいセリフブロックを追記"
-            >
-              <Sparkles className="w-3 h-3 text-amber-300" />
-              <span>+ セリフ追記</span>
-            </button>
-
-            <div className="h-3 w-px bg-[#2e3135] mx-1 flex-shrink-0" />
-
-            <span className="text-[#8e918f] font-mono text-[10px] uppercase flex-shrink-0">
-              Insert:
-            </span>
-            {characters.map((c) => {
-              const snippetToInsert = `\n- speaker: ${c.name}\n  text: `;
-
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => handleInsertSnippet(snippetToInsert)}
-                  className="px-2 py-0.5 rounded bg-[#202124] hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white border border-[#2e3135] flex items-center gap-1 flex-shrink-0 transition active:scale-95 text-xs font-mono"
-                  title={`${c.name} のYAMLブロックを挿入`}
-                >
-                  <span className="text-[#8ab4f8] font-bold">+</span>
-                  <span className="text-[11px] font-sans">{c.name}</span>
-                </button>
-              );
-            })}
-
-            <div className="h-3 w-px bg-[#2e3135] mx-1 flex-shrink-0" />
-
-            {/* Expressions */}
-            {[
-              { id: 'smile', label: '笑顔 [smile]' },
-              { id: 'shock', label: '驚き [shock]' },
-              { id: 'trouble', label: '困り [trouble]' },
-              { id: 'angry', label: '怒り [angry]' },
-            ].map((expr) => (
-              <button
-                key={expr.id}
-                type="button"
-                onClick={() => handleInsertSnippet(` [${expr.id}]`)}
-                className="px-2 py-0.5 rounded bg-[#202124] hover:bg-[#282a2e] text-[#a8aaa8] hover:text-white border border-[#2e3135] flex-shrink-0 transition active:scale-95 text-[10px]"
-                title={`話者に表情タグ [${expr.id}] を付与`}
-              >
-                {expr.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Monospaced Code Editor Textarea */}
-          <div className="flex-1 relative flex flex-col p-3">
-            <textarea
-              ref={rawTextareaRef}
-              value={rawText}
-              onChange={(e) => setRawText(e.target.value)}
-              onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
-                  e.preventDefault();
-                  handleApplyRawScript('append');
-                } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-                  e.preventDefault();
-                  handleApplyRawScript('replace');
-                }
-                if (e.key === 'Tab') {
-                  e.preventDefault();
-                  handleInsertSnippet('  ');
-                }
-              }}
-              placeholder={`# YAML形式で台本を入力・編集できます (Ctrl+Enterで反映)
-- speaker: ずんだもん
-  text: 今回はYAML形式で台本を作っていくのだ！
-- speaker: 四国めたん
+      {/* Main Content Area: Cards vs YAML */}
+      {tab === 'yaml' ? (
+        <div className="flex-1 relative flex flex-col p-3 bg-[#121314]">
+          <textarea
+            value={yamlText}
+            onChange={handleYamlChange}
+            onBlur={handleYamlBlur}
+            placeholder={`# Dialogue in YAML format (auto-synced with Cards)
+- speaker: Zundamon
+  text: Welcome to Voix!
+- speaker: Shikoku Metan
   emotion: smile
-  text: パラメータ（話速や感情）も綺麗に構造化できますね。`}
-              className="w-full h-full bg-transparent text-[#e3e3e3] font-mono text-xs leading-relaxed resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266]"
-              spellCheck={false}
-            />
-          </div>
-
-          {/* RAW Footer / Status Bar */}
-          <div className="px-3 py-1.5 bg-[#17181a] border-t border-[#242628] flex items-center justify-between text-[11px] text-[#8e918f] font-mono">
-            <div className="flex items-center gap-3">
-              <span>
-                {rawText.split('\n').filter((l) => l.trim() && !l.trim().startsWith('#')).length} lines
-              </span>
-              <span>{rawText.length} chars</span>
-              {rawStatusMessage && (
-                <span className="text-[#8ab4f8] font-sans font-medium flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-amber-400" />
-                  {rawStatusMessage}
-                </span>
-              )}
-            </div>
-            <div className="text-[10px] text-[#6b6e70]">
-              <code className="text-[#a8aaa8]">Ctrl+Enter</code> 全反映 | <code className="text-[#a8aaa8]">Ctrl+Shift+Enter</code> 末尾追記
-            </div>
-          </div>
+  text: Cards and YAML are automatically synchronized.`}
+            className="w-full h-full bg-transparent text-[#e3e3e3] font-mono text-xs leading-relaxed resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266]"
+            spellCheck={false}
+          />
         </div>
       ) : (
-        /* ================= CARDS LIST VIEW ================= */
         <>
+          {/* Main Content: Dialogue Cards List */}
           <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5">
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#8e918f]">
-                <p className="text-sm font-medium text-[#c4c7c5]">No captions yet</p>
+                <p className="text-sm font-medium text-[#c4c7c5]">No dialogue clips yet</p>
                 <p className="text-xs mt-1.5 text-[#8e918f] max-w-xs leading-relaxed">
-                  Type below, or switch to <strong className="text-[#34d399]">RAW Script</strong> to paste batch lines from Vim or Markdown!
+                  Type dialogue below and press Enter, or edit via the YAML tab.
                 </p>
               </div>
             ) : (
@@ -476,16 +313,16 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                           }}
                         />
 
-                        {/* 表情差分セレクター (100%ダーク仕様) */}
+                        {/* Expression Selector */}
                         <CustomSelect
                           size="sm"
                           value={item.expression || 'default'}
                           options={[
-                            { value: 'default', label: '通常' },
-                            { value: 'smile', label: '笑顔' },
-                            { value: 'shock', label: '驚き' },
-                            { value: 'trouble', label: '困り' },
-                            { value: 'angry', label: '怒り' },
+                            { value: 'default', label: 'Default' },
+                            { value: 'smile', label: 'Smile' },
+                            { value: 'shock', label: 'Shock' },
+                            { value: 'trouble', label: 'Troubled' },
+                            { value: 'angry', label: 'Angry' },
                           ]}
                           onChange={(expr) => onUpdateItem(item.id, { expression: expr })}
                         />
@@ -495,17 +332,17 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                           className="text-[#8e918f] hover:text-[#8ab4f8] font-mono text-[11px] transition"
                           title="Seek to timestamp"
                         >
-                          {item.startTime.toFixed(2)}s 〜 {(item.startTime + item.duration).toFixed(2)}s
+                          {item.startTime.toFixed(2)}s - {(item.startTime + item.duration).toFixed(2)}s
                         </button>
                       </div>
 
-                      {/* Actions (シンプル・必要最小限) */}
+                      {/* Actions */}
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => onPlaySingle(item)}
                           disabled={item.isSynthesizing}
                           className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white transition disabled:opacity-40"
-                          title="音声を試聴"
+                          title="Play audio preview"
                         >
                           {item.isSynthesizing ? (
                             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#8ab4f8]" />
@@ -519,7 +356,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                           className={`p-1.5 rounded-lg transition ${
                             isExpanded ? 'bg-[#004a77] text-[#c2e7ff]' : 'hover:bg-[#282a2e] text-[#8e918f]'
                           }`}
-                          title="話速・音高パラメータ調整"
+                          title="Voice Tuning (Speed / Pitch)"
                         >
                           <Sliders className="w-3.5 h-3.5" />
                         </button>
@@ -527,7 +364,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         <button
                           onClick={() => onDuplicateItem(item.id)}
                           className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#8e918f] hover:text-[#c4c7c5] transition"
-                          title="アイテムを複製"
+                          title="Duplicate item"
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
@@ -535,7 +372,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         <button
                           onClick={() => onSplitItem(item.id, item.startTime + (item.duration || 1) / 2)}
                           className="p-1.5 rounded-lg hover:bg-[#282a2e] text-[#8e918f] hover:text-[#c4c7c5] transition"
-                          title="中央で分割"
+                          title="Split in half"
                         >
                           <Scissors className="w-3.5 h-3.5" />
                         </button>
@@ -543,7 +380,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         <button
                           onClick={() => onDeleteItem(item.id)}
                           className="p-1.5 rounded-lg hover:bg-red-500/10 text-[#8e918f] hover:text-red-400 transition"
-                          title="削除"
+                          title="Delete item"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -686,7 +523,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2e] hover:text-white transition text-left"
                     >
                       <span className="text-sm">🥑</span>
-                      <span>Zundamon-ify (〜なのだ)</span>
+                      <span>Zundamon-ify</span>
                     </button>
                     <button
                       type="button"
@@ -716,7 +553,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                       className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2e] hover:text-white transition text-left"
                     >
                       <Tag className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Auto Readings (France(フランス))</span>
+                      <span>Auto Readings (Reading Hints)</span>
                     </button>
                   </div>
                 )}
@@ -724,7 +561,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
               <input
                 type="text"
-                placeholder={`Type for ${selectedChar?.name || 'speaker'} (e.g. France(フランス))...`}
+                placeholder={`Type dialogue for ${selectedChar?.name || 'speaker'}...`}
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 onKeyDown={handleKeyDown}

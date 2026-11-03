@@ -555,7 +555,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   return (
     <div className="flex flex-col bg-[#141517] rounded-xl overflow-hidden border border-[#282a2c] shadow-lg">
-      {/* プレビューモニター */}
+      {/* Video Preview Canvas */}
       <div
         className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden"
         onDragOver={(e) => {

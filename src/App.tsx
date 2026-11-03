@@ -34,16 +34,21 @@ export function App() {
           const seen = new Set<string>();
           const deduped: Character[] = [];
           parsed.characters.forEach((c: Character) => {
-            const isZunda = c.id === 'zundamon' || (c.speakerId === 3 && (c.name.includes('ずんだ') || c.name.includes('zunda')));
-            const key = isZunda ? 'zundamon' : c.id;
+            const isZunda = c.id === 'zundamon' || (c.speakerId === 3 && (c.name.includes('ずんだ') || c.name.toLowerCase().includes('zunda')));
+            const isMetan = c.id === 'metan' || (c.speakerId === 2 && (c.name.includes('めたん') || c.name.toLowerCase().includes('metan')));
+            const key = isZunda ? 'zundamon' : isMetan ? 'metan' : c.id;
             if (!seen.has(key)) {
               seen.add(key);
-              const def = defaultCharacters.find((d) => d.id === (isZunda ? 'zundamon' : c.id));
+              let resolvedName = c.name;
+              if (isZunda && (c.name === 'zunda' || c.name === 'ずんだもん')) resolvedName = 'Zundamon';
+              if (isMetan && (c.name === 'metan' || c.name === '四国めたん')) resolvedName = 'Shikoku Metan';
+              const def = defaultCharacters.find((d) => d.id === (isZunda ? 'zundamon' : isMetan ? 'metan' : c.id));
               if (def) {
                 deduped.push({
                   ...def,
                   ...c,
                   id: def.id,
+                  name: resolvedName,
                   avatar: {
                     ...def.avatar,
                     ...c.avatar,
@@ -56,7 +61,7 @@ export function App() {
                   },
                 });
               } else {
-                deduped.push(c);
+                deduped.push({ ...c, name: resolvedName });
               }
             }
           });
@@ -112,18 +117,6 @@ export function App() {
     const saved = localStorage.getItem('voix_timeline_height');
     return saved ? Math.max(130, Math.min(450, parseInt(saved))) : 200;
   });
-
-  const [layoutMode, setLayoutMode] = useState<'stacked' | 'split'>(() => {
-    return (localStorage.getItem('voix_layout_mode') as 'stacked' | 'split') || 'split';
-  });
-
-  const handleToggleLayoutMode = () => {
-    setLayoutMode((prev) => {
-      const next = prev === 'stacked' ? 'split' : 'stacked';
-      localStorage.setItem('voix_layout_mode', next);
-      return next;
-    });
-  };
 
   const handleToggleScriptCollapsed = () => {
     setIsScriptCollapsed((prev) => {
@@ -218,14 +211,18 @@ export function App() {
         const seen = new Set<string>();
         const cleaned: Character[] = [];
         cfgChars.forEach((c) => {
-          const isZunda = c.id === 'zundamon' || (c.speakerId === 3 && (c.name.includes('ずんだ') || c.name.includes('zunda')));
-          const key = isZunda ? 'zundamon' : c.id;
+          const isZunda = c.id === 'zundamon' || (c.speakerId === 3 && (c.name.includes('ずんだ') || c.name.toLowerCase().includes('zunda')));
+          const isMetan = c.id === 'metan' || (c.speakerId === 2 && (c.name.includes('めたん') || c.name.toLowerCase().includes('metan')));
+          const key = isZunda ? 'zundamon' : isMetan ? 'metan' : c.id;
           if (!seen.has(key)) {
             seen.add(key);
+            let resolvedName = c.name;
+            if (isZunda && (c.name === 'zunda' || c.name === 'ずんだもん')) resolvedName = 'Zundamon';
+            if (isMetan && (c.name === 'metan' || c.name === '四国めたん')) resolvedName = 'Shikoku Metan';
             cleaned.push({
               ...c,
-              id: isZunda ? 'zundamon' : c.id,
-              name: isZunda && c.name === 'zunda' ? 'ずんだもん' : c.name,
+              id: isZunda ? 'zundamon' : isMetan ? 'metan' : c.id,
+              name: resolvedName,
             });
           }
         });
@@ -532,7 +529,7 @@ export function App() {
         }
       }
     } catch (err) {
-      alert(`プロジェクト読み込みエラー: ${err}`);
+      alert(`Failed to load project: ${err}`);
     }
   };
 
@@ -544,12 +541,12 @@ export function App() {
       if (segments.length === 0) return;
 
       const dialoguePairs = [
-        ['ここからスタートなのだ！', 'どんな展開になるか楽しみですね。'],
-        ['画面をよく見てほしいのだ！', '油断は禁物ですよ。'],
-        ['これはすごいことが起きたのだー！', '見逃せない名シーンですね。'],
-        ['危ないのだ！ピンチなのだ！？', '落ち着いて切り抜けましょう！'],
-        ['やったのだ！大成功なのだ！', '素晴らしい成果ですわ。'],
-        ['まだまだ見どころがあるのだ！', '最後まで応援してくださいね。'],
+        ['Starting from here!', 'Excited to see what happens.'],
+        ['Watch the screen closely!', 'Stay focused!'],
+        ['Something incredible happened!', 'A must-see highlight!'],
+        ['Watch out! Danger ahead!', 'Stay calm and handle it!'],
+        ['We did it! Huge success!', 'What an amazing outcome!'],
+        ['Still more action to come!', 'Keep cheering us on!'],
       ];
 
       const newClips: VoiceItem[] = [];
@@ -661,63 +658,65 @@ export function App() {
     }
   };
 
-  // RAWスクリプトからのバッチ適用 & 高速音声合成 (全置換モードまたは末尾追記モードに対応)
-  const handleBatchApplyScript = async (
-    lines: ParsedScriptLine[],
-    mode: 'replace' | 'append' = 'replace'
-  ): Promise<void> => {
-    if (lines.length === 0) return;
+  // Cards ↔ YAML 自動同期ハンドラー
+  const handleSyncFromYaml = async (lines: ParsedScriptLine[]): Promise<void> => {
+    if (lines.length === 0) {
+      setItems([]);
+      return;
+    }
 
-    let currentStart =
-      mode === 'append'
-        ? items.reduce((max, it) => Math.max(max, it.startTime + (it.duration || 1) + 0.15), 0)
-        : 0;
-    const newItems: TimelineItem[] = mode === 'append' ? [...items] : [];
+    let currentStart = 0;
+    const newItems: VoiceItem[] = [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       const char = matchCharacter(line.speaker, characters);
+      const speed = typeof line.speed === 'number' ? line.speed : 1.0;
+      const pitch = typeof line.pitch === 'number' ? line.pitch : 0.0;
+      const expr = line.expression || 'default';
       const startTime = line.startTime !== undefined ? line.startTime : currentStart;
 
-      // 既存アイテムに同一話者・同一テキスト・合成済み音声があれば即座にキャッシュ再利用
+      // 既存アイテムに同一話者・同一テキスト・同一話速・音高・合成済み音声があれば再利用
       const existing = items.find(
-        (it) => it.type === 'voice' && it.characterId === char.id && it.text === line.text && it.audioBlob
+        (it) =>
+          it.type === 'voice' &&
+          it.characterId === char.id &&
+          it.text === line.text &&
+          Math.abs((it.speedScale || 1.0) - speed) < 0.01 &&
+          Math.abs((it.pitchScale || 0.0) - pitch) < 0.01 &&
+          it.audioBlob
       ) as VoiceItem | undefined;
 
       if (existing) {
         newItems.push({
           ...existing,
-          id: `voice_${Date.now()}_${i}`,
           startTime,
-          expression: line.expression || existing.expression || 'default',
+          expression: expr,
         });
         currentStart = startTime + existing.duration + 0.15;
       } else {
-        // 新規テキストをVOICEVOXで合成
         try {
-          const speedScale = typeof line.speed === 'number' ? line.speed : 1.0;
-          const pitchScale = typeof line.pitch === 'number' ? line.pitch : 0.0;
           const result = await ttsManager.synthesize(
             char.ttsProviderId,
             char.speakerId,
             line.text,
-            { speedScale, pitchScale }
+            { speedScale: speed, pitchScale: pitch }
           );
           const audioBlobUrl = URL.createObjectURL(result.audioBlob);
           const duration = Math.max(result.duration, 0.6);
 
           newItems.push({
-            id: `voice_${Date.now()}_${i}`,
+            id: `voice_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
             type: 'voice',
             layer: 2,
             name: `${char.name}: ${line.text.slice(0, 10)}`,
             characterId: char.id,
             text: line.text,
-            expression: line.expression || 'default',
+            expression: expr,
             startTime,
             duration,
-            speedScale,
-            pitchScale,
+            speedScale: speed,
+            pitchScale: pitch,
             audioBlob: result.audioBlob,
             audioBlobUrl,
             phonemes: result.phonemes,
@@ -726,29 +725,28 @@ export function App() {
 
           currentStart = startTime + duration + 0.15;
         } catch (err) {
-          console.warn('Batch synthesis error for line:', line.text, err);
+          console.warn('Sync synthesis failed for line:', line.text, err);
+          const duration = 1.5;
           newItems.push({
-            id: `voice_${Date.now()}_${i}`,
+            id: `voice_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,
             type: 'voice',
             layer: 2,
             name: `${char.name}: ${line.text.slice(0, 10)}`,
             characterId: char.id,
             text: line.text,
-            expression: line.expression || 'default',
+            expression: expr,
             startTime,
-            duration: 1.5,
-            speedScale: 1.0,
-            pitchScale: 0.0,
+            duration,
+            speedScale: speed,
+            pitchScale: pitch,
             isSynthesizing: false,
           });
-          currentStart = startTime + 1.5 + 0.15;
+          currentStart = startTime + duration + 0.15;
         }
       }
     }
 
-    if (newItems.length > 0) {
-      setItems(newItems);
-    }
+    setItems(newItems);
   };
 
   // 立ち絵 (ZIP / PSD / PNG) のインポート成功ハンドラー
@@ -831,131 +829,86 @@ export function App() {
         hasVideo={!!videoSrc}
         itemCount={items.length}
         isTranscribing={isTranscribing}
-        layoutMode={layoutMode}
-        onToggleLayoutMode={handleToggleLayoutMode}
         onSaveProject={handleSaveProject}
         onLoadProject={handleLoadProject}
       />
 
       <main className="flex-1 flex overflow-hidden p-3 gap-3 min-h-0">
-        {layoutMode === 'stacked' ? (
-          /* ================= STACKED LAYOUT (上下分割: ビデオ上・台本下 / 圧倒的見やすさ) ================= */
-          <div className="flex-1 flex flex-col min-h-0 overflow-hidden gap-2">
-            {/* Top: Video Preview (自然なアスペクト比で中央配置) */}
-            <div className="h-[46vh] min-h-[220px] max-h-[58vh] flex flex-col justify-center items-center overflow-hidden">
-              <VideoPreview
-                videoSrc={videoSrc}
-                items={items}
-                characters={characters}
-                currentTime={currentTime}
-                duration={totalDuration}
-                isPlaying={isPlaying}
-                onTogglePlay={handleTogglePlay}
-                onSeek={handleSeek}
-                onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
-                onVideoDrop={handleVideoSelect}
-                activeAudioUrl={activeAudioUrl}
-              />
-            </div>
+        {/* Left: Video Preview */}
+        <div className="flex-1 flex flex-col justify-start min-w-0 pr-1 overflow-hidden">
+          <VideoPreview
+            videoSrc={videoSrc}
+            items={items}
+            characters={characters}
+            currentTime={currentTime}
+            duration={totalDuration}
+            isPlaying={isPlaying}
+            onTogglePlay={handleTogglePlay}
+            onSeek={handleSeek}
+            onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
+            onVideoDrop={handleVideoSelect}
+            activeAudioUrl={activeAudioUrl}
+          />
+        </div>
 
-            {/* Bottom: Script & Captions (全幅表示でスクリプトが改行されず極めて読みやすい) */}
-            <div className="flex-1 min-h-[160px] flex flex-col overflow-hidden">
-              <ScriptEditor
-                items={voiceItems}
-                characters={characters}
-                currentTime={currentTime}
-                onAddItem={handleAddVoiceItem}
-                onUpdateItem={handleUpdateItem}
-                onDeleteItem={handleDeleteItem}
-                onDuplicateItem={handleDuplicateItem}
-                onSplitItem={handleSplitItem}
-                onSeek={handleSeek}
-                onPlaySingle={handlePlaySingle}
-                onSynthesizeItem={handleSynthesizeItem}
-                onBatchApplyScript={handleBatchApplyScript}
-              />
-            </div>
+        {/* Horizontal Resize Handle */}
+        {!isScriptCollapsed && (
+          <div
+            onMouseDown={handleStartHorizontalResize}
+            className="w-2 hover:w-2.5 transition-all flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-1 flex-shrink-0"
+            title="Drag to resize Script panel width"
+            onDoubleClick={() => setScriptWidth(460)}
+          >
+            <div className="w-1 h-12 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+          </div>
+        )}
+
+        {/* Right: Script & Captions */}
+        {!isScriptCollapsed ? (
+          <div
+            style={{ width: `${scriptWidth}px` }}
+            className="flex flex-col flex-shrink-0 min-w-0 h-full"
+          >
+            <ScriptEditor
+              items={voiceItems}
+              characters={characters}
+              currentTime={currentTime}
+              onAddItem={handleAddVoiceItem}
+              onUpdateItem={handleUpdateItem}
+              onDeleteItem={handleDeleteItem}
+              onDuplicateItem={handleDuplicateItem}
+              onSplitItem={handleSplitItem}
+              onSeek={handleSeek}
+              onPlaySingle={handlePlaySingle}
+              onSynthesizeItem={handleSynthesizeItem}
+              onSyncFromYaml={handleSyncFromYaml}
+            />
           </div>
         ) : (
-          /* ================= SPLIT LAYOUT (左右分割) ================= */
-          <>
-            {/* Left: Video Preview */}
-            <div className="flex-1 flex flex-col justify-start min-w-0 pr-1 overflow-hidden">
-              <VideoPreview
-                videoSrc={videoSrc}
-                items={items}
-                characters={characters}
-                currentTime={currentTime}
-                duration={totalDuration}
-                isPlaying={isPlaying}
-                onTogglePlay={handleTogglePlay}
-                onSeek={handleSeek}
-                onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
-                onVideoDrop={handleVideoSelect}
-                activeAudioUrl={activeAudioUrl}
-              />
-            </div>
-
-            {/* 水平リサイズハンドル */}
-            {!isScriptCollapsed && (
-              <div
-                onMouseDown={handleStartHorizontalResize}
-                className="w-2 hover:w-2.5 transition-all flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-1 flex-shrink-0"
-                title="ドラッグしてScriptパネル幅を変更"
-                onDoubleClick={() => setScriptWidth(460)}
-              >
-                <div className="w-1 h-12 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
-              </div>
-            )}
-
-            {/* Right: Script & Captions */}
-            {!isScriptCollapsed ? (
-              <div
-                style={{ width: `${scriptWidth}px` }}
-                className="flex flex-col flex-shrink-0 min-w-0 h-full"
-              >
-                <ScriptEditor
-                  items={voiceItems}
-                  characters={characters}
-                  currentTime={currentTime}
-                  onAddItem={handleAddVoiceItem}
-                  onUpdateItem={handleUpdateItem}
-                  onDeleteItem={handleDeleteItem}
-                  onDuplicateItem={handleDuplicateItem}
-                  onSplitItem={handleSplitItem}
-                  onSeek={handleSeek}
-                  onPlaySingle={handlePlaySingle}
-                  onSynthesizeItem={handleSynthesizeItem}
-                  onBatchApplyScript={handleBatchApplyScript}
-                />
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleToggleScriptCollapsed}
-                className="w-5 h-16 self-center rounded-l-lg bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
-                title="Script & Captions パネルを展開"
-              >
-                <PanelRightOpen className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </>
+          <button
+            type="button"
+            onClick={handleToggleScriptCollapsed}
+            className="w-5 h-16 self-center rounded-l-lg bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
+            title="Expand Script & Captions panel"
+          >
+            <PanelRightOpen className="w-3.5 h-3.5" />
+          </button>
         )}
       </main>
 
-      {/* 垂直リサイズハンドル (タイムライン調整) */}
+      {/* Vertical Resize Handle (Timeline) */}
       {!isTimelineCollapsed && (
         <div
           onMouseDown={handleStartVerticalResize}
           className="h-1.5 hover:h-2 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0"
-          title="ドラッグしてタイムライン高さを変更 (ダブルクリックで初期化)"
+          title="Drag to resize Timeline height (Double-click to reset)"
           onDoubleClick={() => setTimelineHeight(200)}
         >
           <div className="h-1 w-16 rounded-full bg-[#222427] group-hover:bg-[#8ab4f8] transition-colors" />
         </div>
       )}
 
-      {/* Bottom: Timeline (開閉 & 自由リサイズ対応) */}
+      {/* Bottom: Timeline */}
       {!isTimelineCollapsed ? (
         <div
           style={{ height: `${timelineHeight}px` }}
@@ -966,7 +919,7 @@ export function App() {
               type="button"
               onClick={handleToggleTimelineCollapsed}
               className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#8e918f] hover:text-[#c4c7c5] border border-[#2e3135]"
-              title="タイムラインを折りたたむ"
+              title="Collapse timeline"
             >
               ▼ Collapse
             </button>
