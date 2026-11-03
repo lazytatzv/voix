@@ -661,12 +661,18 @@ export function App() {
     }
   };
 
-  // RAWスクリプトからのバッチ適用 & 高速音声合成
-  const handleBatchApplyScript = async (lines: ParsedScriptLine[]): Promise<void> => {
+  // RAWスクリプトからのバッチ適用 & 高速音声合成 (全置換モードまたは末尾追記モードに対応)
+  const handleBatchApplyScript = async (
+    lines: ParsedScriptLine[],
+    mode: 'replace' | 'append' = 'replace'
+  ): Promise<void> => {
     if (lines.length === 0) return;
 
-    let currentStart = 0;
-    const newItems: TimelineItem[] = [];
+    let currentStart =
+      mode === 'append'
+        ? items.reduce((max, it) => Math.max(max, it.startTime + (it.duration || 1) + 0.15), 0)
+        : 0;
+    const newItems: TimelineItem[] = mode === 'append' ? [...items] : [];
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];

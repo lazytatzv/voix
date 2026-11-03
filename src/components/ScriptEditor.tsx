@@ -25,6 +25,7 @@ import {
   itemsToRawText,
   parseRawScript,
   ParsedScriptLine,
+  RawScriptFormat,
   getCharacterShortPrefix,
 } from '../utils/scriptParser';
 
@@ -40,7 +41,7 @@ interface ScriptEditorProps {
   onSeek: (time: number) => void;
   onPlaySingle: (item: VoiceItem) => void;
   onSynthesizeItem: (id: string) => Promise<void>;
-  onBatchApplyScript?: (lines: ParsedScriptLine[]) => Promise<void>;
+  onBatchApplyScript?: (lines: ParsedScriptLine[], mode?: 'replace' | 'append') => Promise<void>;
 }
 
 export const ScriptEditor: React.FC<ScriptEditorProps> = ({
@@ -76,40 +77,50 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     ? selectedCharacterId
     : characters[0]?.id || '';
 
-  const [rawFormat, setRawFormat] = useState<'short' | 'full'>('short');
+  const [rawFormat, setRawFormat] = useState<RawScriptFormat>(() => {
+    return (localStorage.getItem('voix_raw_format') as RawScriptFormat) || 'markdown';
+  });
 
-  // RAWモード切り替え時にタイムラインの最新状態を反映 (短縮形式対応)
-  const handleSwitchToRaw = (fmt: 'short' | 'full' = rawFormat) => {
+  // RAWモード切り替え時にタイムラインの最新状態を反映
+  const handleSwitchToRaw = (fmt: RawScriptFormat = rawFormat) => {
     setRawText(itemsToRawText(items, characters, fmt));
     setViewMode('raw');
     setRawStatusMessage(null);
   };
 
-  const handleToggleRawFormat = () => {
-    const nextFmt = rawFormat === 'short' ? 'full' : 'short';
-    setRawFormat(nextFmt);
-    handleSwitchToRaw(nextFmt);
+  const handleSelectRawFormat = (newFmt: RawScriptFormat) => {
+    setRawFormat(newFmt);
+    localStorage.setItem('voix_raw_format', newFmt);
+    handleSwitchToRaw(newFmt);
   };
 
   const handleSwitchToCards = () => {
     setViewMode('cards');
   };
 
-  // RAWスクリプトの適用
-  const handleApplyRawScript = async () => {
+  // RAWスクリプトの適用 (全置換 または 末尾追記)
+  const handleApplyRawScript = async (mode: 'replace' | 'append' = 'replace') => {
     if (!onBatchApplyScript) return;
     setIsApplyingRaw(true);
-    setRawStatusMessage('Parsing & synthesizing voice with VOICEVOX...');
+    setRawStatusMessage(
+      mode === 'append'
+        ? 'タイムライン末尾にセリフを追記中...'
+        : 'タイムラインへスクリプトを一括反映中...'
+    );
 
     try {
       const parsed = parseRawScript(rawText);
       if (parsed.length === 0) {
-        setRawStatusMessage('No valid dialogue lines found.');
+        setRawStatusMessage('有効なセリフが見つかりませんでした。');
         setIsApplyingRaw(false);
         return;
       }
-      await onBatchApplyScript(parsed);
-      setRawStatusMessage(`Applied ${parsed.length} dialogue clips to timeline.`);
+      await onBatchApplyScript(parsed, mode);
+      setRawStatusMessage(
+        mode === 'append'
+          ? `末尾に ${parsed.length} 件のセリフを追加しました。`
+          : `タイムラインに ${parsed.length} 件のセリフを反映しました。`
+      );
       setTimeout(() => setRawStatusMessage(null), 3500);
     } catch (err: unknown) {
       console.error('Failed to apply raw script:', err);
@@ -117,6 +128,39 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     } finally {
       setIsApplyingRaw(false);
     }
+  };
+
+  // 縦に新しいセリフブロックを末尾へ追記
+  const handleAppendNewBlock = (charName?: string, expr?: string) => {
+    const targetChar = charName || (characters.find((c) => c.id === activeCharId) || characters[0])?.name || 'ずんだもん';
+    const exprTag = expr && expr !== 'default' ? ` [${expr}]` : '';
+    let snippet = '';
+
+    if (rawFormat === 'markdown') {
+      snippet = `\n\n### ${targetChar}${exprTag}\n`;
+    } else if (rawFormat === 'yaml') {
+      snippet = `\n- speaker: ${targetChar}${expr && expr !== 'default' ? `\n  emotion: ${expr}` : ''}\n  text: `;
+    } else if (rawFormat === 'json') {
+      snippet = `\n  ,{"speaker": "${targetChar}", "text": ""}`;
+    } else {
+      const charIndex = characters.findIndex((c) => c.name === targetChar);
+      const prefix = charIndex !== -1 ? getCharacterShortPrefix(characters[charIndex], charIndex) : targetChar;
+      snippet = `\n${prefix}${exprTag}: `;
+    }
+
+    setRawText((prev) => {
+      const base = prev.trimEnd();
+      return base + snippet;
+    });
+
+    setTimeout(() => {
+      if (rawTextareaRef.current) {
+        rawTextareaRef.current.focus();
+        rawTextareaRef.current.scrollTop = rawTextareaRef.current.scrollHeight;
+        const len = rawTextareaRef.current.value.length;
+        rawTextareaRef.current.setSelectionRange(len, len);
+      }
+    }, 20);
   };
 
   // RAWテキストへのスニペット挿入
@@ -244,15 +288,31 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         {/* View Mode Action Header */}
         {viewMode === 'raw' ? (
           <div className="flex items-center gap-1.5">
-            {/* Format toggle: 短縮 vs フル名 */}
-            <button
-              type="button"
-              onClick={handleToggleRawFormat}
-              className="px-2 py-1 rounded-md text-[11px] font-mono text-[#a8aaa8] hover:text-white bg-[#202124] hover:bg-[#282a2e] border border-[#2e3135] transition"
-              title="短縮記号（ず:/め:）とフル名前（ずんだもん:）を相互変換"
-            >
-              {rawFormat === 'short' ? '短縮形式 (ず:/め:)' : 'フル名前形式'}
-            </button>
+            {/* Format Selector Pills: Markdown | YAML | Simple | JSON */}
+            <div className="flex items-center bg-[#1e2023] p-0.5 rounded-lg border border-[#2e3135]">
+              {(
+                [
+                  { id: 'markdown', label: 'MD' },
+                  { id: 'yaml', label: 'YAML' },
+                  { id: 'short', label: 'Simple' },
+                  { id: 'json', label: 'JSON' },
+                ] as const
+              ).map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  onClick={() => handleSelectRawFormat(f.id)}
+                  className={`px-2 py-0.5 text-[10px] rounded font-mono transition ${
+                    rawFormat === f.id
+                      ? 'bg-[#2b2d31] text-white font-bold shadow-xs'
+                      : 'text-[#8e918f] hover:text-[#c4c7c5]'
+                  }`}
+                  title={`${f.label} 形式で表示・編集`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
 
             <button
               type="button"
@@ -268,7 +328,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               type="button"
               onClick={() => handleSwitchToRaw()}
               className="px-2 py-1 rounded-md text-[11px] text-[#8e918f] hover:text-white bg-[#202124] hover:bg-[#282a2e] border border-[#2e3135] transition flex items-center gap-1"
-              title="Sync from current timeline"
+              title="タイムラインの最新状態を同期"
             >
               <RotateCcw className="w-3 h-3" />
               Sync
@@ -276,10 +336,20 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
             <button
               type="button"
-              onClick={handleApplyRawScript}
+              onClick={() => handleApplyRawScript('append')}
+              disabled={isApplyingRaw}
+              className="px-2.5 py-1 rounded-md text-xs font-medium text-[#c4c7c5] hover:text-white bg-[#202124] hover:bg-[#2b2d31] border border-[#2e3135] active:scale-95 transition flex items-center gap-1 disabled:opacity-50"
+              title="末尾に追記 (Ctrl+Shift+Enter)"
+            >
+              <span>+ 追記反映</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleApplyRawScript('replace')}
               disabled={isApplyingRaw}
               className="px-3 py-1 rounded-md text-xs font-semibold text-white bg-[#004a77] hover:bg-[#005a92] active:scale-95 transition flex items-center gap-1.5 disabled:opacity-50 shadow-sm border border-[#004a77]"
-              title="Apply script to timeline & synthesize with VOICEVOX (Ctrl+Enter)"
+              title="タイムライン全反映 (Ctrl+Enter)"
             >
               {isApplyingRaw ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -302,20 +372,42 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         <div className="flex-1 flex flex-col overflow-hidden bg-[#121314]">
           {/* Quick Snippet Insert Bar */}
           <div className="px-3 py-1.5 bg-[#17181a] border-b border-[#242628] flex items-center gap-1.5 overflow-x-auto text-[11px]">
+            {/* 縦にセリフを追加するクイックボタン */}
+            <button
+              type="button"
+              onClick={() => handleAppendNewBlock()}
+              className="px-2.5 py-0.5 rounded bg-[#004a77]/50 hover:bg-[#004a77] text-[#c2e7ff] hover:text-white border border-[#004a77] flex items-center gap-1 flex-shrink-0 transition active:scale-95 text-xs font-semibold"
+              title="末尾に新しいセリフブロックを追記"
+            >
+              <Sparkles className="w-3 h-3 text-amber-300" />
+              <span>+ 縦にセリフ追記</span>
+            </button>
+
+            <div className="h-3 w-px bg-[#2e3135] mx-1 flex-shrink-0" />
+
             <span className="text-[#8e918f] font-mono text-[10px] uppercase flex-shrink-0">
               Insert:
             </span>
             {characters.map((c, idx) => {
               const prefix = getCharacterShortPrefix(c, idx);
+              const snippetToInsert =
+                rawFormat === 'markdown'
+                  ? `\n\n### ${c.name}\n`
+                  : rawFormat === 'yaml'
+                  ? `\n- speaker: ${c.name}\n  text: `
+                  : `${prefix}: `;
+
               return (
                 <button
                   key={c.id}
                   type="button"
-                  onClick={() => handleInsertSnippet(`${prefix}: `)}
+                  onClick={() => handleInsertSnippet(snippetToInsert)}
                   className="px-2 py-0.5 rounded bg-[#202124] hover:bg-[#282a2e] text-[#c4c7c5] hover:text-white border border-[#2e3135] flex items-center gap-1 flex-shrink-0 transition active:scale-95 text-xs font-mono"
-                  title={`${c.name} (${prefix}:)`}
+                  title={`${c.name} (${rawFormat === 'markdown' ? `### ${c.name}` : `${prefix}:`})`}
                 >
-                  <span className="text-[#8ab4f8] font-bold">+{prefix}:</span>
+                  <span className="text-[#8ab4f8] font-bold">
+                    {rawFormat === 'markdown' ? `###` : `+${prefix}:`}
+                  </span>
                   <span className="text-[10px] opacity-70">{c.name}</span>
                 </button>
               );
@@ -348,16 +440,25 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               value={rawText}
               onChange={(e) => setRawText(e.target.value)}
               onKeyDown={(e) => {
-                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'Enter') {
                   e.preventDefault();
-                  handleApplyRawScript();
+                  handleApplyRawScript('append');
+                } else if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                  e.preventDefault();
+                  handleApplyRawScript('replace');
                 }
                 if (e.key === 'Tab') {
                   e.preventDefault();
                   handleInsertSnippet('  ');
                 }
               }}
-              placeholder={`# スクリプト一括入力 (短縮入力・カギ括弧・TSVに対応):\nず: 今回はLinuxで最強の動画を作るのだ！\nめ: ついに完成に近づいてきましたね。\nず[shock]: え！？もう動くのだ！？\nめ[smile]: 当然ですわ。`}
+              placeholder={
+                rawFormat === 'markdown'
+                  ? `### ずんだもん\n今回はMarkdown形式で台本を縦に書いていくのだ！\n普通の文章のように自然に改行できます。\n\n### 四国めたん [smile]\n見出しで話者を指定するだけなので、ChatGPTやClaudeの出力もそのままペーストできますわ。`
+                  : rawFormat === 'yaml'
+                  ? `- speaker: ずんだもん\n  text: 今回はYAML形式で台本を作っていくのだ！\n- speaker: 四国めたん\n  emotion: smile\n  text: パラメータも綺麗に構造化できますね。`
+                  : `ず: 今回は短縮形式で爆速入力なのだ！\nめ[smile]: 1行1セリフで手軽に書けますね。`
+              }
               className="w-full h-full bg-transparent text-[#e3e3e3] font-mono text-xs leading-relaxed resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266]"
               spellCheck={false}
             />
@@ -378,7 +479,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               )}
             </div>
             <div className="text-[10px] text-[#6b6e70]">
-              入力例: <code className="text-[#a8aaa8]">ず: セリフ</code> または <code className="text-[#a8aaa8]">ずんだもん「セリフ」</code> (Ctrl+Enterでタイムライン反映)
+              <code className="text-[#a8aaa8]">Ctrl+Enter</code> 全反映 | <code className="text-[#a8aaa8]">Ctrl+Shift+Enter</code> 末尾追記
             </div>
           </div>
         </div>
