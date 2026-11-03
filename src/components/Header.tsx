@@ -1,10 +1,11 @@
 import React, { useRef } from 'react';
 import { Upload, Sparkles, SlidersHorizontal, Download, PlaySquare, FolderOpen, Save, Video, Wand2, FileArchive } from 'lucide-react';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 
 interface HeaderProps {
   projectName: string;
   onProjectNameChange: (name: string) => void;
-  onVideoSelect: (file: File) => void;
+  onVideoSelect: (fileOrPath: File | string) => void;
   onAutoTranscribe: () => void;
   onOpenCharacterSettings: () => void;
   onOpenTtsSettings: () => void;
@@ -35,6 +36,28 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handlePickVideo = async () => {
+    try {
+      const selected = await openDialog({
+        multiple: false,
+        filters: [
+          {
+            name: 'Video',
+            extensions: ['mp4', 'mkv', 'webm', 'mov', 'avi'],
+          },
+        ],
+      });
+      if (selected && typeof selected === 'string') {
+        onVideoSelect(selected);
+        return;
+      }
+    } catch (e) {
+      console.warn('Native dialog error or cancelled:', e);
+    }
+    // Fallback to HTML input
+    videoInputRef.current?.click();
+  };
 
   const handleVideoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -132,7 +155,7 @@ export const Header: React.FC<HeaderProps> = ({
           onChange={handleVideoChange}
         />
         <button
-          onClick={() => videoInputRef.current?.click()}
+          onClick={handlePickVideo}
           className="px-3.5 py-2 bg-[#1e1f20] hover:bg-[#282a2c] text-[#e3e3e3] text-xs font-medium rounded-full border border-[#3c4043] flex items-center gap-1.5 transition active:scale-95"
         >
           {hasVideo ? <Video className="w-3.5 h-3.5 text-[#8ab4f8]" /> : <Upload className="w-3.5 h-3.5 text-[#8ab4f8]" />}

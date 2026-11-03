@@ -15,6 +15,7 @@ import { exportProjectToJson, importProjectFromJson } from './utils/projectStora
 import { detectSpeechFromVideo } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
 import { ScriptLinePrompt } from './services/aiService';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 const STORAGE_KEY = 'voix_project_autosave';
 
@@ -43,6 +44,7 @@ export function App() {
   });
 
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [rawVideoPath, setRawVideoPath] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number>(15);
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
@@ -165,18 +167,24 @@ export function App() {
     });
   };
 
-  // 動画読み込み
-  const handleVideoSelect = (file: File) => {
-    const url = URL.createObjectURL(file);
-    setVideoSrc(url);
-
-    const tempVideo = document.createElement('video');
-    tempVideo.src = url;
-    tempVideo.onloadedmetadata = () => {
-      if (tempVideo.duration) {
-        setVideoDuration(tempVideo.duration);
+  // 動画読み込み (ファイルパス または Fileオブジェクトに対応)
+  const handleVideoSelect = (fileOrPath: File | string) => {
+    if (typeof fileOrPath === 'string') {
+      setRawVideoPath(fileOrPath);
+      // Tauriのアセットプロトコルで安全かつ大容量動画もHTTPレンジストリーミング
+      const assetUrl = convertFileSrc(fileOrPath);
+      setVideoSrc(assetUrl);
+    } else {
+      // HTML input file fallback
+      const path = (fileOrPath as unknown as { path?: string }).path;
+      if (path && typeof path === 'string') {
+        setRawVideoPath(path);
+        setVideoSrc(convertFileSrc(path));
+      } else {
+        const url = URL.createObjectURL(fileOrPath);
+        setVideoSrc(url);
       }
-    };
+    }
   };
 
   // セリフ追加
@@ -345,7 +353,7 @@ export function App() {
     setIsTranscribing(true);
     try {
       // 発話区間を検出
-      const segments = await detectSpeechFromVideo('');
+      const segments = await detectSpeechFromVideo(rawVideoPath || '');
 
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
@@ -494,6 +502,7 @@ export function App() {
             isPlaying={isPlaying}
             onTogglePlay={handleTogglePlay}
             onSeek={handleSeek}
+            onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
             activeAudioUrl={activeAudioUrl}
           />
         </div>
@@ -564,7 +573,7 @@ export function App() {
         onClose={() => setIsExportModalOpen(false)}
         items={items}
         videoDuration={totalDuration}
-        videoSrc={videoSrc}
+        videoSrc={rawVideoPath || videoSrc}
       />
     </div>
   );

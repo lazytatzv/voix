@@ -12,6 +12,7 @@ interface VideoPreviewProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
+  onVideoDurationLoaded?: (duration: number) => void;
   activeAudioUrl?: string | null;
 }
 
@@ -24,6 +25,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   isPlaying,
   onTogglePlay,
   onSeek,
+  onVideoDurationLoaded,
   activeAudioUrl,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -45,6 +47,50 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     });
     setImagesLoaded(loaded);
   }, [characters]);
+
+  // 1. 再生・一時停止の動画同期
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoSrc) return;
+
+    if (isPlaying) {
+      if (video.paused) {
+        video.play().catch((err) => {
+          console.warn('Video playback warning:', err);
+        });
+      }
+    } else {
+      if (!video.paused) {
+        video.pause();
+      }
+    }
+  }, [isPlaying, videoSrc]);
+
+  // 2. シーク位置 (currentTime) と動画の同期 (0.15秒以上のズレがある場合)
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoSrc) return;
+
+    if (Math.abs(video.currentTime - currentTime) > 0.15) {
+      video.currentTime = currentTime;
+    }
+  }, [currentTime, videoSrc]);
+
+  // 3. 動画ソース変更時に読み込み直し & シーク
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !videoSrc) return;
+
+    video.load();
+    video.currentTime = currentTime;
+  }, [videoSrc]);
+
+  const handleLoadedMetadata = () => {
+    const video = videoRef.current;
+    if (video && video.duration && !isNaN(video.duration) && video.duration > 0) {
+      onVideoDurationLoaded?.(video.duration);
+    }
+  };
 
   const currentVoiceItem = items.find(
     (item): item is VoiceItem =>
@@ -75,11 +121,32 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const width = canvas.width;
     const height = canvas.height;
 
-    // 1. 背景描画
-    if (videoRef.current && videoSrc && videoRef.current.readyState >= 2) {
-      ctx.drawImage(videoRef.current, 0, 0, width, height);
+    // 1. 背景描画 (動画アスペクト比を完全維持して歪みを防止)
+    if (videoRef.current && videoSrc && (videoRef.current.readyState >= 1 || videoRef.current.currentTime > 0)) {
+      const vWidth = videoRef.current.videoWidth || 1920;
+      const vHeight = videoRef.current.videoHeight || 1080;
+      const vAspect = vWidth / vHeight;
+      const cAspect = width / height;
+
+      let drawWidth = width;
+      let drawHeight = height;
+      let drawX = 0;
+      let drawY = 0;
+
+      if (vAspect > cAspect) {
+        // 横長動画 (21:9等): 上下に黒帯 (レターボックス)
+        drawHeight = width / vAspect;
+        drawY = (height - drawHeight) / 2;
+      } else {
+        // 縦長・4:3・16:10等: 左右に黒帯 (ピラーボックス)
+        drawWidth = height * vAspect;
+        drawX = (width - drawWidth) / 2;
+      }
+
+      ctx.fillStyle = '#0a0a0c';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(videoRef.current, drawX, drawY, drawWidth, drawHeight);
     } else {
-      // Googleライクな落ち着いたニュートラルダーク
       ctx.fillStyle = '#0f0f11';
       ctx.fillRect(0, 0, width, height);
 
@@ -88,11 +155,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         ctx.font = '500 22px "Google Sans", sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('Drop video file here or click "Import Video"', width / 2, height / 2 - 15);
+        ctx.fillText('Drop video file here or click "Video"', width / 2, height / 2 - 15);
 
         ctx.fillStyle = '#565958';
         ctx.font = '400 15px "Google Sans", sans-serif';
-        ctx.fillText('Supports MP4, WebM, QuickTime', width / 2, height / 2 + 18);
+        ctx.fillText('Supports MP4, MKV, WebM, QuickTime', width / 2, height / 2 + 18);
       }
     }
 
@@ -333,9 +400,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           <video
             ref={videoRef}
             src={videoSrc}
-            className="hidden"
+            className="absolute w-1 h-1 opacity-0 pointer-events-none"
             muted={isMuted}
             playsInline
+            preload="auto"
+            onLoadedMetadata={handleLoadedMetadata}
+            onCanPlay={() => renderCanvas()}
+            onTimeUpdate={() => renderCanvas()}
           />
         )}
         <audio ref={audioRef} className="hidden" />

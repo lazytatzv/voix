@@ -22,14 +22,19 @@ pub struct TachieImportResult {
 static PROCESS_TACHIE_SCRIPT: &str = include_str!("../scripts/process_tachie.py");
 
 #[tauri::command]
-fn import_tachie_archive(file_path: String, filename_hint: Option<String>) -> Result<TachieImportResult, String> {
+fn import_tachie_archive(
+    file_path: String,
+    filename_hint: Option<String>,
+) -> Result<TachieImportResult, String> {
     let mut cmd = Command::new("python3");
     cmd.arg("-c").arg(PROCESS_TACHIE_SCRIPT).arg(&file_path);
     if let Some(hint) = filename_hint {
         cmd.arg(hint);
     }
 
-    let output = cmd.output().map_err(|e| format!("Python実行エラー: {}", e))?;
+    let output = cmd
+        .output()
+        .map_err(|e| format!("Python実行エラー: {}", e))?;
 
     if !output.status.success() {
         let err = String::from_utf8_lossy(&output.stderr);
@@ -110,7 +115,10 @@ fn detect_speech_segments(video_path: String) -> Result<Vec<SpeechSegment>, Stri
 
     // セグメントが空の場合はフォールバックとして5秒おきのセグメント
     if segments.is_empty() {
-        segments.push(SpeechSegment { start: 0.5, end: 3.5 });
+        segments.push(SpeechSegment {
+            start: 0.5,
+            end: 3.5,
+        });
     }
 
     Ok(segments)
@@ -161,7 +169,9 @@ fn export_full_video(payload: FullExportPayload) -> Result<String, String> {
             format_srt_time(clip.start_time + clip.duration),
             clip.text
         );
-        srt_file.write_all(srt_entry.as_bytes()).map_err(|e| e.to_string())?;
+        srt_file
+            .write_all(srt_entry.as_bytes())
+            .map_err(|e| e.to_string())?;
     }
 
     // 3. FFmpegコマンド構築
@@ -173,10 +183,10 @@ fn export_full_video(payload: FullExportPayload) -> Result<String, String> {
         cmd.arg("-i").arg(vpath);
     } else {
         // 背景動画がない場合は黒背景 (1920x1080) を生成
-        cmd.arg("-f")
-            .arg("lavfi")
-            .arg("-i")
-            .arg(format!("color=c=#0f0f11:s=1920x1080:d={}:r=30", payload.total_duration));
+        cmd.arg("-f").arg("lavfi").arg("-i").arg(format!(
+            "color=c=#0f0f11:s=1920x1080:d={}:r=30",
+            payload.total_duration
+        ));
     }
 
     // 音声入力を追加
@@ -189,12 +199,21 @@ fn export_full_video(payload: FullExportPayload) -> Result<String, String> {
         let mut filter_complex = String::new();
         for (i, (_, start_sec)) in wav_files.iter().enumerate() {
             let delay_ms = (start_sec * 1000.0) as u64;
-            filter_complex.push_str(&format!("[{}:a]adelay={}|{}[a{}];", i + 1, delay_ms, delay_ms, i));
+            filter_complex.push_str(&format!(
+                "[{}:a]adelay={}|{}[a{}];",
+                i + 1,
+                delay_ms,
+                delay_ms,
+                i
+            ));
         }
         for i in 0..wav_files.len() {
             filter_complex.push_str(&format!("[a{}]", i));
         }
-        filter_complex.push_str(&format!("amix=inputs={}:dropout_transition=2[outa]", wav_files.len()));
+        filter_complex.push_str(&format!(
+            "amix=inputs={}:dropout_transition=2[outa]",
+            wav_files.len()
+        ));
 
         cmd.arg("-filter_complex").arg(filter_complex);
         cmd.arg("-map").arg("0:v");
@@ -250,6 +269,7 @@ fn base64_decode_simple(data: &str) -> Result<Vec<u8>, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             check_system_environment,
