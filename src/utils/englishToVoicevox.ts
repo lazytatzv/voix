@@ -1,7 +1,42 @@
 // 英語テキストをVOICEVOXが自然に発話できるカタカナ読みに変換するエンジン
 // 画面の字幕は英語のまま、音声だけずんだもんの発音に変換！
 
-const COMMON_WORD_DICT: Record<string, string> = {
+export const COMMON_WORD_DICT: Record<string, string> = {
+  // 国名・都市・地名
+  france: 'フランス',
+  japan: 'ジャパン',
+  tokyo: 'トウキョウ',
+  america: 'アメリカ',
+  usa: 'ユーエスエー',
+  uk: 'ユーケー',
+  london: 'ロンドン',
+  paris: 'パリ',
+  china: 'チャイナ',
+
+  // 実況・ゲーム名・プラットフォーム
+  minecraft: 'マインクラフト',
+  apex: 'エーペックス',
+  steam: 'スチーム',
+  switch: 'スイッチ',
+  playstation: 'プレイステーション',
+  ps5: 'ピーエスファイブ',
+  pc: 'ピーシー',
+  youtube: 'ユーチューブ',
+  twitter: 'ツイッター',
+  twitch: 'ツイッチ',
+  discord: 'ディスコード',
+  roblox: 'ロブロックス',
+  fortnite: 'フォートナイト',
+  valorant: 'ヴァロラント',
+  pokemon: 'ポケモン',
+  mario: 'マリオ',
+  zelda: 'ゼルダ',
+  genshin: 'ゲンシン',
+  voicevox: 'ボイスボックス',
+  zundamon: 'ズンダモン',
+  metan: 'メタン',
+  tsumugi: 'ツムギ',
+
   // 挨拶・リアクション
   hello: 'ハロー',
   hi: 'ハイ',

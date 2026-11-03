@@ -386,6 +386,36 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       />
                     </div>
                   </div>
+
+                  {/* Furigana / Ruby Reading display */}
+                  <div className="pt-3 border-t border-[#282a2c] flex items-center justify-between">
+                    <div>
+                      <span className="text-xs text-[#e3e3e3] font-medium block">Ruby (Reading) Display</span>
+                      <span className="text-[11px] text-[#8e918f]">Reading annotations like France(フランス)</span>
+                    </div>
+                    <div className="flex items-center gap-1 bg-[#1e1f20] p-1 rounded-xl border border-[#3c4043]">
+                      {(['above', 'hidden', 'inline'] as const).map((mode) => (
+                        <button
+                          key={mode}
+                          onClick={() =>
+                            onUpdateCharacter(char.id, {
+                              subtitleStyle: {
+                                ...char.subtitleStyle,
+                                rubyDisplay: mode,
+                              },
+                            })
+                          }
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
+                            (char.subtitleStyle.rubyDisplay || 'above') === mode
+                              ? 'bg-[#004a77] text-[#c2e7ff]'
+                              : 'text-[#8e918f] hover:text-[#e3e3e3]'
+                          }`}
+                        >
+                          {mode === 'above' ? 'Above' : mode === 'hidden' ? 'Hidden' : 'Inline'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

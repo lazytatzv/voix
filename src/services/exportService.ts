@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import { VoiceItem } from '../types';
+import { getSubtitleDisplayText } from '../utils/pronunciation';
 
 export async function blobToBase64(blob: Blob): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -30,7 +31,7 @@ export async function executeExportVideo(params: ExportFullVideoParams): Promise
         id: c.id,
         start_time: c.startTime,
         duration: c.duration,
-        text: c.text,
+        text: getSubtitleDisplayText(c.text),
         wav_base64: base64,
       };
     })

@@ -1,8 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Trash2, Volume2, Loader2, Send, Sliders, Copy, Scissors, Sparkles, Languages, Wand2 } from 'lucide-react';
+import { Trash2, Volume2, Loader2, Send, Sliders, Copy, Scissors, Sparkles, Languages, Wand2, Tag } from 'lucide-react';
 import { Character, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
 import { processAiAction, AiAction } from '../services/aiService';
+import { extractPronunciations, autoAnnotatePronunciations } from '../utils/pronunciation';
 
 interface ScriptEditorProps {
   items: VoiceItem[];
@@ -224,6 +225,27 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   className="w-full bg-transparent text-sm text-[#e3e3e3] border-b border-transparent focus:border-[#8ab4f8] outline-none py-0.5 transition"
                 />
 
+                {/* Pronunciation Badges (e.g. France(フランス)) */}
+                {(() => {
+                  const prons = extractPronunciations(item.text);
+                  if (prons.length === 0) return null;
+                  return (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                      {prons.map((p, idx) => (
+                        <span
+                          key={idx}
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#004a77]/40 border border-[#004a77] text-[11px] text-[#c2e7ff] font-mono shadow-xs"
+                          title={`Display: "${p.word}" | Spoken pronunciation: "${p.reading}"`}
+                        >
+                          <span className="text-[#8ab4f8] font-medium">{p.word}</span>
+                          <span className="text-[#8e918f]">→</span>
+                          <span className="font-semibold text-white">{p.reading}</span>
+                        </span>
+                      ))}
+                    </div>
+                  );
+                })()}
+
                 {/* Voice Tuning Panel */}
                 {isExpanded && (
                   <div className="pt-2 border-t border-[#2e3134] grid grid-cols-2 gap-3 text-xs text-[#c4c7c5]">
@@ -343,13 +365,27 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   <Scissors className="w-3.5 h-3.5 text-rose-400" />
                   <span>Shorten & Punchy</span>
                 </button>
+                <div className="border-t border-[#2e3134] my-1" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (inputText.trim()) {
+                      setInputText(autoAnnotatePronunciations(inputText));
+                    }
+                    setIsAiMenuOpen(false);
+                  }}
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-[#e3e3e3] hover:bg-[#282a2c] hover:text-white transition text-left"
+                >
+                  <Tag className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Auto-Annotate Readings (France→France(フランス))</span>
+                </button>
               </div>
             )}
           </div>
 
           <input
             type="text"
-            placeholder={`Type for ${selectedChar?.name || 'speaker'} in English or Japanese...`}
+            placeholder={`Type for ${selectedChar?.name || 'speaker'} (e.g. France(フランス) or Apex[エーペックス])...`}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={handleKeyDown}

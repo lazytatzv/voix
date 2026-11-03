@@ -39,6 +39,9 @@ export interface SubtitleStyle {
   bgStyle: 'none' | 'pill' | 'banner';
   bgColor?: string;
 
+  // ルビ (ふりがな) 表示オプション
+  rubyDisplay?: 'above' | 'hidden' | 'inline'; // 'above': 文字の上に小さく表示, 'hidden': 字幕は単語のみ表示, 'inline': 原文のまま表示
+
   // 画面配置
   yOffsetPercent: number; // 画面下部からの距離 % (例: 10)
 }

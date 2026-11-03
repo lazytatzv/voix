@@ -1,5 +1,6 @@
 import { Speaker, PhonemeTiming } from '../../types';
 import { containsEnglish, convertEnglishToVoicevox } from '../../utils/englishToVoicevox';
+import { getTtsSpokenText } from '../../utils/pronunciation';
 
 export interface TTSProvider {
   id: string;
@@ -100,8 +101,11 @@ export class VoicevoxProvider implements TTSProvider {
       };
     }
 
-    // 1. Audio Queryの作成 (英文が含まれる場合は自動で発音カタカナに変換してVOICEVOXに渡す)
-    const speechText = containsEnglish(text) ? convertEnglishToVoicevox(text) : text;
+    // 1. Audio Queryの作成
+    // (a) 読み仮名アノテーション (例: France(フランス) -> フランス) を展開
+    const spokenAnnotated = getTtsSpokenText(text);
+    // (b) 英文が含まれる場合は自動で発音カタカナに変換してVOICEVOXに渡す
+    const speechText = containsEnglish(spokenAnnotated) ? convertEnglishToVoicevox(spokenAnnotated) : spokenAnnotated;
     const queryUrl = new URL(`${this.endpoint}/audio_query`);
     queryUrl.searchParams.set('speaker', speakerId.toString());
     queryUrl.searchParams.set('text', speechText);

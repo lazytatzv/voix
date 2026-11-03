@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User } from 'lucide-react';
 import { Character, VoiceItem, TimelineItem } from '../types';
+import { parsePronunciationTokens, getSubtitleDisplayText } from '../utils/pronunciation';
 
 interface VideoPreviewProps {
   videoSrc: string | null;
@@ -150,8 +151,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
       ctx.save();
       const weight = style.fontWeight || '900';
-      ctx.font = `${weight} ${style.fontSize}px ${style.fontFamily}`;
-      ctx.textAlign = 'center';
+      const mainFont = `${weight} ${style.fontSize}px ${style.fontFamily}`;
+      const rubyFontSize = Math.max(14, Math.round(style.fontSize * 0.42));
+      const rubyFont = `${weight} ${rubyFontSize}px ${style.fontFamily}`;
+      ctx.font = mainFont;
       ctx.textBaseline = 'middle';
       ctx.lineJoin = 'round';
       ctx.miterLimit = 2;
@@ -159,51 +162,154 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       const x = width / 2;
       const y = height - (height * (style.yOffsetPercent / 100));
 
-      const text = currentVoiceItem.text;
+      const rawText = currentVoiceItem.text;
+      const rubyMode = style.rubyDisplay || 'above';
+      const tokens = parsePronunciationTokens(rawText);
+      const hasRuby = tokens.some((t) => t.reading) && rubyMode === 'above';
 
-      // オプション: 背景ピル
-      if (style.bgStyle === 'pill') {
-        const textMetrics = ctx.measureText(text);
-        const bgPaddingX = 32;
-        const bgPaddingY = 16;
-        ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
-        ctx.beginPath();
-        ctx.roundRect?.(
-          x - textMetrics.width / 2 - bgPaddingX,
-          y - style.fontSize / 2 - bgPaddingY,
-          textMetrics.width + bgPaddingX * 2,
-          style.fontSize + bgPaddingY * 2,
-          14
-        );
-        ctx.fill();
+      if (!hasRuby) {
+        // 通常の単一テキスト描画 (ルビ非表示モード または ルビ指定なし)
+        const displayText = rubyMode === 'inline' ? rawText : getSubtitleDisplayText(rawText);
+
+        // 背景ピル
+        if (style.bgStyle === 'pill') {
+          const textMetrics = ctx.measureText(displayText);
+          const bgPaddingX = 32;
+          const bgPaddingY = 16;
+          ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
+          ctx.beginPath();
+          ctx.roundRect?.(
+            x - textMetrics.width / 2 - bgPaddingX,
+            y - style.fontSize / 2 - bgPaddingY,
+            textMetrics.width + bgPaddingX * 2,
+            style.fontSize + bgPaddingY * 2,
+            14
+          );
+          ctx.fill();
+        }
+
+        ctx.textAlign = 'center';
+
+        // ドロップシャドウ
+        if (style.hasShadow) {
+          ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
+          ctx.shadowBlur = style.shadowBlur ?? 8;
+          ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
+          ctx.shadowOffsetX = 0;
+        }
+
+        // レイヤーA: 外側縁取り (アウターストローク / 二重縁取り)
+        if (style.outerStrokeColor && style.outerStrokeWidth && style.outerStrokeWidth > 0) {
+          ctx.strokeStyle = style.outerStrokeColor;
+          ctx.lineWidth = style.outerStrokeWidth;
+          ctx.strokeText(displayText, x, y);
+        }
+
+        // レイヤーB: 内側メイン縁取り
+        ctx.shadowColor = 'transparent';
+        if (style.strokeWidth && style.strokeWidth > 0) {
+          ctx.strokeStyle = style.strokeColor;
+          ctx.lineWidth = style.strokeWidth;
+          ctx.strokeText(displayText, x, y);
+        }
+
+        // レイヤーC: 文字本体塗り
+        ctx.fillStyle = style.textColor;
+        ctx.fillText(displayText, x, y);
+      } else {
+        // ルビ付きプロ字幕レンダリング (France(フランス) -> Franceの上に小さくフランス)
+        ctx.font = mainFont;
+        const tokenWidths = tokens.map((t) => ctx.measureText(t.text).width);
+        const totalWidth = tokenWidths.reduce((sum, w) => sum + w, 0);
+        const rubyY = y - style.fontSize * 0.72;
+
+        // 背景ピル (ルビを含む高さに拡張)
+        if (style.bgStyle === 'pill') {
+          const bgPaddingX = 32;
+          const bgPaddingY = 18;
+          ctx.fillStyle = style.bgColor || 'rgba(15, 15, 18, 0.82)';
+          ctx.beginPath();
+          ctx.roundRect?.(
+            x - totalWidth / 2 - bgPaddingX,
+            rubyY - rubyFontSize / 2 - bgPaddingY,
+            totalWidth + bgPaddingX * 2,
+            y - rubyY + style.fontSize / 2 + bgPaddingY * 2,
+            16
+          );
+          ctx.fill();
+        }
+
+        // ドロップシャドウ設定
+        if (style.hasShadow) {
+          ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
+          ctx.shadowBlur = style.shadowBlur ?? 8;
+          ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
+          ctx.shadowOffsetX = 0;
+        }
+
+        // レイヤーA: 外側二重縁取り
+        if (style.outerStrokeColor && style.outerStrokeWidth && style.outerStrokeWidth > 0) {
+          ctx.strokeStyle = style.outerStrokeColor;
+          let curX = x - totalWidth / 2;
+          for (let i = 0; i < tokens.length; i++) {
+            const tok = tokens[i];
+            const w = tokenWidths[i];
+            ctx.font = mainFont;
+            ctx.lineWidth = style.outerStrokeWidth;
+            ctx.textAlign = 'left';
+            ctx.strokeText(tok.text, curX, y);
+
+            if (tok.reading) {
+              ctx.font = rubyFont;
+              ctx.lineWidth = Math.max(2, style.outerStrokeWidth * 0.6);
+              ctx.textAlign = 'center';
+              ctx.strokeText(tok.reading, curX + w / 2, rubyY);
+            }
+            curX += w;
+          }
+        }
+
+        // レイヤーB: 内側メイン縁取り
+        ctx.shadowColor = 'transparent';
+        if (style.strokeWidth && style.strokeWidth > 0) {
+          ctx.strokeStyle = style.strokeColor;
+          let curX = x - totalWidth / 2;
+          for (let i = 0; i < tokens.length; i++) {
+            const tok = tokens[i];
+            const w = tokenWidths[i];
+            ctx.font = mainFont;
+            ctx.lineWidth = style.strokeWidth;
+            ctx.textAlign = 'left';
+            ctx.strokeText(tok.text, curX, y);
+
+            if (tok.reading) {
+              ctx.font = rubyFont;
+              ctx.lineWidth = Math.max(1, style.strokeWidth * 0.6);
+              ctx.textAlign = 'center';
+              ctx.strokeText(tok.reading, curX + w / 2, rubyY);
+            }
+            curX += w;
+          }
+        }
+
+        // レイヤーC: 文字本体塗り
+        ctx.fillStyle = style.textColor;
+        let curX = x - totalWidth / 2;
+        for (let i = 0; i < tokens.length; i++) {
+          const tok = tokens[i];
+          const w = tokenWidths[i];
+          ctx.font = mainFont;
+          ctx.textAlign = 'left';
+          ctx.fillText(tok.text, curX, y);
+
+          if (tok.reading) {
+            ctx.font = rubyFont;
+            ctx.textAlign = 'center';
+            ctx.fillText(tok.reading, curX + w / 2, rubyY);
+          }
+          curX += w;
+        }
       }
-
-      // ドロップシャドウ
-      if (style.hasShadow) {
-        ctx.shadowColor = style.shadowColor || 'rgba(0, 0, 0, 0.85)';
-        ctx.shadowBlur = style.shadowBlur ?? 8;
-        ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
-        ctx.shadowOffsetX = 0;
-      }
-
-      // レイヤーA: 外側縁取り (アウターストローク / 二重縁取り)
-      if (style.outerStrokeColor && style.outerStrokeWidth && style.outerStrokeWidth > 0) {
-        ctx.strokeStyle = style.outerStrokeColor;
-        ctx.lineWidth = style.outerStrokeWidth;
-        ctx.strokeText(text, x, y);
-      }
-
-      // レイヤーB: 内側メイン縁取り (二重縁取りのシャドウが重複しないようシャドウOFF)
-      ctx.shadowColor = 'transparent';
-      if (style.strokeWidth && style.strokeWidth > 0) {
-        ctx.strokeStyle = style.strokeColor;
-        ctx.lineWidth = style.strokeWidth;
-        ctx.strokeText(text, x, y);
-      }
-
-      // レイヤーC: 文字本体塗り
-      ctx.fillStyle = style.textColor;
-      ctx.fillText(text, x, y);
 
       ctx.restore();
     }

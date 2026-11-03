@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { Character, TimelineItem, VoiceItem } from '../types';
 import { ZoomIn, ZoomOut, Film, MessageSquare } from 'lucide-react';
+import { getSubtitleDisplayText } from '../utils/pronunciation';
 
 interface TimelineProps {
   items: TimelineItem[];
@@ -162,7 +163,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       title={item.text}
                     >
                       <MessageSquare className="w-3 h-3 mr-1.5 flex-shrink-0 opacity-70" />
-                      <span className="truncate font-medium text-[11px]">{item.text}</span>
+                      <span className="truncate font-medium text-[11px]">{getSubtitleDisplayText(item.text)}</span>
                     </div>
                   );
                 })}
