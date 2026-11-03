@@ -124,53 +124,103 @@ pub struct SpeechSegment {
     pub end: f64,
 }
 
-// 動画の音声から無音検出（silencedetect）を行い、発話区間を割り出す
+// 動画の音声から無音検出（silencedetect）を行い、発話区間を割り出す（音声なし動画にも自動対応）
 #[tauri::command]
 fn detect_speech_segments(video_path: String) -> Result<Vec<SpeechSegment>, String> {
-    let output = Command::new("ffmpeg")
-        .arg("-i")
+    let path = std::path::Path::new(&video_path);
+    if video_path.trim().is_empty() || !path.exists() {
+        return Err("有効な動画ファイルが見つかりません".to_string());
+    }
+
+    // ffprobe で動画の総尺と音声ストリームの有無を確認
+    let probe_out = Command::new("ffprobe")
+        .arg("-v")
+        .arg("error")
+        .arg("-show_entries")
+        .arg("format=duration:stream=codec_type")
+        .arg("-of")
+        .arg("default=noprint_wrappers=1")
         .arg(&video_path)
-        .arg("-af")
-        .arg("silencedetect=noise=-30dB:d=0.4")
-        .arg("-f")
-        .arg("null")
-        .arg("-")
-        .output()
-        .map_err(|e| format!("FFmpeg実行エラー: {}", e))?;
+        .output();
 
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    let mut segments = Vec::new();
-    let mut current_speech_start = 0.0;
-
-    for line in stderr.lines() {
-        if line.contains("silence_start:") {
-            if let Some(pos) = line.find("silence_start:") {
-                let val_str = line[pos + 14..].split_whitespace().next().unwrap_or("");
-                if let Ok(silence_start) = val_str.parse::<f64>() {
-                    if silence_start > current_speech_start + 0.3 {
-                        segments.push(SpeechSegment {
-                            start: current_speech_start,
-                            end: silence_start,
-                        });
-                    }
+    let (duration, has_audio) = match probe_out {
+        Ok(out) if out.status.success() => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            let mut dur = 15.0;
+            let mut audio = false;
+            for line in s.lines() {
+                if line.starts_with("duration=") {
+                    dur = line[9..].parse::<f64>().unwrap_or(15.0);
+                } else if line == "codec_type=audio" {
+                    audio = true;
                 }
             }
-        } else if line.contains("silence_end:") {
-            if let Some(pos) = line.find("silence_end:") {
-                let val_str = line[pos + 12..].split_whitespace().next().unwrap_or("");
-                if let Ok(silence_end) = val_str.parse::<f64>() {
-                    current_speech_start = silence_end;
+            (dur, audio)
+        }
+        _ => (15.0, false),
+    };
+
+    let mut segments = Vec::new();
+
+    if has_audio {
+        let output = Command::new("ffmpeg")
+            .arg("-i")
+            .arg(&video_path)
+            .arg("-af")
+            .arg("silencedetect=noise=-30dB:d=0.35")
+            .arg("-f")
+            .arg("null")
+            .arg("-")
+            .output();
+
+        if let Ok(out) = output {
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            let mut current_speech_start = 0.0;
+
+            for line in stderr.lines() {
+                if line.contains("silence_start:") {
+                    if let Some(pos) = line.find("silence_start:") {
+                        let val_str = line[pos + 14..].split_whitespace().next().unwrap_or("");
+                        if let Ok(silence_start) = val_str.parse::<f64>() {
+                            if silence_start > current_speech_start + 0.3 {
+                                segments.push(SpeechSegment {
+                                    start: (current_speech_start * 100.0).round() / 100.0,
+                                    end: (silence_start * 100.0).round() / 100.0,
+                                });
+                            }
+                        }
+                    }
+                } else if line.contains("silence_end:") {
+                    if let Some(pos) = line.find("silence_end:") {
+                        let val_str = line[pos + 12..].split_whitespace().next().unwrap_or("");
+                        if let Ok(silence_end) = val_str.parse::<f64>() {
+                            current_speech_start = silence_end;
+                        }
+                    }
                 }
             }
         }
     }
 
-    // セグメントが空の場合はフォールバックとして5秒おきのセグメント
+    // 音声トラックがない動画、または無音部分のみの動画の場合:
+    // 動画の尺に合わせて、テンポ良い実況・解説区間（4〜5秒間隔）を自動生成
     if segments.is_empty() {
-        segments.push(SpeechSegment {
-            start: 0.5,
-            end: 3.5,
-        });
+        let step = 4.2;
+        let mut t = 0.5;
+        while t + 1.2 < duration {
+            let seg_end = (t + 2.4).min(duration);
+            segments.push(SpeechSegment {
+                start: (t * 10.0).round() / 10.0,
+                end: (seg_end * 10.0).round() / 10.0,
+            });
+            t += step;
+        }
+        if segments.is_empty() {
+            segments.push(SpeechSegment {
+                start: 0.5,
+                end: 3.5,
+            });
+        }
     }
 
     Ok(segments)

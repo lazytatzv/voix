@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Type, FileArchive } from 'lucide-react';
+import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Type, FileArchive, Wand2 } from 'lucide-react';
 import { Character, Speaker } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
 import { CustomSelect } from './CustomSelect';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
+import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
 
 interface CharacterModalProps {
   isOpen: boolean;
@@ -47,20 +48,34 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     const file = e.target.files?.[0];
     if (file && char) {
       const reader = new FileReader();
-      reader.onload = (event) => {
+      reader.onload = async (event) => {
         if (event.target?.result) {
-          const imgUrl = event.target.result as string;
+          const rawUrl = event.target.result as string;
+          // 自動で白背景ベタ塗りを透過化
+          const cleanedUrl = await removeWhiteBackgroundFromDataUrl(rawUrl);
           onUpdateCharacter(char.id, {
             avatar: {
-              idle: imgUrl,
-              speaking: imgUrl,
-              blinking: imgUrl,
+              idle: cleanedUrl,
+              speaking: cleanedUrl,
+              blinking: cleanedUrl,
             },
           });
         }
       };
       reader.readAsDataURL(file);
     }
+  };
+
+  const handleCleanCurrentAvatar = async () => {
+    if (!char?.avatar?.idle) return;
+    const cleaned = await removeWhiteBackgroundFromDataUrl(char.avatar.idle);
+    onUpdateCharacter(char.id, {
+      avatar: {
+        ...char.avatar,
+        idle: cleaned,
+        speaking: char.avatar.speaking ? await removeWhiteBackgroundFromDataUrl(char.avatar.speaking) : cleaned,
+      },
+    });
   };
 
   const handleAddNewCharacter = () => {
@@ -263,6 +278,15 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                           From ZIP / PSD
                         </button>
                       )}
+                      <button
+                        type="button"
+                        onClick={handleCleanCurrentAvatar}
+                        className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#282a2c] hover:bg-[#333538] text-[#c4c7c5] hover:text-white text-xs font-medium rounded-full border border-[#3c4043] transition"
+                        title="Remove white backdrop and make background transparent"
+                      >
+                        <Wand2 className="w-3 h-3 text-amber-400" />
+                        白背景を透過
+                      </button>
                     </div>
                   </div>
                 </div>

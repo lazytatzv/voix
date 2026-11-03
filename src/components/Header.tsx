@@ -1,5 +1,21 @@
 import React, { useRef } from 'react';
-import { Upload, SlidersHorizontal, Download, PlaySquare, FolderOpen, Save, Video, FileArchive, Bot, Layers } from 'lucide-react';
+import {
+  Upload,
+  SlidersHorizontal,
+  Download,
+  PlaySquare,
+  FolderOpen,
+  Save,
+  Video,
+  FileArchive,
+  Bot,
+  Layers,
+  PanelRightClose,
+  PanelRightOpen,
+  PanelBottomClose,
+  PanelBottomOpen,
+} from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
 
 interface HeaderProps {
   projectName: string;
@@ -16,6 +32,10 @@ interface HeaderProps {
   hasVideo: boolean;
   itemCount: number;
   isTranscribing: boolean;
+  isScriptCollapsed?: boolean;
+  onToggleScriptCollapsed?: () => void;
+  isTimelineCollapsed?: boolean;
+  onToggleTimelineCollapsed?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -32,11 +52,32 @@ export const Header: React.FC<HeaderProps> = ({
   hasVideo,
   itemCount,
   isTranscribing,
+  isScriptCollapsed,
+  onToggleScriptCollapsed,
+  isTimelineCollapsed,
+  onToggleTimelineCollapsed,
 }) => {
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const projectInputRef = useRef<HTMLInputElement | null>(null);
 
-  const handlePickVideo = () => {
+  const handlePickVideo = async () => {
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [
+          {
+            name: 'Video Files',
+            extensions: ['mp4', 'mkv', 'webm', 'mov', 'avi', 'm4v'],
+          },
+        ],
+      });
+      if (selected && typeof selected === 'string') {
+        onVideoSelect(selected);
+        return;
+      }
+    } catch (e) {
+      console.warn('Native file picker error, falling back to HTML input:', e);
+    }
     videoInputRef.current?.click();
   };
 
@@ -170,6 +211,33 @@ export const Header: React.FC<HeaderProps> = ({
         >
           <SlidersHorizontal className="w-4 h-4" />
         </button>
+
+        {/* Panel View Toggles */}
+        <div className="flex items-center bg-[#18191b] p-0.5 rounded-lg border border-[#2e3135]">
+          {onToggleTimelineCollapsed && (
+            <button
+              onClick={onToggleTimelineCollapsed}
+              className={`p-1.5 rounded transition ${
+                isTimelineCollapsed ? 'text-[#8e918f] hover:text-white' : 'bg-[#25272a] text-[#8ab4f8]'
+              }`}
+              title={isTimelineCollapsed ? 'Show Timeline Panel' : 'Hide Timeline Panel'}
+            >
+              {isTimelineCollapsed ? <PanelBottomOpen className="w-4 h-4" /> : <PanelBottomClose className="w-4 h-4" />}
+            </button>
+          )}
+
+          {onToggleScriptCollapsed && (
+            <button
+              onClick={onToggleScriptCollapsed}
+              className={`p-1.5 rounded transition ${
+                isScriptCollapsed ? 'text-[#8e918f] hover:text-white' : 'bg-[#25272a] text-[#8ab4f8]'
+              }`}
+              title={isScriptCollapsed ? 'Show Script & Captions Panel' : 'Hide Script & Captions Panel'}
+            >
+              {isScriptCollapsed ? <PanelRightOpen className="w-4 h-4" /> : <PanelRightClose className="w-4 h-4" />}
+            </button>
+          )}
+        </div>
 
         {/* Export Video */}
         <button

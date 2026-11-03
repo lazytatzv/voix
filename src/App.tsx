@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
+import { PanelRightOpen } from 'lucide-react';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import { Header } from './components/Header';
 import { VideoPreview } from './components/VideoPreview';
 import { ScriptEditor } from './components/ScriptEditor';
@@ -80,6 +82,81 @@ export function App() {
   const [isTachieModalOpen, setIsTachieModalOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
+
+  // パネル開閉 & リサイズ状態 (永続化)
+  const [isScriptCollapsed, setIsScriptCollapsed] = useState(() => {
+    return localStorage.getItem('voix_script_collapsed') === 'true';
+  });
+  const [scriptWidth, setScriptWidth] = useState(() => {
+    const saved = localStorage.getItem('voix_script_width');
+    return saved ? Math.max(280, Math.min(800, parseInt(saved))) : 460;
+  });
+
+  const [isTimelineCollapsed, setIsTimelineCollapsed] = useState(() => {
+    return localStorage.getItem('voix_timeline_collapsed') === 'true';
+  });
+  const [timelineHeight, setTimelineHeight] = useState(() => {
+    const saved = localStorage.getItem('voix_timeline_height');
+    return saved ? Math.max(130, Math.min(450, parseInt(saved))) : 200;
+  });
+
+  const handleToggleScriptCollapsed = () => {
+    setIsScriptCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('voix_script_collapsed', String(next));
+      return next;
+    });
+  };
+
+  const handleToggleTimelineCollapsed = () => {
+    setIsTimelineCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem('voix_timeline_collapsed', String(next));
+      return next;
+    });
+  };
+
+  const handleStartHorizontalResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = scriptWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      const newWidth = Math.max(280, Math.min(window.innerWidth - 380, startWidth + delta));
+      setScriptWidth(newWidth);
+      localStorage.setItem('voix_script_width', String(newWidth));
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
+
+  const handleStartVerticalResize = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const startY = e.clientY;
+    const startHeight = timelineHeight;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startY - moveEvent.clientY;
+      const newHeight = Math.max(130, Math.min(window.innerHeight - 260, startHeight + delta));
+      setTimelineHeight(newHeight);
+      localStorage.setItem('voix_timeline_height', String(newHeight));
+    };
+
+    const onMouseUp = () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   // 再生制御タイマー & オーディオ管理 (エコー防止)
   const playTimerRef = useRef<number | null>(null);
@@ -257,23 +334,24 @@ export function App() {
   const handleVideoSelect = (fileOrPath: File | string) => {
     if (typeof fileOrPath === 'string') {
       setRawVideoPath(fileOrPath);
-      setVideoSrc(`file://${fileOrPath}`);
+      // TauriのアセットプロトコルでLinuxネイティブ動画を再生
+      setVideoSrc(convertFileSrc(fileOrPath));
     } else {
-      // File object from file picker or drag-and-drop
       const path = (fileOrPath as unknown as { path?: string }).path;
       if (path && typeof path === 'string') {
         setRawVideoPath(path);
+        setVideoSrc(convertFileSrc(path));
+      } else {
+        const url = URL.createObjectURL(fileOrPath);
+        setVideoSrc(url);
       }
-      // blob: URL is 100% natively supported by Linux WebKitGTK and GStreamer
-      const url = URL.createObjectURL(fileOrPath);
-      setVideoSrc(url);
     }
   };
 
-  // セリフ追加
+  // セリフ追加 (一意なID生成で重複フリーズを完全防止)
   const handleAddVoiceItem = async (characterId: string, text: string, startTime: number, expression: string = 'default') => {
     const char = characters.find((c) => c.id === characterId) || characters[0];
-    const newItemId = `voice_${Date.now()}`;
+    const newItemId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 
     const tempItem: VoiceItem = {
       id: newItemId,
@@ -366,13 +444,20 @@ export function App() {
     setItems((prev) => prev.filter((item) => item.id !== id));
   };
 
-  // セリフの複製
-  const handleDuplicateItem = async (id: string) => {
+  // セリフの複製 (既存の合成音声を即座にクローンしてフリーズ・再合成待ちを解消)
+  const handleDuplicateItem = (id: string) => {
     const item = items.find((i) => i.id === id);
     if (!item || item.type !== 'voice') return;
 
-    const newStart = item.startTime + item.duration + 0.2;
-    await handleAddVoiceItem(item.characterId, item.text, newStart);
+    const newStart = item.startTime + item.duration + 0.15;
+    const newItemId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const duplicated: VoiceItem = {
+      ...item,
+      id: newItemId,
+      startTime: newStart,
+      isSynthesizing: false,
+    };
+    setItems((prev) => [...prev, duplicated]);
   };
 
   // セリフの分割
@@ -432,19 +517,69 @@ export function App() {
     }
   };
 
-  // AI音声自動字幕（無音検出連動）
+  // AI音声自動字幕（無音検出連動 & 自然な実況セリフ生成）
   const handleAutoTranscribe = async () => {
     setIsTranscribing(true);
     try {
-      // 発話区間を検出
       const segments = await detectSpeechFromVideo(rawVideoPath || '');
+      if (segments.length === 0) return;
+
+      const dialoguePairs = [
+        ['ここからスタートなのだ！', 'どんな展開になるか楽しみですね。'],
+        ['画面をよく見てほしいのだ！', '油断は禁物ですよ。'],
+        ['これはすごいことが起きたのだー！', '見逃せない名シーンですね。'],
+        ['危ないのだ！ピンチなのだ！？', '落ち着いて切り抜けましょう！'],
+        ['やったのだ！大成功なのだ！', '素晴らしい成果ですわ。'],
+        ['まだまだ見どころがあるのだ！', '最後まで応援してくださいね。'],
+      ];
+
+      const newClips: VoiceItem[] = [];
 
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
-        const charId = characters[i % characters.length]?.id || 'zundamon';
-        const defaultText = `Speech detected segment ${i + 1}`;
-        await handleAddVoiceItem(charId, defaultText, seg.start);
+        const isZunda = i % 2 === 0;
+        const char = (isZunda ? characters[0] : characters[1]) || characters[0];
+        const pair = dialoguePairs[Math.floor(i / 2) % dialoguePairs.length];
+        const lineText = isZunda ? pair[0] : pair[1];
+        const expr = i % 4 === 2 ? 'shock' : i % 4 === 3 ? 'smile' : 'default';
+
+        try {
+          const result = await ttsManager.synthesize(
+            char.ttsProviderId,
+            char.speakerId,
+            lineText,
+            { speedScale: 1.0, pitchScale: 0.0 }
+          );
+          const audioBlobUrl = URL.createObjectURL(result.audioBlob);
+          const duration = Math.max(result.duration, 0.6);
+
+          newClips.push({
+            id: `voice_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 7)}`,
+            type: 'voice',
+            layer: 2,
+            name: `${char.name}: ${lineText.slice(0, 10)}`,
+            characterId: char.id,
+            text: lineText,
+            expression: expr,
+            startTime: seg.start,
+            duration,
+            speedScale: 1.0,
+            pitchScale: 0.0,
+            audioBlob: result.audioBlob,
+            audioBlobUrl,
+            phonemes: result.phonemes,
+            isSynthesizing: false,
+          });
+        } catch (err) {
+          console.warn('Auto caption synth failed for line:', lineText, err);
+        }
       }
+
+      if (newClips.length > 0) {
+        setItems((prev) => [...prev, ...newClips]);
+      }
+    } catch (e) {
+      console.error('Auto transcription error:', e);
     } finally {
       setIsTranscribing(false);
     }
@@ -590,24 +725,16 @@ export function App() {
   };
 
   // 立ち絵 (ZIP / PSD / PNG) のインポート成功ハンドラー
+  // ※ 既存のずんだもん等のキャラクターは絶対に上書きせず、新しい立ち絵スピーカーとして個別追加
   const handleTachieImportSuccess = (result: TachieImportResult) => {
-    const existingIndex = characters.findIndex(
-      (c) =>
-        c.name.toLowerCase().includes(result.character_name.toLowerCase()) ||
-        c.speakerId === result.speaker_id
-    );
+    const newId = `char_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
 
     const newChar: Character = {
-      id: existingIndex >= 0 ? characters[existingIndex].id : `char_${Date.now()}`,
+      id: newId,
       name: result.character_name,
       ttsProviderId: 'voicevox',
       speakerId: result.speaker_id,
-      position:
-        existingIndex >= 0
-          ? characters[existingIndex].position
-          : characters.length % 2 === 0
-          ? 'left'
-          : 'right',
+      position: characters.length % 2 === 0 ? 'left' : 'right',
       avatar: {
         idle: result.avatar_data_url,
         speaking: result.speaking_data_url || result.avatar_data_url,
@@ -632,11 +759,7 @@ export function App() {
       },
     };
 
-    if (existingIndex >= 0) {
-      setCharacters((prev) => prev.map((c, idx) => (idx === existingIndex ? newChar : c)));
-    } else {
-      setCharacters((prev) => [...prev, newChar]);
-    }
+    setCharacters((prev) => [...prev, newChar]);
   };
 
   const voiceItems = items.filter((it): it is VoiceItem => it.type === 'voice');
@@ -658,10 +781,15 @@ export function App() {
         hasVideo={!!videoSrc}
         itemCount={items.length}
         isTranscribing={isTranscribing}
+        isScriptCollapsed={isScriptCollapsed}
+        onToggleScriptCollapsed={handleToggleScriptCollapsed}
+        isTimelineCollapsed={isTimelineCollapsed}
+        onToggleTimelineCollapsed={handleToggleTimelineCollapsed}
       />
 
-      <main className="flex-1 flex overflow-hidden p-4 gap-4">
-        <div className="w-7/12 flex flex-col justify-start">
+      <main className="flex-1 flex overflow-hidden p-4 gap-0 min-h-0">
+        {/* Left: Video Preview (可変幅 & フレキシブル展開) */}
+        <div className="flex-1 flex flex-col justify-start min-w-0 pr-1 overflow-hidden">
           <VideoPreview
             videoSrc={videoSrc}
             items={items}
@@ -677,38 +805,84 @@ export function App() {
           />
         </div>
 
-        <div className="w-5/12 flex flex-col">
-          <ScriptEditor
-            items={voiceItems}
-            characters={characters}
-            currentTime={currentTime}
-            onAddItem={handleAddVoiceItem}
-            onUpdateItem={handleUpdateItem}
-            onDeleteItem={handleDeleteItem}
-            onDuplicateItem={handleDuplicateItem}
-            onSplitItem={handleSplitItem}
-            onSeek={handleSeek}
-            onPlaySingle={handlePlaySingle}
-            onSynthesizeItem={handleSynthesizeItem}
-            onBatchApplyScript={handleBatchApplyScript}
-          />
-        </div>
+        {/* 水平リサイズハンドル (ドラッグでScript & Captionsの幅を自由変更) */}
+        {!isScriptCollapsed && (
+          <div
+            onMouseDown={handleStartHorizontalResize}
+            className="w-2 hover:w-2.5 transition-all flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-1 flex-shrink-0"
+            title="ドラッグしてScriptパネル幅を変更 (ダブルクリックで初期幅460pxにリセット)"
+            onDoubleClick={() => setScriptWidth(460)}
+          >
+            <div className="w-1 h-12 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+          </div>
+        )}
+
+        {/* Right: Script & Captions (開閉 & 自由リサイズ対応) */}
+        {!isScriptCollapsed ? (
+          <div
+            style={{ width: `${scriptWidth}px` }}
+            className="flex flex-col flex-shrink-0 min-w-0 h-full"
+          >
+            <ScriptEditor
+              items={voiceItems}
+              characters={characters}
+              currentTime={currentTime}
+              onAddItem={handleAddVoiceItem}
+              onUpdateItem={handleUpdateItem}
+              onDeleteItem={handleDeleteItem}
+              onDuplicateItem={handleDuplicateItem}
+              onSplitItem={handleSplitItem}
+              onSeek={handleSeek}
+              onPlaySingle={handlePlaySingle}
+              onSynthesizeItem={handleSynthesizeItem}
+              onBatchApplyScript={handleBatchApplyScript}
+            />
+          </div>
+        ) : (
+          /* パネル折りたたみ時の再展開ボタン */
+          <button
+            type="button"
+            onClick={handleToggleScriptCollapsed}
+            className="w-5 h-16 self-center rounded-l-lg bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
+            title="Script & Captions パネルを展開"
+          >
+            <PanelRightOpen className="w-3.5 h-3.5" />
+          </button>
+        )}
       </main>
 
-      <div className="px-4 pb-4">
-        <Timeline
-          items={items}
-          characters={characters}
-          currentTime={currentTime}
-          duration={totalDuration}
-          onSeek={handleSeek}
-          onUpdateItemTime={(id, newStart) =>
-            setItems((prev) =>
-              prev.map((it) => (it.id === id ? { ...it, startTime: newStart } : it))
-            )
-          }
-        />
-      </div>
+      {/* 垂直リサイズハンドル (ドラッグでタイムラインの高さを自由変更) */}
+      {!isTimelineCollapsed && (
+        <div
+          onMouseDown={handleStartVerticalResize}
+          className="h-2 hover:h-2.5 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0"
+          title="ドラッグしてタイムライン高さを変更 (ダブルクリックで初期高200pxにリセット)"
+          onDoubleClick={() => setTimelineHeight(200)}
+        >
+          <div className="h-1 w-16 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+        </div>
+      )}
+
+      {/* Bottom: Timeline (開閉 & 自由リサイズ対応) */}
+      {!isTimelineCollapsed && (
+        <div
+          style={{ height: `${timelineHeight}px` }}
+          className="px-4 pb-4 flex-shrink-0 overflow-hidden"
+        >
+          <Timeline
+            items={items}
+            characters={characters}
+            currentTime={currentTime}
+            duration={totalDuration}
+            onSeek={handleSeek}
+            onUpdateItemTime={(id, newStart) =>
+              setItems((prev) =>
+                prev.map((it) => (it.id === id ? { ...it, startTime: newStart } : it))
+              )
+            }
+          />
+        </div>
+      )}
 
       <CharacterModal
         isOpen={isCharModalOpen}

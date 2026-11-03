@@ -43,6 +43,53 @@ def detect_character_info(filepath: str, inner_names: list[str]):
     clean_name = clean_name.strip() or "Custom Character"
     return {"name": clean_name, "speaker_id": 3, "theme_color": "#8ab4f8"}
 
+def remove_white_background(im):
+    """白ベタ塗り背景（JPGや非透過PNG）を自動検出し、外周からフラッドフィルで透過処理"""
+    try:
+        import numpy as np
+        import cv2
+        from PIL import Image
+
+        rgba = np.array(im.convert("RGBA"))
+        h, w = rgba.shape[:2]
+
+        corners = [rgba[0, 0], rgba[0, w - 1], rgba[h - 1, 0], rgba[h - 1, w - 1]]
+        # 既に角が透過されているなら何もしない
+        if any(c[3] < 50 for c in corners):
+            return im
+
+        # 角が白色系（R, G, B > 220）かチェック
+        is_white_corner = any(c[0] > 220 and c[1] > 220 and c[2] > 220 for c in corners)
+        if not is_white_corner:
+            return im
+
+        mask = np.zeros((h + 2, w + 2), np.uint8)
+        bgr = cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
+
+        diff = (22, 22, 22)
+        seeds = [
+            (0, 0), (w - 1, 0), (0, h - 1), (w - 1, h - 1),
+            (w // 2, 0), (0, h // 2), (w - 1, h // 2), (w // 2, h - 1)
+        ]
+        for sx, sy in seeds:
+            b, g, r = bgr[sy, sx]
+            if r > 210 and g > 210 and b > 210:
+                cv2.floodFill(
+                    bgr, mask, (sx, sy), (0, 0, 0),
+                    loDiff=diff, upDiff=diff,
+                    flags=cv2.FLOODFILL_MASK_ONLY | (255 << 8)
+                )
+
+        filled = (mask[1:h + 1, 1:w + 1] == 255)
+        alpha = rgba[:, :, 3]
+        alpha[filled] = 0
+        rgba[:, :, 3] = alpha
+
+        return Image.fromarray(rgba)
+    except Exception as e:
+        sys.stderr.write(f"remove_white_background notice: {e}\n")
+        return im
+
 def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
     from PIL import Image
 
@@ -141,6 +188,9 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
 
     if im.mode != "RGBA":
         im = im.convert("RGBA")
+
+    # 白ベタ塗り背景の自動透過処理
+    im = remove_white_background(im)
 
     unscaled_height = im.height
     max_height = 1600
