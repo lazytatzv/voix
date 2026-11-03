@@ -15,6 +15,8 @@ import { exportProjectToJson, importProjectFromJson } from './utils/projectStora
 import { detectSpeechFromVideo } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
 import { ScriptLinePrompt } from './services/aiService';
+import { loadCharactersFromConfig, saveCharactersToConfig } from './services/configService';
+import { matchCharacter, ParsedScriptLine } from './utils/scriptParser';
 
 const STORAGE_KEY = 'voix_project_autosave';
 
@@ -105,6 +107,44 @@ export function App() {
     videoDuration,
     items.reduce((max, item) => Math.max(max, item.startTime + item.duration + 1), 10)
   );
+
+  // Linux XDG dotfile (~/.config/voix/characters.json) からの立ち絵・キャラクター初期ロード
+  useEffect(() => {
+    loadCharactersFromConfig().then((cfgChars) => {
+      if (cfgChars && cfgChars.length > 0) {
+        setCharacters((prev) => {
+          const map = new Map(prev.map((c) => [c.id, c]));
+          cfgChars.forEach((c) => {
+            const existing = map.get(c.id);
+            if (existing) {
+              map.set(c.id, {
+                ...existing,
+                ...c,
+                avatar: {
+                  ...existing.avatar,
+                  ...c.avatar,
+                  speaking: c.avatar.speaking || existing.avatar.speaking,
+                  expressions: c.avatar.expressions || existing.avatar.expressions,
+                },
+                subtitleStyle: {
+                  ...existing.subtitleStyle,
+                  ...c.subtitleStyle,
+                },
+              });
+            } else {
+              map.set(c.id, c);
+            }
+          });
+          return Array.from(map.values());
+        });
+      }
+    });
+  }, []);
+
+  // キャラクター変更時に ~/.config/voix/characters.json に自動保存
+  useEffect(() => {
+    saveCharactersToConfig(characters);
+  }, [characters]);
 
   // 自動保存
   useEffect(() => {
@@ -467,6 +507,88 @@ export function App() {
     }
   };
 
+  // RAWスクリプトからのバッチ適用 & 高速音声合成
+  const handleBatchApplyScript = async (lines: ParsedScriptLine[]): Promise<void> => {
+    if (lines.length === 0) return;
+
+    let currentStart = 0;
+    const newItems: TimelineItem[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const char = matchCharacter(line.speaker, characters);
+      const startTime = line.startTime !== undefined ? line.startTime : currentStart;
+
+      // 既存アイテムに同一話者・同一テキスト・合成済み音声があれば即座にキャッシュ再利用
+      const existing = items.find(
+        (it) => it.type === 'voice' && it.characterId === char.id && it.text === line.text && it.audioBlob
+      ) as VoiceItem | undefined;
+
+      if (existing) {
+        newItems.push({
+          ...existing,
+          id: `voice_${Date.now()}_${i}`,
+          startTime,
+          expression: line.expression || existing.expression || 'default',
+        });
+        currentStart = startTime + existing.duration + 0.15;
+      } else {
+        // 新規テキストをVOICEVOXで合成
+        try {
+          const result = await ttsManager.synthesize(
+            char.ttsProviderId,
+            char.speakerId,
+            line.text,
+            { speedScale: 1.0, pitchScale: 0.0 }
+          );
+          const audioBlobUrl = URL.createObjectURL(result.audioBlob);
+          const duration = Math.max(result.duration, 0.6);
+
+          newItems.push({
+            id: `voice_${Date.now()}_${i}`,
+            type: 'voice',
+            layer: 2,
+            name: `${char.name}: ${line.text.slice(0, 10)}`,
+            characterId: char.id,
+            text: line.text,
+            expression: line.expression || 'default',
+            startTime,
+            duration,
+            speedScale: 1.0,
+            pitchScale: 0.0,
+            audioBlob: result.audioBlob,
+            audioBlobUrl,
+            phonemes: result.phonemes,
+            isSynthesizing: false,
+          });
+
+          currentStart = startTime + duration + 0.15;
+        } catch (err) {
+          console.warn('Batch synthesis error for line:', line.text, err);
+          newItems.push({
+            id: `voice_${Date.now()}_${i}`,
+            type: 'voice',
+            layer: 2,
+            name: `${char.name}: ${line.text.slice(0, 10)}`,
+            characterId: char.id,
+            text: line.text,
+            expression: line.expression || 'default',
+            startTime,
+            duration: 1.5,
+            speedScale: 1.0,
+            pitchScale: 0.0,
+            isSynthesizing: false,
+          });
+          currentStart = startTime + 1.5 + 0.15;
+        }
+      }
+    }
+
+    if (newItems.length > 0) {
+      setItems(newItems);
+    }
+  };
+
   // 立ち絵 (ZIP / PSD / PNG) のインポート成功ハンドラー
   const handleTachieImportSuccess = (result: TachieImportResult) => {
     const existingIndex = characters.findIndex(
@@ -568,6 +690,7 @@ export function App() {
             onSeek={handleSeek}
             onPlaySingle={handlePlaySingle}
             onSynthesizeItem={handleSynthesizeItem}
+            onBatchApplyScript={handleBatchApplyScript}
           />
         </div>
       </main>
@@ -603,6 +726,8 @@ export function App() {
         characters={characters}
         onGenerateVideo={handleGenerateFullAiVideo}
         isGenerating={isGeneratingAiVideo}
+        rawVideoPath={rawVideoPath}
+        hasVideo={!!videoSrc}
       />
 
       <TachieImportModal

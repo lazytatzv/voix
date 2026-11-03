@@ -198,11 +198,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const height = canvas.height;
 
     // 1. 背景描画 (動画アスペクト比を完全維持して歪みを防止)
-    if (
+    const canDrawVideo =
       videoRef.current &&
       videoSrc &&
-      (videoRef.current.readyState >= 1 || videoRef.current.currentTime > 0)
-    ) {
+      (videoRef.current.videoWidth > 0 ||
+        videoRef.current.readyState >= 1 ||
+        videoRef.current.currentTime > 0);
+
+    if (canDrawVideo && videoRef.current) {
       const vWidth = videoRef.current.videoWidth || 1920;
       const vHeight = videoRef.current.videoHeight || 1080;
       const vAspect = vWidth / vHeight;
@@ -226,23 +229,21 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       try {
         ctx.drawImage(videoRef.current, drawX, drawY, drawWidth, drawHeight);
       } catch {
-        // Safe catch
+        // 一時停止・シーク中のフレーム再描画エラーを安全に無視
       }
-    } else {
+    } else if (!videoSrc) {
       ctx.fillStyle = '#101113';
       ctx.fillRect(0, 0, width, height);
 
-      if (!videoSrc) {
-        ctx.fillStyle = '#5f6368';
-        ctx.font = '500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText('Drop video file here or select from toolbar', width / 2, height / 2 - 12);
+      ctx.fillStyle = '#5f6368';
+      ctx.font = '500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Drop video file here or select from toolbar', width / 2, height / 2 - 12);
 
-        ctx.fillStyle = '#3c4043';
-        ctx.font = '400 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-        ctx.fillText('Supports MP4, MKV, WebM, MOV', width / 2, height / 2 + 18);
-      }
+      ctx.fillStyle = '#3c4043';
+      ctx.font = '400 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+      ctx.fillText('Supports MP4, MKV, WebM, MOV', width / 2, height / 2 + 18);
     }
 
     // 2. 立ち絵キャラクター描画 (表情差分・100%不透明・口パク)

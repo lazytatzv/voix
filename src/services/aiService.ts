@@ -1,5 +1,5 @@
 // Voix AI Studio Engine
-// 動画制作者のためのAIアシスタントサービス (脚本自動生成, キャラ口調変換, 翻訳, 要約)
+// 動画制作者のためのAIアシスタントサービス (脚本自動生成, 動画解析, リモートAIサーバー連携, キャラ口調変換)
 
 export type AiAction = 'translate_en' | 'translate_ja' | 'zundamon' | 'metan' | 'reaction' | 'shorten';
 
@@ -7,6 +7,9 @@ export interface AiRequest {
   action: AiAction;
   text: string;
   apiKey?: string;
+  provider?: 'gemini' | 'remote_ollama' | 'remote_openai' | 'local_persona';
+  remoteEndpoint?: string;
+  remoteModel?: string;
 }
 
 export interface ScriptLinePrompt {
@@ -16,12 +19,18 @@ export interface ScriptLinePrompt {
   expression?: 'default' | 'smile' | 'shock' | 'trouble' | 'angry';
 }
 
+export type AiProviderType = 'gemini' | 'remote_ollama' | 'remote_openai' | 'local_persona';
+
 export interface GenerateFullScriptRequest {
   topic: string;
   characters: { id: string; name: string }[];
   style?: 'gaming' | 'tech_review' | 'comedy_banter' | 'shorts_hook' | 'general';
   lineCount?: number;
+  provider?: AiProviderType;
   apiKey?: string;
+  remoteEndpoint?: string; // e.g. http://192.168.1.100:11434
+  remoteModel?: string;    // e.g. qwen2.5:latest, llama3
+  videoKeyframes?: string[]; // base64 JPEG keyframes for multimodal video understanding!
 }
 
 /**
@@ -49,7 +58,6 @@ export function formatSpeechWithPersona(characterName: string, text: string): st
   // 2. 四国めたん (お嬢様口調: 〜ですわ、〜ますわ、〜かしら、わたくし)
   if (name.includes('めたん') || name.includes('metan')) {
     let res = text.replace(/ボク|オレ|私/g, 'わたくし');
-    // ずんだもん口調の完全排除
     res = res.replace(/なのだ|のだ/g, 'ですわ');
     res = res.replace(/るのだ/g, 'ますわ');
     res = res.replace(/たのだ/g, 'ましたわ');
@@ -147,116 +155,209 @@ async function callGeminiApi(action: AiAction, text: string, apiKey: string): Pr
   let prompt = '';
   switch (action) {
     case 'translate_en':
-      prompt = `Translate the following sentence into natural conversational English for YouTube gaming: "${text}". Only return the translation.`;
+      prompt = `Translate into natural conversational English for YouTube: "${text}". Only return translation.`;
       break;
     case 'translate_ja':
-      prompt = `Translate the following English sentence into friendly Japanese YouTube captions: "${text}". Only return the translation.`;
+      prompt = `Translate into Japanese YouTube caption: "${text}". Only return translation.`;
       break;
     case 'zundamon':
-      prompt = `Rewrite into Zundamon persona (ends with 〜なのだ or 〜のだ, energetic, cute): "${text}". Only return the line.`;
+      prompt = `Rewrite into Zundamon persona (ends with 〜なのだ or 〜のだ, energetic, cute): "${text}".`;
       break;
     case 'metan':
-      prompt = `Rewrite into Shikoku Metan persona (ends with 〜ですわ, 〜かしら, high-class ojou-sama tsukkomi): "${text}". Only return the line.`;
+      prompt = `Rewrite into Shikoku Metan persona (ends with 〜ですわ, high-class ojou-sama tsukkomi): "${text}".`;
       break;
     case 'reaction':
-      prompt = `Generate a short YouTube video reaction based on: "${text}". Only return the line.`;
+      prompt = `Generate a short YouTube video reaction based on: "${text}".`;
       break;
     case 'shorten':
-      prompt = `Shorten for YouTube shorts video subtitles: "${text}". Only return the line.`;
+      prompt = `Shorten for video subtitles: "${text}".`;
       break;
   }
 
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-    }),
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
   });
 
-  if (!res.ok) {
-    throw new Error(`Gemini API HTTP ${res.status}`);
-  }
-
+  if (!res.ok) throw new Error(`Gemini API HTTP ${res.status}`);
   const data = await res.json();
   const output = data.candidates?.[0]?.content?.parts?.[0]?.text;
   return output ? output.trim().replace(/^["']|["']$/g, '') : text;
 }
 
 /**
- * トピックから動画全体の掛け合い台本を一括自動生成する
+ * トピックまたは動画キーフレームから動画全体の掛け合い台本を一括自動生成する
  */
 export async function generateFullScript(req: GenerateFullScriptRequest): Promise<ScriptLinePrompt[]> {
-  const { topic, characters, style = 'gaming', lineCount = 6, apiKey } = req;
-  if (!characters.length) return [];
+  const {
+    topic,
+    characters,
+    style = 'gaming',
+    lineCount = 6,
+    provider = 'gemini',
+    apiKey,
+    remoteEndpoint,
+    remoteModel,
+    videoKeyframes = [],
+  } = req;
 
+  if (!characters.length) return [];
   const char1 = characters[0];
   const char2 = characters.length > 1 ? characters[1] : characters[0];
 
-  // 1. Google Gemini 2.0 Flash による本格生成 (APIキー設定時)
-  if (apiKey?.trim()) {
-    try {
-      const charProfiles = characters.map((c) => {
-        if (c.name.includes('ずんだ')) return `- ${c.name}: 一人称「ボク」、語尾は「〜なのだ」「〜のだ」。元気でマスコット的。`;
-        if (c.name.includes('めたん')) return `- ${c.name}: 一人称「わたくし」、語尾は「〜ですわ」「〜かしら」「〜わね」。良家のお嬢様でツッコミ役。`;
-        if (c.name.includes('つむぎ')) return `- ${c.name}: 一人称「あーし」、語尾は「〜っす」「〜じゃん」。埼玉ギャル。`;
-        return `- ${c.name}: 自然な話し言葉。`;
-      }).join('\n');
+  const charProfiles = characters.map((c) => {
+    if (c.name.includes('ずんだ')) return `- ${c.name}: 一人称「ボク」、語尾は「〜なのだ」「〜のだ」。元気でマスコット的。`;
+    if (c.name.includes('めたん')) return `- ${c.name}: 一人称「わたくし」、語尾は「〜ですわ」「〜かしら」「〜わね」。良家のお嬢様でツッコミ役。`;
+    if (c.name.includes('つむぎ')) return `- ${c.name}: 一人称「あーし」、語尾は「〜っす」「〜じゃん」。埼玉ギャル。`;
+    return `- ${c.name}: 自然な話し言葉。`;
+  }).join('\n');
 
-      const systemPrompt = `あなたはYouTube・ニコニコ動画の動画編集アプリ「Voix」の専属プロ脚本家AIです。
-以下のトピックに基づいて、キャラクター同士のテンポが良い魅力的な掛け合い台本を${lineCount}行作成してください。
+  const hasVideoVision = videoKeyframes.length > 0;
 
-【テーマ】: ${topic}
-【スタイル】: ${style} (gaming=ゲーム実況, tech_review=技術・ツール解説, comedy_banter=掛け合い漫才, shorts_hook=ショート動画)
-【登場キャラクター設定】:
+  const baseInstructions = hasVideoVision
+    ? `添付された画像はユーザーが編集中の動画から時系列順に抽出したスクリーンショット（キーフレーム）です。
+動画で実際に何が起きているか（ゲームの進行、敵の出現、ハプニング、場面展開など）を視覚的に細かく読み取り、
+動画の展開と100%シンクロした臨場感のある実況・解説掛け合い台本を${lineCount}行作成してください！
+トピックの補足情報: ${topic || 'ゲーム実況'}`
+    : `以下のトピックに基づいて、キャラクター同士のテンポが良い魅力的な掛け合い台本を${lineCount}行作成してください。
+トピック: ${topic}`;
+
+  const systemPrompt = `あなたはYouTube・ニコニコ動画の動画編集アプリ「Voix」の動画監督AIです。
+
+${baseInstructions}
+動画スタイル: ${style}
+登場キャラクター設定:
 ${charProfiles}
 
 【出力形式】
-必ず以下のJSON形式のみを出力してください（Markdownコードブロックも可）:
+必ず以下のJSON形式のみを出力してください（Markdownコードブロック可）:
 [
   { "speaker": "${char1.name}", "text": "セリフ", "expression": "smile" },
   { "speaker": "${char2.name}", "text": "セリフ", "expression": "shock" }
 ]
 ※ expression は "default", "smile", "shock", "trouble", "angry" のいずれか`;
 
+  // 1. Google Gemini 2.0 Flash (マルチモーダル動画認識対応)
+  if ((provider === 'gemini' || !remoteEndpoint) && apiKey?.trim()) {
+    try {
+      const parts: any[] = [{ text: systemPrompt }];
+
+      // キーフレーム画像をGeminiに渡して動画を視覚理解させる
+      if (hasVideoVision) {
+        videoKeyframes.forEach((kf) => {
+          const cleanB64 = kf.replace(/^data:image\/\w+;base64,/, '');
+          parts.push({
+            inlineData: {
+              mimeType: 'image/jpeg',
+              data: cleanB64,
+            },
+          });
+        });
+      }
+
       const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: systemPrompt }] }] }),
+        body: JSON.stringify({ contents: [{ parts }] }),
       });
 
       if (res.ok) {
         const data = await res.json();
         const rawJsonText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const jsonMatch = rawJsonText.match(/\[[\s\S]*\]/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]) as { speaker: string; text: string; expression?: string }[];
-          return parsed.map((item) => {
-            const matchedChar = characters.find((c) => c.name.includes(item.speaker) || item.speaker.includes(c.name)) || char1;
-            // キャラクター口調の安全補正
-            const formattedText = formatSpeechWithPersona(matchedChar.name, item.text);
-            const expr = (item.expression as any) || inferExpressionFromText(formattedText);
-            return {
-              characterId: matchedChar.id,
-              characterName: matchedChar.name,
-              text: formattedText,
-              expression: expr,
-            };
-          });
-        }
+        const parsed = parseScriptJson(rawJsonText, characters, char1);
+        if (parsed.length > 0) return parsed;
       }
     } catch (e) {
-      console.warn('Gemini generation failed, falling back to local persona engine:', e);
+      console.warn('Gemini multimodal call failed, falling back:', e);
     }
   }
 
-  // 2. オフライン時: キャラクター設定に忠実なスマート動的生成
+  // 2. リモートPC / 自宅サーバーの Ollama 連携 (手元の重さ・充電消費をゼロに)
+  if (provider === 'remote_ollama' && remoteEndpoint?.trim()) {
+    try {
+      const endpoint = remoteEndpoint.replace(/\/+$/, '') + '/api/generate';
+      const model = remoteModel?.trim() || 'qwen2.5:latest';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt: systemPrompt,
+          stream: false,
+          format: 'json',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const parsed = parseScriptJson(data.response || '', characters, char1);
+        if (parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Remote Ollama call failed:', e);
+    }
+  }
+
+  // 3. リモートPC / OpenAI互換エンドポイント (vLLM, LocalAI, LMStudio等)
+  if (provider === 'remote_openai' && remoteEndpoint?.trim()) {
+    try {
+      const endpoint = remoteEndpoint.replace(/\/+$/, '') + '/chat/completions';
+      const model = remoteModel?.trim() || 'default';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(apiKey?.trim() ? { Authorization: `Bearer ${apiKey.trim()}` } : {}),
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: systemPrompt }],
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const content = data.choices?.[0]?.message?.content || '';
+        const parsed = parseScriptJson(content, characters, char1);
+        if (parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      console.warn('Remote OpenAI-compatible call failed:', e);
+    }
+  }
+
+  // 4. オフライン・スマート動的生成 (ゼロ遅延で確実に生成)
   return generateDynamicScript(topic, characters, style, lineCount);
 }
 
-/**
- * オフラインでもキャラクターの個性に100%合致した動的シナリオ生成
- */
+function parseScriptJson(
+  rawText: string,
+  characters: { id: string; name: string }[],
+  defaultChar: { id: string; name: string }
+): ScriptLinePrompt[] {
+  const jsonMatch = rawText.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) return [];
+
+  try {
+    const list = JSON.parse(jsonMatch[0]) as { speaker: string; text: string; expression?: string }[];
+    return list.map((item) => {
+      const matchedChar =
+        characters.find((c) => c.name.includes(item.speaker) || item.speaker.includes(c.name)) || defaultChar;
+      const formatted = formatSpeechWithPersona(matchedChar.name, item.text);
+      const expr = (item.expression as any) || inferExpressionFromText(formatted);
+      return {
+        characterId: matchedChar.id,
+        characterName: matchedChar.name,
+        text: formatted,
+        expression: expr,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
 function generateDynamicScript(
   topic: string,
   characters: { id: string; name: string }[],
@@ -267,7 +368,6 @@ function generateDynamicScript(
   const c2 = characters.length > 1 ? characters[1] : characters[0];
   const cleanTopic = topic.trim() || 'マインクラフト';
 
-  // 基本プロット（キャラ中立）
   let templates: { speakerIsFirst: boolean; baseText: string }[] = [];
 
   if (style === 'gaming') {
@@ -312,7 +412,6 @@ function generateDynamicScript(
 
   return selected.map((tpl) => {
     const char = tpl.speakerIsFirst ? c1 : c2;
-    // キャラクターごとの口調に厳密に変換
     const textWithPersona = formatSpeechWithPersona(char.name, tpl.baseText);
     const expr = inferExpressionFromText(textWithPersona);
 

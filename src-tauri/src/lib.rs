@@ -318,6 +318,108 @@ fn base64_decode_simple(data: &str) -> Result<Vec<u8>, String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn extract_video_keyframes(video_path: String, count: Option<u32>) -> Result<Vec<String>, String> {
+    let num_frames = count.unwrap_or(4).clamp(2, 8);
+    let temp_dir = std::env::temp_dir().join("voix_keyframes");
+    let _ = fs::create_dir_all(&temp_dir);
+
+    // 動画の総尺を取得
+    let dur_out = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            &video_path,
+        ])
+        .output()
+        .map_err(|e| format!("ffprobeエラー: {}", e))?;
+
+    let dur_str = String::from_utf8_lossy(&dur_out.stdout);
+    let total_sec: f64 = dur_str.trim().parse().unwrap_or(30.0);
+
+    let mut base64_frames = Vec::new();
+
+    for i in 1..=num_frames {
+        let timestamp = (total_sec / (num_frames as f64 + 1.0)) * (i as f64);
+        let out_img = temp_dir.join(format!("kf_{}.jpg", i));
+
+        let _ = Command::new("ffmpeg")
+            .args([
+                "-y",
+                "-ss",
+                &format!("{:.2}", timestamp),
+                "-i",
+                &video_path,
+                "-vframes",
+                "1",
+                "-vf",
+                "scale=640:-1",
+                "-q:v",
+                "4",
+                out_img.to_str().unwrap(),
+            ])
+            .output();
+
+        if let Ok(bytes) = fs::read(&out_img) {
+            use base64::Engine;
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+            base64_frames.push(format!("data:image/jpeg;base64,{}", b64));
+            let _ = fs::remove_file(&out_img);
+        }
+    }
+
+    Ok(base64_frames)
+}
+
+fn get_voix_config_dir() -> std::path::PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let path = std::path::PathBuf::from(home).join(".config").join("voix");
+    let _ = fs::create_dir_all(&path);
+    path
+}
+
+#[tauri::command]
+fn save_app_settings(settings_json: String) -> Result<(), String> {
+    let dir = get_voix_config_dir();
+    let file = dir.join("settings.json");
+    fs::write(file, settings_json).map_err(|e| format!("設定保存エラー: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_app_settings() -> Result<String, String> {
+    let dir = get_voix_config_dir();
+    let file = dir.join("settings.json");
+    if file.exists() {
+        fs::read_to_string(file).map_err(|e| format!("設定読み込みエラー: {}", e))
+    } else {
+        Ok("{}".to_string())
+    }
+}
+
+#[tauri::command]
+fn save_characters_config(characters_json: String) -> Result<(), String> {
+    let dir = get_voix_config_dir();
+    let file = dir.join("characters.json");
+    fs::write(file, characters_json).map_err(|e| format!("キャラクター保存エラー: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+fn load_characters_config() -> Result<String, String> {
+    let dir = get_voix_config_dir();
+    let file = dir.join("characters.json");
+    if file.exists() {
+        fs::read_to_string(file).map_err(|e| format!("キャラクター読み込みエラー: {}", e))
+    } else {
+        Ok("[]".to_string())
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -327,7 +429,12 @@ pub fn run() {
             check_system_environment,
             detect_speech_segments,
             export_full_video,
-            import_tachie_archive
+            import_tachie_archive,
+            extract_video_keyframes,
+            save_app_settings,
+            load_app_settings,
+            save_characters_config,
+            load_characters_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
