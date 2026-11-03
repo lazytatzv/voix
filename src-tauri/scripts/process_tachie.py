@@ -229,55 +229,107 @@ def process_file_or_data(filepath_or_data: str, filename_hint: str = ""):
 
     if effective_psd_path and os.path.exists(effective_psd_path):
         try:
-            import subprocess
-            out = subprocess.check_output(['identify', '-format', '%[label]\n', effective_psd_path], stderr=subprocess.DEVNULL)
-            lines = out.splitlines()
-            target_idx = None
-            expr_candidates = {
-                'smile': [],
-                'shock': [],
-                'trouble': [],
-                'angry': []
-            }
-            scale_factor = im.height / float(unscaled_height) if 'unscaled_height' in locals() and unscaled_height else 1.0
+            # First attempt: Try high-fidelity psd-tools composite to completely avoid double face features
+            try:
+                from psd_tools import PSDImage
+                psd_obj = PSDImage.open(effective_psd_path)
 
-            for i, line in enumerate(lines):
-                decoded = line.decode('cp932', errors='replace')
-                if target_idx is None and any(k in decoded for k in ['ほあー', 'ほあ', 'あー', 'わあー', '▽', 'open']):
-                    target_idx = i
-                
-                if any(k in decoded for k in ['にっこり', '><', 'ほほえみ', '赤面']):
-                    expr_candidates['smile'].append(i)
-                elif any(k in decoded for k in ['青ざめ', '見開き']):
-                    expr_candidates['shock'].append(i)
-                elif any(k in decoded for k in ['困り', '汗']):
-                    expr_candidates['trouble'].append(i)
-                elif any(k in decoded for k in ['おこ', '怒り']):
-                    expr_candidates['angry'].append(i)
+                def find_groups():
+                    eye_group = None
+                    mouth_group = None
+                    brow_group = None
+                    blush_group = None
+                    for layer in psd_obj:
+                        lname = layer.name
+                        if "目" in lname and layer.is_group(): eye_group = layer
+                        elif "口" in lname and layer.is_group(): mouth_group = layer
+                        elif "眉" in lname and layer.is_group(): brow_group = layer
+                        elif "顔色" in lname and layer.is_group(): blush_group = layer
+                    return eye_group, mouth_group, brow_group, blush_group
 
-            def make_composite(layer_indices, output_filename):
-                comp = im.copy()
-                for idx in layer_indices:
-                    geom = subprocess.check_output(['magick', 'identify', '-format', '%w %h %X %Y', f'{effective_psd_path}[{idx}]'], stderr=subprocess.DEVNULL).decode().strip().split()
-                    if len(geom) == 4:
-                        raw_x = int(geom[2].replace('+', ''))
-                        raw_y = int(geom[3].replace('+', ''))
-                        b = subprocess.check_output(['magick', f'{effective_psd_path}[{idx}]', 'png:-'], stderr=subprocess.DEVNULL)
-                        l_im = Image.open(io.BytesIO(b)).convert('RGBA')
-                        sx = int(raw_x * scale_factor)
-                        sy = int(raw_y * scale_factor)
-                        sl = l_im.resize((max(1, int(l_im.width * scale_factor)), max(1, int(l_im.height * scale_factor))), Image.Resampling.LANCZOS)
-                        comp.paste(sl, (sx, sy), sl)
-                out_path = os.path.join(char_dir, output_filename)
-                comp.save(out_path, format='PNG', optimize=True)
-                return out_path
+                eye_g, mouth_g, brow_g, blush_g = find_groups()
 
-            if target_idx is not None:
-                speaking_data_url = make_composite([target_idx], "speaking.png")
+                if eye_g and mouth_g:
+                    def render_expr(expr_key, eye_kw, mouth_kw, brow_kw, blush_kw):
+                        for c in eye_g:
+                            c.visible = any(k in c.name for k in eye_kw) if eye_kw else False
+                        for c in mouth_g:
+                            c.visible = any(k in c.name for k in mouth_kw) if mouth_kw else False
+                        if brow_g:
+                            for c in brow_g:
+                                c.visible = any(k in c.name for k in brow_kw) if brow_kw else False
+                        if blush_g:
+                            for c in blush_g:
+                                c.visible = any(k in c.name for k in blush_kw) if blush_kw else False
+                        
+                        comp_img = psd_obj.composite()
+                        if comp_img.height > max_height:
+                            scale = max_height / float(comp_img.height)
+                            new_w = max(1, int(comp_img.width * scale))
+                            comp_img = comp_img.resize((new_w, max_height), Image.Resampling.LANCZOS)
+                        p = os.path.join(char_dir, f"{expr_key}.png")
+                        comp_img.save(p, format="PNG", optimize=True)
+                        return p
 
-            for k, indices in expr_candidates.items():
-                if indices:
-                    expressions[k] = make_composite(indices[:3], f"{k}.png")
+                    # Render speaking, smile, angry, shock, trouble
+                    speaking_data_url = render_expr("speaking", ["普通目", "目セット"], ["ほあー", "わあー", "▽", "あー", "open"], ["普通", "ごきげん"], ["普通", "ほっぺ"])
+                    expressions["smile"] = render_expr("smile", ["にっこり", "><", "目閉じ"], ["ほほえみ", "△", "わあー"], ["ごきげん", "普通"], ["赤面", "ほっぺ赤め", "ほっぺ"])
+                    expressions["angry"] = render_expr("angry", ["普通目", "目セット"], ["む", "むー"], ["おこ", "怒り"], [])
+                    expressions["shock"] = render_expr("shock", ["○○", "〇〇", "見開き", "ぐるぐる"], ["お"], ["こまり", "困り"], ["青ざめ"])
+                    expressions["trouble"] = render_expr("trouble", ["ジト目", "普通目", "目セット"], ["んー", "むふ"], ["こまり", "困り"], ["普通", "ほっぺ"])
+            except Exception as e_psd:
+                sys.stderr.write(f"psd_tools composite notice: {e_psd}\n")
+
+            if not expressions:
+                import subprocess
+                out = subprocess.check_output(['identify', '-format', '%[label]\n', effective_psd_path], stderr=subprocess.DEVNULL)
+                lines = out.splitlines()
+                target_idx = None
+                expr_candidates = {
+                    'smile': [],
+                    'shock': [],
+                    'trouble': [],
+                    'angry': []
+                }
+                scale_factor = im.height / float(unscaled_height) if 'unscaled_height' in locals() and unscaled_height else 1.0
+
+                for i, line in enumerate(lines):
+                    decoded = line.decode('cp932', errors='replace')
+                    if target_idx is None and any(k in decoded for k in ['ほあー', 'ほあ', 'あー', 'わあー', '▽', 'open']):
+                        target_idx = i
+                    
+                    if any(k in decoded for k in ['にっこり', '><', 'ほほえみ', '赤面']):
+                        expr_candidates['smile'].append(i)
+                    elif any(k in decoded for k in ['青ざめ', '見開き']):
+                        expr_candidates['shock'].append(i)
+                    elif any(k in decoded for k in ['困り', '汗']):
+                        expr_candidates['trouble'].append(i)
+                    elif any(k in decoded for k in ['おこ', '怒り']):
+                        expr_candidates['angry'].append(i)
+
+                def make_composite(layer_indices, output_filename):
+                    comp = im.copy()
+                    for idx in layer_indices:
+                        geom = subprocess.check_output(['magick', 'identify', '-format', '%w %h %X %Y', f'{effective_psd_path}[{idx}]'], stderr=subprocess.DEVNULL).decode().strip().split()
+                        if len(geom) == 4:
+                            raw_x = int(geom[2].replace('+', ''))
+                            raw_y = int(geom[3].replace('+', ''))
+                            b = subprocess.check_output(['magick', f'{effective_psd_path}[{idx}]', 'png:-'], stderr=subprocess.DEVNULL)
+                            l_im = Image.open(io.BytesIO(b)).convert('RGBA')
+                            sx = int(raw_x * scale_factor)
+                            sy = int(raw_y * scale_factor)
+                            sl = l_im.resize((max(1, int(l_im.width * scale_factor)), max(1, int(l_im.height * scale_factor))), Image.Resampling.LANCZOS)
+                            comp.paste(sl, (sx, sy), sl)
+                    out_path = os.path.join(char_dir, output_filename)
+                    comp.save(out_path, format='PNG', optimize=True)
+                    return out_path
+
+                if target_idx is not None and speaking_data_url == idle_path:
+                    speaking_data_url = make_composite([target_idx], "speaking.png")
+
+                for k, indices in expr_candidates.items():
+                    if indices and k not in expressions:
+                        expressions[k] = make_composite(indices[:3], f"{k}.png")
         except Exception as e:
             sys.stderr.write(f"Expression composite notice: {e}\n")
 

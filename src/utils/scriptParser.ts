@@ -53,6 +53,7 @@ export function extractSpeakerAndExpression(rawSpeaker: string): { speaker: stri
 
 /**
  * タイムラインの音声アイテムをYAMLテキストにシリアライズ
+ * （見やすさのために各ブロックを空行で改行し、追加時間 time を含める）
  */
 export function itemsToRawText(
   items: VoiceItem[],
@@ -63,15 +64,14 @@ export function itemsToRawText(
     return '';
   }
 
-  const data = items.map((item) => {
+  const blocks = items.map((item) => {
     const char = characters.find((c) => c.id === item.characterId) || characters[0];
     const speakerName = char ? char.name : 'Zundamon';
     const entry: Record<string, unknown> = {
       speaker: speakerName,
+      time: Number(item.startTime.toFixed(2)),
+      emotion: item.expression || 'default',
     };
-    if (item.expression && item.expression !== 'default') {
-      entry.emotion = item.expression;
-    }
     if (typeof item.speedScale === 'number' && item.speedScale !== 1.0) {
       entry.speed = Number(item.speedScale.toFixed(2));
     }
@@ -79,10 +79,13 @@ export function itemsToRawText(
       entry.pitch = Number(item.pitchScale.toFixed(2));
     }
     entry.text = item.text;
-    return entry;
+
+    // 単一要素の配列としてstringifyすることで "- speaker: ..." の書式を生成
+    return YAML.stringify([entry], { indent: 2, lineWidth: 0 }).trim();
   });
 
-  return YAML.stringify(data, { indent: 2, lineWidth: 0 });
+  // 各ブロックを空行（改行2つ）で区切って視認性を大幅に向上
+  return blocks.join('\n\n') + '\n';
 }
 
 /**
@@ -126,16 +129,25 @@ function extractLinesFromYaml(data: unknown): ParsedScriptLine[] {
       const { speaker, expression: exprFromSpk } = extractSpeakerAndExpression(rawSpk);
       const emotion = rec.emotion || rec.expression || exprFromSpk;
 
+      // time, startTime, start の各キー（数値またはパース可能な文字列）に対応
+      let parsedStartTime: number | undefined = undefined;
+      if (typeof rec.time === 'number') {
+        parsedStartTime = rec.time;
+      } else if (typeof rec.startTime === 'number') {
+        parsedStartTime = rec.startTime;
+      } else if (typeof rec.start === 'number') {
+        parsedStartTime = rec.start;
+      } else if (typeof rec.time === 'string' && !isNaN(Number(rec.time))) {
+        parsedStartTime = Number(rec.time);
+      } else if (typeof rec.startTime === 'string' && !isNaN(Number(rec.startTime))) {
+        parsedStartTime = Number(rec.startTime);
+      }
+
       result.push({
         speaker: speaker || 'Zundamon',
         expression: normalizeExpressionTag(String(emotion || 'default')),
         text: rawText,
-        startTime:
-          typeof rec.startTime === 'number'
-            ? rec.startTime
-            : typeof rec.start === 'number'
-            ? rec.start
-            : undefined,
+        startTime: parsedStartTime,
         speed: typeof rec.speed === 'number' ? rec.speed : undefined,
         pitch: typeof rec.pitch === 'number' ? rec.pitch : undefined,
       });

@@ -89,6 +89,7 @@ export function App() {
   const [currentTime, setCurrentTime] = useState<number>(0);
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
   const [activeAudioUrl, setActiveAudioUrl] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   // モーダル
   const [isCharModalOpen, setIsCharModalOpen] = useState(false);
@@ -176,11 +177,26 @@ export function App() {
     window.addEventListener('mouseup', onMouseUp);
   };
 
-  // 再生制御タイマー & オーディオ管理 (エコー防止)
+  // 再生制御タイマー & オーディオ管理 (エコー防止・排他再生)
   const playTimerRef = useRef<number | null>(null);
   const lastPlayTimestampRef = useRef<number>(0);
   const playedItemIdsRef = useRef<Set<string>>(new Set());
   const playingAudiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+
+  const itemsRef = useRef<TimelineItem[]>(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
+  const currentTimeRef = useRef<number>(currentTime);
+  useEffect(() => {
+    currentTimeRef.current = currentTime;
+  }, [currentTime]);
+
+  const charactersRef = useRef<Character[]>(characters);
+  useEffect(() => {
+    charactersRef.current = characters;
+  }, [characters]);
 
   const stopAllAudio = () => {
     playingAudiosRef.current.forEach((audio) => {
@@ -219,11 +235,38 @@ export function App() {
             let resolvedName = c.name;
             if (isZunda && (c.name === 'zunda' || c.name === 'ずんだもん')) resolvedName = 'Zundamon';
             if (isMetan && (c.name === 'metan' || c.name === '四国めたん')) resolvedName = 'Shikoku Metan';
-            cleaned.push({
-              ...c,
-              id: isZunda ? 'zundamon' : isMetan ? 'metan' : c.id,
-              name: resolvedName,
-            });
+            const def = defaultCharacters.find((d) => d.id === (isZunda ? 'zundamon' : isMetan ? 'metan' : c.id));
+            if (def) {
+              // デフォルトキャラの場合、壊れたBase64待機画像を排除し公式立ち絵と表情差分を確実に復元
+              const idleIsCorruptedBase64 = c.avatar?.idle?.startsWith('data:') && c.avatar.idle.length > 500;
+              cleaned.push({
+                ...def,
+                ...c,
+                id: def.id,
+                name: resolvedName,
+                avatar: {
+                  ...def.avatar,
+                  ...c.avatar,
+                  idle: idleIsCorruptedBase64 ? def.avatar.idle : (c.avatar?.idle || def.avatar.idle),
+                  speaking: def.avatar.speaking,
+                  blinking: def.avatar.blinking,
+                  expressions: {
+                    ...def.avatar.expressions,
+                    ...c.avatar?.expressions,
+                  },
+                },
+                subtitleStyle: {
+                  ...def.subtitleStyle,
+                  ...c.subtitleStyle,
+                },
+              });
+            } else {
+              cleaned.push({
+                ...c,
+                id: isZunda ? 'zundamon' : isMetan ? 'metan' : c.id,
+                name: resolvedName,
+              });
+            }
           }
         });
         setCharacters(cleaned);
@@ -252,6 +295,56 @@ export function App() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(serialized));
   }, [projectName, characters, items]);
 
+  // アプリ起動時・読み込み時の未合成音声アイテムを自動バックグラウンド合成
+  useEffect(() => {
+    const unSynthesized = items.filter(
+      (it): it is VoiceItem => it.type === 'voice' && !it.audioBlobUrl && !!it.text.trim()
+    );
+    if (unSynthesized.length === 0) return;
+
+    let isCancelled = false;
+    const synthesizeMissing = async () => {
+      for (const item of unSynthesized) {
+        if (isCancelled) break;
+        try {
+          const char = characters.find((c) => c.id === item.characterId) || characters[0];
+          const result = await ttsManager.synthesize(
+            char.ttsProviderId,
+            char.speakerId,
+            item.text,
+            {
+              speedScale: item.speedScale || 1.0,
+              pitchScale: item.pitchScale || 0.0,
+            }
+          );
+          if (isCancelled) break;
+          const audioBlobUrl = URL.createObjectURL(result.audioBlob);
+          setItems((prev) =>
+            prev.map((it) =>
+              it.id === item.id && it.type === 'voice'
+                ? {
+                    ...it,
+                    duration: result.duration,
+                    audioBlob: result.audioBlob,
+                    audioBlobUrl,
+                    phonemes: result.phonemes,
+                    isSynthesizing: false,
+                  }
+                : it
+            )
+          );
+        } catch (e) {
+          console.warn('Initial background voice synthesis failed for:', item.text, e);
+        }
+      }
+    };
+
+    synthesizeMissing();
+    return () => {
+      isCancelled = true;
+    };
+  }, [characters]);
+
   // ショートカットキー (Space で再生/停止, Ctrl+S で保存)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -273,77 +366,146 @@ export function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isPlaying, currentTime, totalDuration]);
 
-  // 再生ループ
+  // 再生ループ（itemsRef経由でステート更新による再生中断を完全防止）
   useEffect(() => {
-    if (isPlaying) {
-      lastPlayTimestampRef.current = performance.now();
-      const updatePlayhead = () => {
-        const now = performance.now();
-        const deltaSec = (now - lastPlayTimestampRef.current) / 1000;
-        lastPlayTimestampRef.current = now;
-
-        setCurrentTime((prev) => {
-          const next = prev + deltaSec;
-          if (next >= totalDuration) {
-            setIsPlaying(false);
-            stopAllAudio();
-            return totalDuration;
-          }
-
-          items.forEach((item) => {
-            if (
-              item.type === 'voice' &&
-              item.audioBlobUrl &&
-              next >= item.startTime &&
-              next <= item.startTime + item.duration &&
-              !playedItemIdsRef.current.has(item.id) &&
-              !playingAudiosRef.current.has(item.id)
-            ) {
-              playedItemIdsRef.current.add(item.id);
-              const audio = new Audio(item.audioBlobUrl);
-              playingAudiosRef.current.set(item.id, audio);
-              audio.onended = () => {
-                playingAudiosRef.current.delete(item.id);
-              };
-              audio.play().catch(() => {});
-            }
-          });
-
-          return next;
-        });
-
-        playTimerRef.current = requestAnimationFrame(updatePlayhead);
-      };
-      playTimerRef.current = requestAnimationFrame(updatePlayhead);
-    } else {
-      if (playTimerRef.current) cancelAnimationFrame(playTimerRef.current);
+    if (!isPlaying) {
+      if (playTimerRef.current) {
+        cancelAnimationFrame(playTimerRef.current);
+        playTimerRef.current = null;
+      }
       stopAllAudio();
+      return;
     }
 
-    return () => {
-      if (playTimerRef.current) cancelAnimationFrame(playTimerRef.current);
+    lastPlayTimestampRef.current = performance.now();
+
+    const updatePlayhead = (now: number) => {
+      const deltaSec = (now - lastPlayTimestampRef.current) / 1000;
+      lastPlayTimestampRef.current = now;
+
+      // 1.0秒以上の休止（タブ切り替え等）のみスキップし、通常フレームは等速1.0xリアルタイムで正確に進行
+      const safeDelta = Math.min(deltaSec, 1.0);
+      const nextTime = currentTimeRef.current + safeDelta;
+
+      if (nextTime >= totalDuration) {
+        currentTimeRef.current = totalDuration;
+        setCurrentTime(totalDuration);
+        setIsPlaying(false);
+        stopAllAudio();
+        return;
+      }
+
+      currentTimeRef.current = nextTime;
+      setCurrentTime(nextTime);
+
+      // セリフの排他再生判定（一人ずつ順番にしゃべる・ダブり完全防止）
+      const currentItems = itemsRef.current;
+      for (const item of currentItems) {
+        if (item.type !== 'voice') continue;
+
+        if (
+          nextTime >= item.startTime &&
+          nextTime < item.startTime + item.duration &&
+          !playedItemIdsRef.current.has(item.id)
+        ) {
+          playedItemIdsRef.current.add(item.id);
+
+          if (item.audioBlobUrl) {
+            // 一人ずつしゃべるため、既存音声を即座に停止
+            stopAllAudio();
+
+            const audio = new Audio(item.audioBlobUrl);
+            playingAudiosRef.current.set(item.id, audio);
+            audio.onended = () => {
+              playingAudiosRef.current.delete(item.id);
+            };
+            audio.play().catch((err) => {
+              console.warn('Playback error:', err);
+            });
+          } else {
+            // 音声が未生成の場合は即座にオンデマンド合成して再生
+            const char =
+              charactersRef.current.find((c) => c.id === item.characterId) ||
+              charactersRef.current[0];
+            ttsManager
+              .synthesize(char.ttsProviderId, char.speakerId, item.text, {
+                speedScale: item.speedScale || 1.0,
+                pitchScale: item.pitchScale || 0.0,
+              })
+              .then((res) => {
+                const url = URL.createObjectURL(res.audioBlob);
+                handleUpdateItem(item.id, {
+                  duration: res.duration,
+                  audioBlob: res.audioBlob,
+                  audioBlobUrl: url,
+                  phonemes: res.phonemes,
+                });
+                if (
+                  currentTimeRef.current >= item.startTime &&
+                  currentTimeRef.current < item.startTime + res.duration
+                ) {
+                  stopAllAudio();
+                  const audio = new Audio(url);
+                  playingAudiosRef.current.set(item.id, audio);
+                  audio.onended = () => {
+                    playingAudiosRef.current.delete(item.id);
+                  };
+                  audio.play().catch(() => {});
+                }
+              })
+              .catch((err) => console.warn('On-demand tts synthesis failed:', err));
+          }
+        }
+      }
+
+      playTimerRef.current = requestAnimationFrame(updatePlayhead);
     };
-  }, [isPlaying, totalDuration, items]);
+
+    playTimerRef.current = requestAnimationFrame(updatePlayhead);
+
+    return () => {
+      if (playTimerRef.current) {
+        cancelAnimationFrame(playTimerRef.current);
+        playTimerRef.current = null;
+      }
+    };
+  }, [isPlaying, totalDuration]);
 
   const handleTogglePlay = () => {
-    if (!isPlaying && currentTime >= totalDuration) {
-      setCurrentTime(0);
-      playedItemIdsRef.current.clear();
+    if (!isPlaying) {
+      if (currentTimeRef.current >= totalDuration) {
+        currentTimeRef.current = 0;
+        setCurrentTime(0);
+        playedItemIdsRef.current.clear();
+      } else {
+        // 現在の再生ヘッド以降（または現在発話区間内）のアイテムを再生可能にする
+        const toDelete: string[] = [];
+        playedItemIdsRef.current.forEach((id) => {
+          const it = itemsRef.current.find((i) => i.id === id);
+          if (!it || it.startTime + it.duration >= currentTimeRef.current) {
+            toDelete.push(id);
+          }
+        });
+        toDelete.forEach((id) => playedItemIdsRef.current.delete(id));
+      }
       stopAllAudio();
     }
     setIsPlaying(!isPlaying);
   };
 
   const handleSeek = (time: number) => {
+    currentTimeRef.current = time;
     setCurrentTime(time);
     stopAllAudio();
-    // シーク位置より後に始まるアイテムのみ再生フラグを再準備
+    // シーク位置以降（または現在位置と重なるセリフ）の再生済みフラグを確実にクリア
+    const toDelete: string[] = [];
     playedItemIdsRef.current.forEach((id) => {
-      const it = items.find((i) => i.id === id);
-      if (it && it.startTime > time + 0.05) {
-        playedItemIdsRef.current.delete(id);
+      const it = itemsRef.current.find((i) => i.id === id);
+      if (!it || it.startTime + it.duration >= time) {
+        toDelete.push(id);
       }
     });
+    toDelete.forEach((id) => playedItemIdsRef.current.delete(id));
   };
 
   // 動画読み込み (Fileオブジェクト または ファイルパスに対応)
@@ -364,10 +526,30 @@ export function App() {
     }
   };
 
-  // セリフ追加 (一意なID生成で重複フリーズを完全防止)
+  // セリフ追加 (重複ダブりを完全防止し一人ずつ順番に配置)
   const handleAddVoiceItem = async (characterId: string, text: string, startTime: number, expression: string = 'default') => {
     const char = characters.find((c) => c.id === characterId) || characters[0];
     const newItemId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+    // 既存セリフとの重複を検出し、被らないように安全にスケジューリング
+    const existingVoices = items.filter((it): it is VoiceItem => it.type === 'voice');
+    let scheduledStart = startTime;
+
+    existingVoices.forEach((it) => {
+      const itEnd = it.startTime + it.duration;
+      if (scheduledStart >= it.startTime - 0.05 && scheduledStart < itEnd + 0.15) {
+        scheduledStart = Math.max(scheduledStart, itEnd + 0.15);
+      }
+    });
+
+    if (existingVoices.length > 0) {
+      const lastVoice = existingVoices.reduce((prev, curr) =>
+        curr.startTime > prev.startTime ? curr : prev
+      );
+      if (startTime >= lastVoice.startTime) {
+        scheduledStart = Math.max(scheduledStart, lastVoice.startTime + lastVoice.duration + 0.15);
+      }
+    }
 
     const tempItem: VoiceItem = {
       id: newItemId,
@@ -377,13 +559,14 @@ export function App() {
       characterId,
       text,
       expression,
-      startTime,
+      startTime: Number(scheduledStart.toFixed(2)),
       duration: 1.5,
       speedScale: 1.0,
       pitchScale: 0.0,
       isSynthesizing: true,
     };
     setItems((prev) => [...prev, tempItem]);
+    setSelectedItemId(newItemId);
 
     try {
       const result = await ttsManager.synthesize(char.ttsProviderId, char.speakerId, text, {
@@ -465,15 +648,24 @@ export function App() {
     const item = items.find((i) => i.id === id);
     if (!item || item.type !== 'voice') return;
 
-    const newStart = item.startTime + item.duration + 0.15;
+    let newStart = item.startTime + item.duration + 0.15;
+    const existingVoices = items.filter((it): it is VoiceItem => it.type === 'voice');
+    existingVoices.forEach((it) => {
+      const itEnd = it.startTime + it.duration;
+      if (newStart >= it.startTime - 0.05 && newStart < itEnd + 0.15) {
+        newStart = Math.max(newStart, itEnd + 0.15);
+      }
+    });
+
     const newItemId = `voice_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const duplicated: VoiceItem = {
       ...item,
       id: newItemId,
-      startTime: newStart,
+      startTime: Number(newStart.toFixed(2)),
       isSynthesizing: false,
     };
     setItems((prev) => [...prev, duplicated]);
+    setSelectedItemId(newItemId);
   };
 
   // セリフの分割
@@ -499,15 +691,48 @@ export function App() {
     await handleAddVoiceItem(item.characterId, secondText, splitTime);
   };
 
-  const handlePlaySingle = (item: VoiceItem) => {
-    if (item.audioBlobUrl) {
-      setActiveAudioUrl(item.audioBlobUrl);
+  const handlePlaySingle = async (item: VoiceItem) => {
+    let url = item.audioBlobUrl;
+    if (!url) {
+      try {
+        const char = characters.find((c) => c.id === item.characterId) || characters[0];
+        const res = await ttsManager.synthesize(char.ttsProviderId, char.speakerId, item.text, {
+          speedScale: item.speedScale || 1.0,
+          pitchScale: item.pitchScale || 0.0,
+        });
+        url = URL.createObjectURL(res.audioBlob);
+        handleUpdateItem(item.id, {
+          duration: res.duration,
+          audioBlob: res.audioBlob,
+          audioBlobUrl: url,
+          phonemes: res.phonemes,
+        });
+      } catch (err) {
+        console.error('Single play synthesis failed:', err);
+        return;
+      }
+    }
+    if (url) {
+      setActiveAudioUrl(url);
+      stopAllAudio();
+      const audio = new Audio(url);
+      playingAudiosRef.current.set(`single_${item.id}`, audio);
+      audio.onended = () => {
+        playingAudiosRef.current.delete(`single_${item.id}`);
+      };
+      audio.play().catch((err) => console.warn('Single audio play error:', err));
     }
   };
 
   const handleUpdateCharacter = (id: string, updates: Partial<Character>) => {
     setCharacters((prev) =>
       prev.map((c) => (c.id === id ? { ...c, ...updates } : c))
+    );
+  };
+
+  const handleToggleCharacterFlip = (id: string) => {
+    setCharacters((prev) =>
+      prev.map((c) => (c.id === id ? { ...c, flipH: !c.flipH } : c))
     );
   };
 
@@ -674,7 +899,10 @@ export function App() {
       const speed = typeof line.speed === 'number' ? line.speed : 1.0;
       const pitch = typeof line.pitch === 'number' ? line.pitch : 0.0;
       const expr = line.expression || 'default';
-      const startTime = line.startTime !== undefined ? line.startTime : currentStart;
+      // 一人ずつ順番にしゃべるよう、直前のセリフの終了時間 (currentStart) より前の重複を自動防止
+      const startTime = line.startTime !== undefined 
+        ? Math.max(line.startTime, currentStart) 
+        : currentStart;
 
       // 既存アイテムに同一話者・同一テキスト・同一話速・音高・合成済み音声があれば再利用
       const existing = items.find(
@@ -813,6 +1041,14 @@ export function App() {
     }
   };
 
+  // タイムライン吹き出しクリック時のハンドラー（閉じていたらスクリプトパネルを展開してジャンプ）
+  const handleSelectTimelineItem = (id: string) => {
+    setSelectedItemId(id);
+    if (isScriptCollapsed) {
+      setIsScriptCollapsed(false);
+    }
+  };
+
   const voiceItems = items.filter((it): it is VoiceItem => it.type === 'voice');
 
   return (
@@ -848,6 +1084,7 @@ export function App() {
             onVideoDurationLoaded={(dur) => setVideoDuration(dur)}
             onVideoDrop={handleVideoSelect}
             activeAudioUrl={activeAudioUrl}
+            onToggleCharacterFlip={handleToggleCharacterFlip}
           />
         </div>
 
@@ -873,6 +1110,8 @@ export function App() {
               items={voiceItems}
               characters={characters}
               currentTime={currentTime}
+              selectedItemId={selectedItemId}
+              isPlaying={isPlaying}
               onAddItem={handleAddVoiceItem}
               onUpdateItem={handleUpdateItem}
               onDeleteItem={handleDeleteItem}
@@ -882,6 +1121,7 @@ export function App() {
               onPlaySingle={handlePlaySingle}
               onSynthesizeItem={handleSynthesizeItem}
               onSyncFromYaml={handleSyncFromYaml}
+              onSelectItem={setSelectedItemId}
             />
           </div>
         ) : (
@@ -929,7 +1169,9 @@ export function App() {
             characters={characters}
             currentTime={currentTime}
             duration={totalDuration}
+            selectedItemId={selectedItemId}
             onSeek={handleSeek}
+            onSelectItem={handleSelectTimelineItem}
             onUpdateItemTime={(id, newStart) =>
               setItems((prev) =>
                 prev.map((it) => (it.id === id ? { ...it, startTime: newStart } : it))

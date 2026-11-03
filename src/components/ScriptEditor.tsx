@@ -26,6 +26,8 @@ interface ScriptEditorProps {
   items: VoiceItem[];
   characters: Character[];
   currentTime: number;
+  selectedItemId?: string | null;
+  isPlaying?: boolean;
   onAddItem: (characterId: string, text: string, startTime: number, expression?: string) => Promise<void>;
   onUpdateItem: (id: string, updates: Partial<VoiceItem>) => void;
   onDeleteItem: (id: string) => void;
@@ -35,12 +37,86 @@ interface ScriptEditorProps {
   onPlaySingle: (item: VoiceItem) => void;
   onSynthesizeItem: (id: string) => Promise<void>;
   onSyncFromYaml?: (lines: ParsedScriptLine[]) => Promise<void>;
+  onSelectItem?: (id: string | null) => void;
+}
+
+/**
+ * YAMLテキスト内の指定インデックスのアイテムブロックの文字範囲を特定する
+ */
+function findYamlSectionRange(yaml: string, itemIndex: number): { start: number; end: number } | null {
+  if (itemIndex < 0 || !yaml) return null;
+
+  // 行頭または改行直後の "- " を探す
+  const regex = /(?:^|\n)- /g;
+  let match: RegExpExecArray | null;
+  let currentIndex = 0;
+  let targetStart = -1;
+
+  while ((match = regex.exec(yaml)) !== null) {
+    if (currentIndex === itemIndex) {
+      targetStart = match[0].startsWith('\n') ? match.index + 1 : match.index;
+      break;
+    }
+    currentIndex++;
+  }
+
+  if (targetStart === -1) return null;
+
+  // 次の "- " の位置を探す
+  regex.lastIndex = targetStart + 2;
+  const nextMatch = regex.exec(yaml);
+  let targetEnd: number;
+  if (nextMatch) {
+    targetEnd = nextMatch[0].startsWith('\n') ? nextMatch.index : nextMatch.index;
+  } else {
+    targetEnd = yaml.length;
+  }
+
+  // 末尾の余分な改行・空白を除去
+  while (targetEnd > targetStart && /\s/.test(yaml[targetEnd - 1])) {
+    targetEnd--;
+  }
+
+  return { start: targetStart, end: targetEnd };
+}
+
+/**
+ * YAMLテキスト内の指定インデックスのアイテムブロックの行範囲を特定する (ハイライト表示用)
+ */
+function getYamlItemLineRange(yaml: string, itemIndex: number): { startLine: number; lineCount: number } | null {
+  if (itemIndex < 0 || !yaml) return null;
+  const lines = yaml.split('\n');
+  let currentBlockIndex = -1;
+  let startLine = -1;
+  let endLine = -1;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (trimmed.startsWith('- ')) {
+      currentBlockIndex++;
+      if (currentBlockIndex === itemIndex) {
+        startLine = i;
+        endLine = i;
+      } else if (currentBlockIndex > itemIndex) {
+        break;
+      }
+    } else if (startLine !== -1 && currentBlockIndex === itemIndex) {
+      if (trimmed !== '') {
+        endLine = i;
+      }
+    }
+  }
+
+  if (startLine === -1 || endLine === -1) return null;
+  return { startLine, lineCount: endLine - startLine + 1 };
 }
 
 export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   items,
   characters,
   currentTime,
+  selectedItemId,
+  isPlaying = false,
   onAddItem,
   onUpdateItem,
   onDeleteItem,
@@ -50,12 +126,15 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   onPlaySingle,
   onSynthesizeItem,
   onSyncFromYaml,
+  onSelectItem,
 }) => {
   const [tab, setTab] = useState<'cards' | 'yaml'>('cards');
   const [yamlText, setYamlText] = useState<string>(() => itemsToRawText(items, characters));
+  const [yamlScrollTop, setYamlScrollTop] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const debounceTimerRef = useRef<number | null>(null);
   const isEditingYamlRef = useRef(false);
+  const yamlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [inputText, setInputText] = useState('');
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>(characters[0]?.id || '');
@@ -64,6 +143,62 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const aiMenuRef = useRef<HTMLDivElement | null>(null);
+
+  // 再生中または選択中のアクティブなセリフアイテムを特定
+  const activeVoiceItem = items.find(
+    (it) => currentTime >= it.startTime && currentTime <= it.startTime + it.duration
+  );
+  const highlightedItemId = activeVoiceItem ? activeVoiceItem.id : selectedItemId;
+  const highlightedItemIndex = items.findIndex((it) => it.id === highlightedItemId);
+  const activeLineRange = highlightedItemIndex >= 0 ? getYamlItemLineRange(yamlText, highlightedItemIndex) : null;
+
+  // 再生中にYAMLの該当セクションを自動追尾スクロール
+  const lastHighlightedIndexRef = useRef<number>(-1);
+  useEffect(() => {
+    if (tab === 'yaml' && isPlaying && activeLineRange && highlightedItemIndex !== lastHighlightedIndexRef.current) {
+      lastHighlightedIndexRef.current = highlightedItemIndex;
+      if (yamlTextareaRef.current) {
+        const targetScroll = Math.max(0, activeLineRange.startLine * 22 - 60);
+        yamlTextareaRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
+      }
+    }
+  }, [tab, isPlaying, activeLineRange, highlightedItemIndex]);
+
+  // 指定されたアイテムへのスクロール & フォーカス（Cardsタブ / YAMLタブ両対応）
+  const scrollToTargetItem = useCallback(
+    (itemId: string) => {
+      if (tab === 'cards') {
+        const el = document.getElementById(`dialogue-card-${itemId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      } else if (tab === 'yaml') {
+        const itemIdx = items.findIndex((it) => it.id === itemId);
+        if (itemIdx >= 0 && yamlTextareaRef.current) {
+          const textarea = yamlTextareaRef.current;
+          const range = findYamlSectionRange(yamlText, itemIdx);
+          if (range) {
+            textarea.focus();
+            textarea.setSelectionRange(range.start, range.end);
+            const textBefore = yamlText.slice(0, range.start);
+            const lineCount = (textBefore.match(/\n/g) || []).length;
+            const lineHeight = 19;
+            textarea.scrollTop = Math.max(0, lineCount * lineHeight - 60);
+          }
+        }
+      }
+    },
+    [tab, items, yamlText]
+  );
+
+  // タイムラインの吹き出しタップ時やタブ切替時に該当箇所へスムーズスクロール
+  useEffect(() => {
+    if (!selectedItemId) return;
+    const timer = setTimeout(() => {
+      scrollToTargetItem(selectedItemId);
+    }, 60);
+    return () => clearTimeout(timer);
+  }, [selectedItemId, tab, scrollToTargetItem]);
 
   const activeCharId = characters.some((c) => c.id === selectedCharacterId)
     ? selectedCharacterId
@@ -248,7 +383,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
             </span>
           )}
           <span className="text-[#3c4043] font-mono text-xs">|</span>
-          <span className="text-[11px] text-[#8e918f] font-mono">
+          <span className="text-[11px] text-[#8e918f] font-mono tabular-nums inline-block min-w-[42px]">
             {currentTime.toFixed(2)}s
           </span>
         </div>
@@ -256,18 +391,43 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
       {/* Main Content Area: Cards vs YAML */}
       {tab === 'yaml' ? (
-        <div className="flex-1 relative flex flex-col p-3 bg-[#121314]">
+        <div className="flex-1 relative flex flex-col bg-[#121314] overflow-hidden">
+          {/* Active / Playing Section Highlight Backdrop */}
+          {activeLineRange && (
+            <div
+              style={{
+                top: `${12 + activeLineRange.startLine * 22 - yamlScrollTop}px`,
+                height: `${activeLineRange.lineCount * 22}px`,
+                left: '8px',
+                right: '8px',
+              }}
+              className="absolute rounded-lg bg-[#1e2d40]/90 border-l-4 border-[#8ab4f8] shadow-md pointer-events-none transition-all duration-150 z-0 ring-1 ring-[#8ab4f8]/30"
+            />
+          )}
+
           <textarea
+            ref={yamlTextareaRef}
             value={yamlText}
             onChange={handleYamlChange}
+            onScroll={(e) => setYamlScrollTop((e.target as HTMLTextAreaElement).scrollTop)}
             onBlur={handleYamlBlur}
             placeholder={`# Dialogue in YAML format (auto-synced with Cards)
 - speaker: Zundamon
+  time: 0.0
+  emotion: default
   text: Welcome to Voix!
+
 - speaker: Shikoku Metan
+  time: 1.5
   emotion: smile
   text: Cards and YAML are automatically synchronized.`}
-            className="w-full h-full bg-transparent text-[#e3e3e3] font-mono text-xs leading-relaxed resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266]"
+            style={{
+              lineHeight: '22px',
+              fontSize: '12px',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+              padding: '12px',
+            }}
+            className="w-full h-full bg-transparent text-[#e3e3e3] resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266] relative z-10"
             spellCheck={false}
           />
         </div>
@@ -286,17 +446,27 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               items.map((item) => {
                 const isActive =
                   currentTime >= item.startTime && currentTime <= item.startTime + item.duration;
+                const isSelected = selectedItemId === item.id;
                 const isExpanded = expandedItemId === item.id;
 
                 return (
                   <div
                     key={item.id}
-                    className={`p-3 rounded-xl border transition-all duration-150 flex flex-col gap-2 ${
-                      isActive
-                        ? 'bg-[#22252a] border-[#8ab4f8] shadow-md ring-1 ring-[#8ab4f8]/30'
+                    id={`dialogue-card-${item.id}`}
+                    onClick={() => onSelectItem?.(item.id)}
+                    className={`p-3 rounded-xl border transition-all duration-200 flex flex-col gap-2 relative cursor-pointer ${
+                      isSelected
+                        ? 'bg-[#22272e] border-[#8ab4f8] shadow-lg ring-2 ring-[#8ab4f8]/50'
+                        : isActive
+                        ? 'bg-[#22252a] border-[#8ab4f8]/70 shadow-md ring-1 ring-[#8ab4f8]/30'
                         : 'bg-[#1b1c1e] border-[#2a2c30] hover:border-[#3c4044]'
                     }`}
                   >
+                    {/* Selected Indicator Bar */}
+                    {isSelected && (
+                      <div className="absolute left-0 top-3 bottom-3 w-1 bg-[#8ab4f8] rounded-r-full" />
+                    )}
+
                     {/* Row Header */}
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
@@ -328,16 +498,27 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         />
 
                         <button
-                          onClick={() => onSeek(item.startTime)}
-                          className="text-[#8e918f] hover:text-[#8ab4f8] font-mono text-[11px] transition"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSeek(item.startTime);
+                            onSelectItem?.(item.id);
+                          }}
+                          className={`font-mono text-[11px] transition flex items-center gap-1 px-1.5 py-0.5 rounded ${
+                            isSelected
+                              ? 'text-[#8ab4f8] bg-[#8ab4f8]/10'
+                              : 'text-[#8e918f] hover:text-[#8ab4f8]'
+                          }`}
                           title="Seek to timestamp"
                         >
-                          {item.startTime.toFixed(2)}s - {(item.startTime + item.duration).toFixed(2)}s
+                          <span>⏱</span>
+                          <span>{item.startTime.toFixed(2)}s</span>
+                          <span className="text-[#555]">-</span>
+                          <span>{(item.startTime + item.duration).toFixed(2)}s</span>
                         </button>
                       </div>
 
                       {/* Actions */}
-                      <div className="flex items-center gap-1">
+                      <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={() => onPlaySingle(item)}
                           disabled={item.isSynthesizing}

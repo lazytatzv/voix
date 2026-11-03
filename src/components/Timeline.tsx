@@ -10,6 +10,8 @@ interface TimelineProps {
   duration: number;
   onSeek: (time: number) => void;
   onUpdateItemTime: (id: string, startTime: number) => void;
+  selectedItemId?: string | null;
+  onSelectItem?: (id: string) => void;
 }
 
 export const Timeline: React.FC<TimelineProps> = ({
@@ -18,6 +20,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   duration,
   onSeek,
   onUpdateItemTime,
+  selectedItemId,
+  onSelectItem,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -38,19 +42,32 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   const handleMouseDownItem = (e: React.MouseEvent, item: TimelineItem) => {
     e.stopPropagation();
-    setDraggingItemId(item.id);
+    const startX = e.clientX;
+    let isDragging = false;
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
-      const deltaX = moveEvent.clientX - e.clientX;
-      const deltaTime = deltaX / basePixelsPerSecond;
-      const newStartTime = Math.max(0, item.startTime + deltaTime);
-      onUpdateItemTime(item.id, newStartTime);
+      if (!isDragging && Math.abs(moveEvent.clientX - startX) > 3) {
+        isDragging = true;
+        setDraggingItemId(item.id);
+      }
+      if (isDragging) {
+        const deltaX = moveEvent.clientX - startX;
+        const deltaTime = deltaX / basePixelsPerSecond;
+        const newStartTime = Math.max(0, item.startTime + deltaTime);
+        onUpdateItemTime(item.id, newStartTime);
+      }
     };
 
     const handleMouseUp = () => {
       setDraggingItemId(null);
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
+
+      // ドラッグせずにタップ・クリックした場合は、カードやYAMLの該当セクションへジャンプ
+      if (!isDragging) {
+        onSeek(item.startTime);
+        onSelectItem?.(item.id);
+      }
     };
 
     window.addEventListener('mousemove', handleMouseMove);
@@ -135,7 +152,7 @@ export const Timeline: React.FC<TimelineProps> = ({
               {renderRuler()}
             </div>
 
-            {/* Captions Track */}
+            {/* Captions Track (吹き出しタップで該当カード/YAMLセクションへジャンプ) */}
             <div className="h-11 border-b border-[#282a2c] relative flex items-center bg-[#131314]">
               {items
                 .filter((item): item is VoiceItem => item.type === 'voice')
@@ -143,26 +160,33 @@ export const Timeline: React.FC<TimelineProps> = ({
                   const left = item.startTime * basePixelsPerSecond;
                   const width = Math.max(item.duration * basePixelsPerSecond, 24);
                   const isDragging = draggingItemId === item.id;
+                  const isSelected = selectedItemId === item.id;
 
                   return (
                     <div
                       key={item.id}
                       onMouseDown={(e) => handleMouseDownItem(e, item)}
-                      className={`absolute h-8 rounded-lg flex items-center px-2.5 text-xs cursor-grab active:cursor-grabbing transition-all select-none shadow-sm ${
+                      className={`absolute h-8 rounded-lg flex items-center px-2.5 text-xs cursor-pointer active:cursor-grabbing transition-all select-none shadow-sm ${
                         isDragging
                           ? 'ring-2 ring-white z-20 shadow-lg'
+                          : isSelected
+                          ? 'ring-2 ring-[#8ab4f8] bg-[#005c94] brightness-125 z-20 shadow-md scale-[1.02]'
                           : 'hover:brightness-110 z-10'
                       }`}
                       style={{
                         left: `${left}px`,
                         width: `${width}px`,
-                        backgroundColor: '#004a77',
+                        backgroundColor: isSelected ? '#005c94' : '#004a77',
                         color: '#c2e7ff',
-                        border: '1px solid #005c94',
+                        border: isSelected ? '1px solid #8ab4f8' : '1px solid #005c94',
                       }}
-                      title={item.text}
+                      title={`${item.text} (Click to jump to card/YAML)`}
                     >
-                      <MessageSquare className="w-3 h-3 mr-1.5 flex-shrink-0 opacity-70" />
+                      <MessageSquare
+                        className={`w-3 h-3 mr-1.5 flex-shrink-0 ${
+                          isSelected ? 'text-[#8ab4f8] opacity-100' : 'opacity-70'
+                        }`}
+                      />
                       <span className="truncate font-medium text-[11px]">{getSubtitleDisplayText(item.text)}</span>
                     </div>
                   );

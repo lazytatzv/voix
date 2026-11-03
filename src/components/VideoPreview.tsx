@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User } from 'lucide-react';
+import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User, FlipHorizontal } from 'lucide-react';
 import { Character, VoiceItem, TimelineItem } from '../types';
 import { parsePronunciationTokens, getSubtitleDisplayText } from '../utils/pronunciation';
 import { resolveImageToDataUrl } from '../utils/imageUtils';
@@ -16,6 +16,7 @@ interface VideoPreviewProps {
   onVideoDurationLoaded?: (duration: number) => void;
   onVideoDrop?: (file: File) => void;
   activeAudioUrl?: string | null;
+  onToggleCharacterFlip?: (characterId: string) => void;
 }
 
 /**
@@ -80,7 +81,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   onVideoDurationLoaded,
   onVideoDrop,
   activeAudioUrl,
+  onToggleCharacterFlip,
 }) => {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -88,6 +91,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [showAvatar, setShowAvatar] = useState(true);
   const [imagesLoaded, setImagesLoaded] = useState<Record<string, HTMLImageElement>>({});
   const activeSlotCharIdRef = useRef<Record<string, string>>({});
+  const pendingSeekTimeRef = useRef<number | null>(null);
 
   useEffect(() => {
     characters.forEach((char) => {
@@ -107,6 +111,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
       loadImg(char.id, char.avatar.idle);
       loadImg(`${char.id}_speaking`, char.avatar.speaking);
+      loadImg(`${char.id}_blinking`, char.avatar.blinking);
 
       // 表情差分画像のロード
       if (char.avatar.expressions) {
@@ -135,26 +140,29 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, [isPlaying, videoSrc]);
 
-  // 2. シーク同期: 停止中のみシークを行う (再生中のスタッター・エコー防止)
+  // 2. シーク同期 (停止中やシーク操作時のみ同期し、通常再生中の不必要なシーク多発・コマ落ち・ラグを完全防止)
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
 
-    if (!isPlaying && video.readyState >= 1) {
-      if (Math.abs(video.currentTime - currentTime) > 0.05) {
-        try {
-          video.currentTime = currentTime;
-        } catch {}
+    if (!isPlaying) {
+      if (video.readyState >= 1) {
+        if (Math.abs(video.currentTime - currentTime) > 0.05) {
+          if (video.seeking) {
+            pendingSeekTimeRef.current = currentTime;
+          } else {
+            try {
+              video.currentTime = currentTime;
+            } catch {}
+          }
+        }
       }
     }
   }, [currentTime, videoSrc, isPlaying]);
 
-  // 3. 動画ソース変更時に読み込み直し
+  // 3. 動画ソース変更時の初期化
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !videoSrc) return;
-
-    video.load();
+    pendingSeekTimeRef.current = null;
   }, [videoSrc]);
 
   const handleLoadedMetadata = () => {
@@ -170,6 +178,24 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       }
       renderCanvas();
     }
+  };
+
+  const handleCanPlay = () => {
+    renderCanvas();
+  };
+
+  const handleSeeked = () => {
+    const video = videoRef.current;
+    if (video && pendingSeekTimeRef.current !== null) {
+      const nextTime = pendingSeekTimeRef.current;
+      pendingSeekTimeRef.current = null;
+      if (Math.abs(video.currentTime - nextTime) > 0.08) {
+        try {
+          video.currentTime = nextTime;
+        } catch {}
+      }
+    }
+    renderCanvas();
   };
 
   const currentVoiceItem = items.find(
@@ -201,54 +227,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const width = canvas.width;
     const height = canvas.height;
 
-    // 1. 背景描画 (動画アスペクト比を完全維持して歪みを防止)
-    const canDrawVideo =
-      videoRef.current &&
-      videoSrc &&
-      (videoRef.current.videoWidth > 0 ||
-        videoRef.current.readyState >= 1 ||
-        videoRef.current.currentTime > 0);
-
-    if (canDrawVideo && videoRef.current) {
-      const vWidth = videoRef.current.videoWidth || 1920;
-      const vHeight = videoRef.current.videoHeight || 1080;
-      const vAspect = vWidth / vHeight;
-      const cAspect = width / height;
-
-      let drawWidth = width;
-      let drawHeight = height;
-      let drawX = 0;
-      let drawY = 0;
-
-      if (vAspect > cAspect) {
-        drawHeight = width / vAspect;
-        drawY = (height - drawHeight) / 2;
-      } else {
-        drawWidth = height * vAspect;
-        drawX = (width - drawWidth) / 2;
-      }
-
-      ctx.fillStyle = '#0a0a0c';
-      ctx.fillRect(0, 0, width, height);
-      try {
-        ctx.drawImage(videoRef.current, drawX, drawY, drawWidth, drawHeight);
-      } catch {
-        // 一時停止・シーク中のフレーム再描画エラーを安全に無視
-      }
-    } else if (!videoSrc) {
-      ctx.fillStyle = '#101113';
-      ctx.fillRect(0, 0, width, height);
-
-      ctx.fillStyle = '#5f6368';
-      ctx.font = '500 20px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText('Drop video file here or select from toolbar', width / 2, height / 2 - 12);
-
-      ctx.fillStyle = '#3c4043';
-      ctx.font = '400 14px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-      ctx.fillText('Supports MP4, MKV, WebM, MOV', width / 2, height / 2 + 18);
-    }
+    // キャンバスを透明クリア（動画は背後のネイティブvideo要素でハードウェア高速表示）
+    ctx.clearRect(0, 0, width, height);
 
     // 2. 立ち絵キャラクター描画 (表情差分・100%不透明・口パク・2重重なり防止)
     if (showAvatar) {
@@ -285,34 +265,43 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         const exprImg = expr !== 'default' ? imagesLoaded[`${char.id}_expr_${expr}`] : null;
 
         const speakingImg = imagesLoaded[`${char.id}_speaking`];
-        const baseIdleImg = exprImg || imagesLoaded[char.id];
+        const defaultIdleImg = imagesLoaded[char.id];
+        const blinkingImg = imagesLoaded[`${char.id}_blinking`];
+        const baseIdleImg = exprImg || defaultIdleImg;
 
-        // 口開け画像が待機画像と互換性があるか検証
-        // 異なるキャラクター（例: デフォルト素材とカスタム立ち絵）やアスペクト比が大きく異なる画像間の切り替えによるチカチカを防止
-        const isMouthOpenCompatible = (() => {
-          if (!speakingImg || !speakingImg.complete || !baseIdleImg || !baseIdleImg.complete) return false;
-          // アスペクト比チェック (±15%以内でなければ別素材と判断)
-          const idleRatio = baseIdleImg.width / baseIdleImg.height;
-          const speakRatio = speakingImg.width / speakingImg.height;
-          if (Math.abs(idleRatio - speakRatio) > 0.15) return false;
+        // 自然な瞬き（まばたき）判定: 約3.6〜4.2秒ごとに約160ms目を閉じる
+        const charSeed = char.id.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0) * 0.7;
+        const blinkCycle = (currentTime + charSeed) % 3.8;
+        const isBlinking = blinkCycle < 0.16;
 
-          // ソース元（デフォルトサンプル /characters/ か、カスタムパス/Data URLか）の不一致チェック
-          const idleSrc = char.avatar.idle || '';
-          const speakSrc = char.avatar.speaking || '';
-          const isIdleDefault = idleSrc.startsWith('/characters/');
-          const isSpeakDefault = speakSrc.startsWith('/characters/');
-          if (isIdleDefault !== isSpeakDefault) return false;
+        // 画像選出ロジック:
+        // 1. 表情差分（smile, angry, shock, trouble等）指定時: 表情差分画像を忠実に表示
+        // 2. 発話時 (isSpeaking): デフォルトは口を閉じ、話す時に口を開けて自然な口パク
+        // 3. 待機時 (!isSpeaking): 口を閉じ、定期的に自然なまばたき（blinking）を実行
+        let activeImg: HTMLImageElement | null = null;
 
-          return true;
-        })();
-
-        // 口パク判定: 発話中かつ互換性のある口開け画像がある場合のみ開閉
-        const isMouthOpen = isSpeaking && isMouthOpenCompatible && Math.floor(currentTime * 7.5) % 2 === 0;
-
-        const activeImg =
-          isMouthOpen && speakingImg
-            ? speakingImg
-            : (baseIdleImg || imagesLoaded[char.id]);
+        if (isSpeaking) {
+          if (expr !== 'default' && exprImg && exprImg.complete) {
+            activeImg = exprImg;
+          } else if (speakingImg && speakingImg.complete) {
+            // 話す時に口をあける・口パク（再生中は口開けと口閉じの自然なアニメーション）
+            if (isPlaying) {
+              const isMouthOpen = Math.floor(currentTime * 6.5) % 4 !== 0;
+              activeImg = isMouthOpen ? speakingImg : (defaultIdleImg || speakingImg);
+            } else {
+              activeImg = speakingImg;
+            }
+          } else {
+            activeImg = baseIdleImg;
+          }
+        } else {
+          // 待機中: 口は閉じ、自然なまばたきを挿入
+          if (isBlinking && blinkingImg && blinkingImg.complete) {
+            activeImg = blinkingImg;
+          } else {
+            activeImg = defaultIdleImg || baseIdleImg;
+          }
+        }
 
         if (activeImg && activeImg.complete) {
           ctx.save();
@@ -333,9 +322,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             : (activeImg.width / activeImg.height);
           const charWidth = baseRatio * charHeight;
 
-          // 口パク専用画像がない場合の微細トークバウンス（チカチカしない自然な上下2px）
-          const bounceY = (isSpeaking && !isMouthOpenCompatible && Math.floor(currentTime * 7.5) % 2 === 0) ? -2 : 0;
-
+          // キャラクター上下の揺れは不要（地面に安定接地）
           let charX = 80;
           if (char.position === 'right') {
             charX = width - charWidth - 80;
@@ -343,8 +330,19 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             charX = (width - charWidth) / 2;
           }
 
-          const charY = height - charHeight + bounceY;
-          ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
+          const charY = height - charHeight;
+
+          // 左右反転 (Horizontal Flip) の適用
+          const isFlipped = Boolean(char.flipH || char.flipX);
+          if (isFlipped) {
+            ctx.save();
+            ctx.translate(charX + charWidth, 0);
+            ctx.scale(-1, 1);
+            ctx.drawImage(activeImg, 0, charY, charWidth, charHeight);
+            ctx.restore();
+          } else {
+            ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
+          }
 
           ctx.restore();
         }
@@ -541,7 +539,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
       ctx.restore();
     }
-  }, [characters, currentVoiceItem, currentTime, imagesLoaded, showAvatar, videoSrc]);
+  }, [characters, currentVoiceItem, currentTime, imagesLoaded, showAvatar]);
 
   useEffect(() => {
     let animationFrameId: number;
@@ -555,8 +553,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   return (
     <div className="flex flex-col bg-[#141517] rounded-xl overflow-hidden border border-[#282a2c] shadow-lg">
-      {/* Video Preview Canvas */}
+      {/* Video Preview Monitor */}
       <div
+        ref={containerRef}
         className="relative aspect-video w-full bg-black flex items-center justify-center overflow-hidden"
         onDragOver={(e) => {
           e.preventDefault();
@@ -571,29 +570,36 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           }
         }}
       >
-        {videoSrc && (
+        {videoSrc ? (
           <video
             ref={videoRef}
             src={videoSrc}
-            className="absolute w-1 h-1 opacity-0 pointer-events-none"
+            className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
             muted={isMuted}
             playsInline
             preload="auto"
             onLoadedMetadata={handleLoadedMetadata}
-            onCanPlay={() => renderCanvas()}
-            onSeeked={() => renderCanvas()}
-            onTimeUpdate={() => {
-              renderCanvas();
-            }}
+            onCanPlay={handleCanPlay}
+            onSeeked={handleSeeked}
           />
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 select-none pointer-events-none">
+            <p className="text-[#5f6368] font-medium text-base mb-1">
+              Drop video file here or select from toolbar
+            </p>
+            <p className="text-[#3c4043] text-xs">
+              Supports MP4, MKV, WebM, MOV
+            </p>
+          </div>
         )}
         <audio ref={audioRef} className="hidden" />
 
+        {/* Overlay Canvas for Tachie and Subtitles */}
         <canvas
           ref={canvasRef}
           width={1920}
           height={1080}
-          className="w-full h-full object-contain cursor-pointer"
+          className="absolute inset-0 w-full h-full object-contain cursor-pointer select-none"
           onClick={onTogglePlay}
         />
       </div>
@@ -616,7 +622,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           >
             <RotateCcw className="w-3.5 h-3.5" />
           </button>
-          <span className="text-xs font-mono text-[#a8aaa8] ml-1">
+          <span className="text-xs font-mono tabular-nums text-[#a8aaa8] ml-1 inline-block min-w-[76px] select-none">
             {formatTime(currentTime)} / {formatTime(duration)}
           </span>
         </div>
@@ -636,6 +642,20 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
         {/* Right: Options */}
         <div className="flex items-center gap-1.5">
+          {onToggleCharacterFlip && (
+            <button
+              onClick={() => {
+                const target = characters.find(c => c.position !== 'hidden');
+                if (target) onToggleCharacterFlip(target.id);
+              }}
+              className="px-2.5 py-1.5 rounded-lg text-xs font-medium border bg-transparent text-[#8e918f] border-[#333538] hover:text-white hover:border-[#8e918f] flex items-center gap-1.5 transition"
+              title="Flip character horizontally (左右反転)"
+            >
+              <FlipHorizontal className="w-3.5 h-3.5" />
+              Flip
+            </button>
+          )}
+
           <button
             onClick={() => setShowAvatar(!showAvatar)}
             className={`px-2.5 py-1.5 rounded-lg text-xs font-medium border flex items-center gap-1.5 transition ${
@@ -659,7 +679,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           <button
             onClick={() => {
-              if (canvasRef.current?.requestFullscreen) {
+              if (containerRef.current?.requestFullscreen) {
+                containerRef.current.requestFullscreen();
+              } else if (canvasRef.current?.requestFullscreen) {
                 canvasRef.current.requestFullscreen();
               }
             }}

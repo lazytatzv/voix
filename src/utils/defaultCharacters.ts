@@ -10,7 +10,7 @@ export const defaultCharacters: Character[] = [
     avatar: {
       idle: '/characters/zundamon.png',
       speaking: '/characters/zundamon_talking.png',
-      blinking: '/characters/zundamon.png',
+      blinking: '/characters/zundamon_blinking.png',
       expressions: {
         smile: '/characters/zundamon_smile.png',
         shock: '/characters/zundamon_shock.png',
@@ -46,7 +46,7 @@ export const defaultCharacters: Character[] = [
     avatar: {
       idle: '/characters/metan.png',
       speaking: '/characters/metan_talking.png',
-      blinking: '/characters/metan.png',
+      blinking: '/characters/metan_blinking.png',
       expressions: {
         smile: '/characters/metan_smile.png',
         shock: '/characters/metan_shock.png',

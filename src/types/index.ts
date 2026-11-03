@@ -62,6 +62,8 @@ export interface Character {
   avatar: CharacterAvatar;
   subtitleStyle: SubtitleStyle;
   position: 'left' | 'right' | 'center' | 'hidden';
+  flipH?: boolean; // 左右反転 (Horizontal Flip)
+  flipX?: boolean;
 }
 
 export interface VoiceItem extends BaseTimelineItem {

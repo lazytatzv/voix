@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Type, FileArchive, Wand2, RotateCcw } from 'lucide-react';
+import { X, Image, SlidersHorizontal, Plus, Trash2, Upload, Type, FileArchive, Wand2, RotateCcw, FlipHorizontal } from 'lucide-react';
 import { Character, Speaker } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
 import { CustomSelect } from './CustomSelect';
@@ -255,6 +255,28 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       {p.label}
                     </button>
                   ))}
+                </div>
+
+                {/* Flip Horizontally (左右反転) */}
+                <div className="mt-2.5 flex items-center justify-between p-2.5 rounded-xl bg-[#131314] border border-[#282a2c]">
+                  <div className="flex items-center gap-2">
+                    <FlipHorizontal className="w-4 h-4 text-[#8ab4f8]" />
+                    <div>
+                      <span className="text-xs font-medium text-[#e3e3e3] block">Flip Horizontally (左右反転)</span>
+                      <span className="text-[10px] text-[#8e918f]">Mirror avatar facing direction</span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onUpdateCharacter(char.id, { flipH: !char.flipH })}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                      char.flipH
+                        ? 'bg-[#8ab4f8] text-[#001d35] border-[#8ab4f8] font-bold shadow-sm'
+                        : 'bg-[#1e1f20] text-[#c4c7c5] border-[#3c4043] hover:border-[#8e918f]'
+                    }`}
+                  >
+                    {char.flipH ? 'Flipped (反転中)' : 'Normal (通常)'}
+                  </button>
                 </div>
               </div>
 
