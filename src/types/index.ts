@@ -188,6 +188,17 @@ export interface TrackState {
   muted: boolean;
 }
 
+/** Automatic BGM ducking while a voice line is audible. */
+export interface DuckingSettings {
+  enabled: boolean;
+  /** Linear BGM gain while voice is active (0 - 1). */
+  level: number;
+  /** Seconds to ramp down when voice starts. */
+  attack: number;
+  /** Seconds to ramp back up when voice ends. */
+  release: number;
+}
+
 export interface TimelineSettings {
   duration: number;
   fps: 30 | 60;
@@ -200,6 +211,8 @@ export interface TimelineSettings {
   videoPath?: string;
   /** Background video audio volume (0.0 - 2.0). */
   videoVolume?: number;
+  /** BGM ducking under voice lines. */
+  ducking?: DuckingSettings;
 }
 
 /** A named cue point on the timeline. */

@@ -20,6 +20,7 @@ import {
 } from './audioCache';
 import { makeCacheKey } from '../utils/hash';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
+import { collectVoiceIntervals } from '../utils/audioDucking';
 
 export { blobToBase64 };
 
@@ -46,6 +47,14 @@ export interface ExecuteExportOptions {
   onProgress?: (event: ExportProgressEvent) => void;
 }
 
+interface DuckingPayload {
+  level: number;
+  attack: number;
+  release: number;
+  /** Voice spans in seconds, relative to the start of this audio clip. */
+  intervals: Array<[number, number]>;
+}
+
 interface AudioClipPayload {
   path: string;
   start: number;
@@ -56,6 +65,8 @@ interface AudioClipPayload {
   loop_audio: boolean;
   fade_in: number;
   fade_out: number;
+  /** Applied only to BGM clips while voice lines are audible. */
+  ducking?: DuckingPayload;
 }
 
 /** Rust-side temporary directory for the export currently in flight. */
@@ -208,6 +219,16 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
     const voiceMuted = trackFlag(project, 'voice', 'muted');
     const musicMuted = trackFlag(project, 'audio', 'muted');
     const videoMuted = trackFlag(project, 'video', 'muted');
+    const duckingSettings = project.timeline.ducking;
+    const voiceIntervals =
+      duckingSettings?.enabled && !voiceMuted
+        ? collectVoiceIntervals(project.items, {
+            start: exportStart,
+            end: exportEnd,
+            minGap: duckingSettings.release,
+            voiceMuted,
+          })
+        : [];
 
     if (!voiceMuted) {
       const voices = project.items.filter(
@@ -255,15 +276,35 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
           const clipEnd = Math.min(item.startTime + item.duration, exportEnd);
           if (clipEnd - clipStart < 0.02) continue;
           const itemEnd = item.startTime + item.duration;
+          const clipDuration = clipEnd - clipStart;
+          const ducking =
+            item.isBgm && duckingSettings?.enabled && voiceIntervals.length > 0
+              ? {
+                  level: duckingSettings.level,
+                  attack: duckingSettings.attack,
+                  release: duckingSettings.release,
+                  intervals: voiceIntervals
+                    .map(
+                      (interval) =>
+                        [
+                          Math.max(0, interval.start - clipStart),
+                          Math.max(0, interval.end - clipStart),
+                        ] as [number, number]
+                    )
+                    .filter(([intervalStart, intervalEnd]) => intervalEnd > intervalStart)
+                    .filter(([intervalStart]) => intervalStart < clipDuration),
+                }
+              : undefined;
           audioClips.push({
             path,
             start: clipStart - exportStart,
-            duration: clipEnd - clipStart,
+            duration: clipDuration,
             volume: Math.max(0, item.volume ?? 1),
             offset: Math.max(0, item.offset ?? 0) + (clipStart - item.startTime),
             loop_audio: Boolean(item.loop),
             fade_in: item.startTime >= exportStart ? Math.max(0, item.fadeIn ?? 0) : 0,
             fade_out: itemEnd <= exportEnd ? Math.max(0, item.fadeOut ?? 0) : 0,
+            ...(ducking && ducking.intervals.length > 0 ? { ducking } : {}),
           });
         } catch (err) {
           console.warn('[export] audio preparation failed:', item.src, err);

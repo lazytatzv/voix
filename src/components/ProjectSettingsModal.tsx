@@ -14,7 +14,8 @@ import {
   Check,
   FileText,
 } from 'lucide-react';
-import { TimelineItem, TrackKind, TrackState, VoixProject } from '../types';
+import { TimelineItem, TrackKind, TrackState, VoixProject, DuckingSettings } from '../types';
+import { DEFAULT_DUCKING } from '../utils/audioDucking';
 
 interface ProjectSettingsModalProps {
   isOpen: boolean;
@@ -115,6 +116,14 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     [timeline.width, timeline.height]
   );
 
+  const ducking = timeline.ducking ?? DEFAULT_DUCKING;
+  const patchDucking = (updates: Partial<DuckingSettings>) => {
+    setTimeline((prev) => ({
+      ...prev,
+      ducking: { ...(prev.ducking ?? DEFAULT_DUCKING), ...updates },
+    }));
+  };
+
   if (!isOpen) return null;
 
   const setResolution = (index: number) => {
@@ -134,6 +143,12 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       overlayFps: Math.max(1, Math.min(60, Number(timeline.overlayFps) || 15)),
       videoVolume:
         timeline.videoVolume !== undefined ? Math.max(0, Math.min(2, timeline.videoVolume)) : 1,
+      ducking: {
+        enabled: Boolean(timeline.ducking?.enabled ?? DEFAULT_DUCKING.enabled),
+        level: Math.max(0, Math.min(1, Number(timeline.ducking?.level ?? DEFAULT_DUCKING.level))),
+        attack: Math.max(0, Math.min(5, Number(timeline.ducking?.attack ?? DEFAULT_DUCKING.attack))),
+        release: Math.max(0, Math.min(5, Number(timeline.ducking?.release ?? DEFAULT_DUCKING.release))),
+      },
     } as VoixProject['timeline'];
     const scaleX = width / project.timeline.width;
     const scaleY = height / project.timeline.height;
@@ -336,6 +351,71 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                   <Trash2 className="w-3 h-3" /> Clear
                 </button>
               )}
+            </div>
+          </section>
+
+          <section className="border-t border-[#242629] pt-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f] flex items-center gap-1">
+                  <Volume2 className="w-3 h-3" /> Audio ducking
+                </div>
+                <p className="text-[10px] text-[#6f7276] font-mono mt-0.5">
+                  Lower BGM automatically while a voice line is playing.
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-[11px] font-mono text-[#c4c7c5] cursor-pointer flex-shrink-0">
+                <input
+                  type="checkbox"
+                  checked={ducking.enabled}
+                  onChange={(e) => patchDucking({ enabled: e.target.checked })}
+                  className="accent-[#3b82f6]"
+                />
+                Enabled
+              </label>
+            </div>
+            <div className={`grid grid-cols-3 gap-3 ${ducking.enabled ? '' : 'opacity-45'}`}>
+              <label className="space-y-1">
+                <span className="text-[10px] font-mono text-[#8e918f]">
+                  BGM level ({Math.round(ducking.level * 100)}%)
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={1}
+                  step={0.01}
+                  value={ducking.level}
+                  disabled={!ducking.enabled}
+                  onChange={(e) => patchDucking({ level: Number(e.target.value) })}
+                  className="w-full accent-[#3b82f6]"
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] font-mono text-[#8e918f]">Attack (s)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={0.05}
+                  value={ducking.attack}
+                  disabled={!ducking.enabled}
+                  onChange={(e) => patchDucking({ attack: Number(e.target.value) })}
+                  className={inputClass}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] font-mono text-[#8e918f]">Release (s)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={5}
+                  step={0.05}
+                  value={ducking.release}
+                  disabled={!ducking.enabled}
+                  onChange={(e) => patchDucking({ release: Number(e.target.value) })}
+                  className={inputClass}
+                />
+              </label>
             </div>
           </section>
 

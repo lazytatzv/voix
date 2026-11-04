@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User, FlipHorizontal, Crop } from 'lucide-react';
-import { AudioItem, Character, TimelineItem, TrackState } from '../types';
+import { AudioItem, Character, DuckingSettings, TimelineItem, TrackState } from '../types';
 import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
 import { loadImage, collectCharacterImageSources } from '../render/imageCache';
 import { mediaUrlFor } from '../utils/mediaUrl';
+import { collectVoiceIntervals, DEFAULT_DUCKING, duckingGainAt } from '../utils/audioDucking';
 
 interface VideoPreviewProps {
   videoSrc: string | null;
@@ -24,6 +25,8 @@ interface VideoPreviewProps {
   showTerminal?: boolean;
   /** Background video volume from project settings (0 - 2). */
   videoVolume?: number;
+  /** Automatic BGM ducking under voice lines. */
+  ducking?: DuckingSettings;
   /** Persist a dragged tachie position in project coordinates. */
   onCharacterMove?: (characterId: string, x: number, y: number) => void;
 }
@@ -46,6 +49,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   tracks,
   showTerminal = true,
   videoVolume = 1,
+  ducking,
   onCharacterMove,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -113,6 +117,15 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         (item): item is AudioItem => item.type === 'audio' && !item.hidden && Boolean(item.src)
       ),
     [items]
+  );
+  const duckingSettings = ducking ?? DEFAULT_DUCKING;
+  const duckingIntervals = useMemo(
+    () =>
+      collectVoiceIntervals(items, {
+        voiceMuted: tracks?.find((track) => track.id === 'voice')?.muted === true,
+        minGap: duckingSettings.release,
+      }),
+    [items, tracks, duckingSettings.release]
   );
   useEffect(() => {
     const map = bgmAudiosRef.current;
@@ -431,7 +444,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         const fadeGain =
           (fadeIn > 0 ? Math.max(0, Math.min(1, elapsed / fadeIn)) : 1) *
           (fadeOut > 0 ? Math.max(0, Math.min(1, remaining / fadeOut)) : 1);
-        audio.volume = Math.max(0, Math.min(1, (item.volume ?? 1) * fadeGain));
+        const duckGain = item.isBgm
+          ? duckingGainAt(currentTimeRef.current, duckingIntervals, duckingSettings)
+          : 1;
+        audio.volume = Math.max(
+          0,
+          Math.min(1, (item.volume ?? 1) * fadeGain * duckGain)
+        );
         if (isPlayingRef.current && active && tracks?.find((t) => t.id === 'audio')?.muted !== true) {
           const expected = currentTimeRef.current - item.startTime + Math.max(0, item.offset ?? 0);
           if (audio.paused) {
@@ -453,7 +472,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  }, [isPlaying, audioItems, tracks]);
+  }, [isPlaying, audioItems, tracks, duckingIntervals, duckingSettings]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);

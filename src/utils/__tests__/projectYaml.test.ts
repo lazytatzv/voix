@@ -22,6 +22,7 @@ function makeProject(): VoixProject {
     backgroundColor: '#101114',
     videoPath: '/tmp/background.mp4',
     videoVolume: 0.35,
+    ducking: { enabled: true, level: 0.3, attack: 0.1, release: 0.8 },
   };
   project.notes = 'Asset links and credits';
   project.markers = [
@@ -118,6 +119,7 @@ describe('project YAML roundtrip', () => {
       backgroundColor: '#101114',
       videoPath: '/tmp/background.mp4',
       videoVolume: 0.35,
+      ducking: { enabled: true, level: 0.3, attack: 0.1, release: 0.8 },
     });
     expect(restored.notes).toBe('Asset links and credits');
     expect(restored.markers).toEqual([

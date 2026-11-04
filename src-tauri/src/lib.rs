@@ -693,6 +693,15 @@ fn read_file_data_url(file_path: String) -> Result<String, String> {
 // ==========================================================
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExportDucking {
+    pub level: f64,
+    pub attack: f64,
+    pub release: f64,
+    /// Voice spans in seconds, relative to the start of the audio clip.
+    pub intervals: Vec<[f64; 2]>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ExportAudioClip {
     pub path: String,
     pub start: f64,
@@ -706,6 +715,8 @@ pub struct ExportAudioClip {
     pub fade_in: f64,
     #[serde(default)]
     pub fade_out: f64,
+    #[serde(default)]
+    pub ducking: Option<ExportDucking>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -804,6 +815,47 @@ fn probe_has_audio(path: &str) -> bool {
         .output()
         .map(|out| String::from_utf8_lossy(&out.stdout).contains("audio"))
         .unwrap_or(false)
+}
+
+fn ducking_volume_expr(ducking: &ExportDucking) -> Option<String> {
+    let level = ducking.level.clamp(0.0, 1.0);
+    if level >= 0.999 {
+        return None;
+    }
+    let attack = ducking.attack.max(0.0);
+    let release = ducking.release.max(0.0);
+    let span = 1.0 - level;
+
+    let mut terms = Vec::new();
+    for interval in &ducking.intervals {
+        let s = interval[0].max(0.0);
+        let e = interval[1].max(s);
+        if e - s < 0.001 {
+            continue;
+        }
+        let down = (s - attack).max(0.0);
+        let before = if attack > 0.0001 && s > down + 0.0001 {
+            format!("if(lt(t,{down:.3}),1,1-{span:.6}*(t-{down:.3})/{attack:.4})")
+        } else {
+            "1".to_string()
+        };
+        let release_end = e + release;
+        let after = if release > 0.0001 {
+            format!(
+                "if(lt(t,{release_end:.3}),{level:.6}+{span:.6}*(t-{e:.3})/{release:.4},1)"
+            )
+        } else {
+            "1".to_string()
+        };
+        terms.push(format!(
+            "if(lt(t,{s:.3}),{before},if(lt(t,{e:.3}),{level:.6},{after}))"
+        ));
+    }
+
+    terms
+        .into_iter()
+        .reduce(|a, b| format!("min({a},{b})"))
+        .map(|expr| format!(",volume=volume='{}':eval=frame", expr))
 }
 
 #[tauri::command]
@@ -940,6 +992,11 @@ fn finish_export_job_blocking(
         if clip.fade_out > 0.001 {
             let start = (clip.duration - clip.fade_out).max(0.0);
             chain.push_str(&format!(",afade=t=out:st={}:d={}", start, clip.fade_out));
+        }
+        if let Some(ducking) = &clip.ducking {
+            if let Some(volume) = ducking_volume_expr(ducking) {
+                chain.push_str(&volume);
+            }
         }
         let delay_ms = (clip.start.max(0.0) * 1000.0) as u64;
         chain.push_str(&format!(

@@ -2037,6 +2037,7 @@ export function App() {
             tracks={tracks}
             showTerminal={terminalOverlayEnabled}
             videoVolume={project.timeline.videoVolume ?? 1}
+            ducking={project.timeline.ducking}
             onCharacterMove={(id, x, y) => handleUpdateCharacter(id, { customX: x, customY: y })}
           />
         </div>

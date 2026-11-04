@@ -10,6 +10,7 @@ import {
   VoixProject,
   VoiceItem,
 } from '../types';
+import { DEFAULT_DUCKING, normalizeDucking } from './audioDucking';
 
 export const PROJECT_FORMAT = 'voix-project';
 export const PROJECT_VERSION = '1.1.0';
@@ -52,6 +53,7 @@ export function createEmptyProject(name = 'Untitled Project'): VoixProject {
       height: 1080,
       backgroundColor: '#0f0f11',
       overlayFps: 15,
+      ducking: { ...DEFAULT_DUCKING },
     },
     characters: [],
     items: [],
@@ -315,6 +317,7 @@ export function normalizeProject(raw: unknown, fallbackName = 'Untitled Project'
       overlayFps: Number(timeline.overlayFps ?? 15),
       videoPath: timeline.videoPath ? String(timeline.videoPath) : undefined,
       videoVolume: timeline.videoVolume !== undefined ? Number(timeline.videoVolume) : 1,
+      ducking: normalizeDucking(timeline.ducking),
     },
     characters: Array.isArray(root.characters)
       ? (root.characters

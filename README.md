@@ -13,6 +13,7 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 - **マーカー** — タイムラインに名前付きの目印を置き、クリックでシーク。近くのアイテムはマーカーへスナップします。位置はYAMLに保存されます。
 - **WYSIWYGプレビュー** — プレビューと書き出しが同じ Canvas コンポジター（`src/render/overlayRenderer.ts`）を使うため、見た目と出力が一致します。立ち絵はプレビュー上で直接ドラッグ配置でき、枠・中央・下端へスナップします。
 - **テロップ・画像モーション** — フェードイン/アウトに加えて、スライド・ズーム・ポップの登場/退場アニメーションをアイテム単位で設定できます。タイミングはプレビューと書き出しで共通です。
+- **BGMダッキング** — セリフ中だけBGMを自動で下げ、話し終わると滑らかに戻します。下げ幅・アタック・リリースはプロジェクト設定で調整でき、プレビューと書き出しの両方に同じカーブが適用されます。
 - **YAMLプロジェクト** — `.voix.yaml` が標準形式。手編集でき、コメントやキー順も保持されます。旧JSON（`.voix` / `.json`）も読み込み可能。
 - **最近使ったプロジェクト** — ヘッダーの履歴メニューから直近8件を開けます。存在しなくなったファイルは自動的に一覧から外れます。
 - **自動保存** — `~/.config/voix/autosave.voix.yaml` と localStorage の二重保存。次回起動時に復元します。
@@ -76,6 +77,11 @@ timeline:
   overlayFps: 15
   videoPath: /home/user/Videos/background.mp4
   videoVolume: 1
+  ducking:
+    enabled: true
+    level: 0.35        # セリフ中のBGM音量（0-1）
+    attack: 0.15       # 下げ始めるまでの秒数
+    release: 0.4       # 戻し始めるまでの秒数
 tracks:
   - id: video
     name: Video
@@ -245,7 +251,7 @@ ttsProviders:
 
 1. **アセット準備** — 立ち絵・画像を読み込み、音声（VOICEVOX / キャッシュ / 読み込み済みBGM）をWAVとして一時ディレクトリへ書き出し。指定範囲に重なる音声だけを切り出し、`offset` で曲の頭出しを反映します。
 2. **オーバーレイ描画** — `overlayFps`（既定15fps）で透過PNGフレームをCanvasに描画。プレビューと同じ `drawOverlayFrame()` を使用します。
-3. **FFmpeg合成** — Rustの `finish_export_job` が背景動画を範囲開始位置までシークしてループさせ、透過PNGをオーバーレイ。音声は `adelay` / `atrim` / `afade` / `amix` でミックス。
+3. **FFmpeg合成** — Rustの `finish_export_job` が背景動画を範囲開始位置までシークしてループさせ、透過PNGをオーバーレイ。音声は `adelay` / `atrim` / `afade` / `amix` でミックスし、BGMダッキングはセリフ区間に合わせた `volume` オートメーションとして適用します。
 4. **エンコード** — 拡張子に応じて自動選択:
    - `.mp4` / `.mkv` → H.264 (libx264) + AAC
    - `.webm` → VP9 (libvpx-vp9) + Opus
