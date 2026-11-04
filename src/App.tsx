@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
-import { convertFileSrc } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { Header } from './components/Header';
@@ -31,6 +30,7 @@ import { ttsManager } from './services/tts/TTSManager';
 import { VoicevoxProvider } from './services/tts/VoicevoxProvider';
 import {
   autosaveProject,
+  autosaveProjectOnUnload,
   loadAutosaveProject,
   openProjectFile,
   projectWithDuration,
@@ -44,7 +44,8 @@ import {
   projectFromYaml,
 } from './utils/projectYaml';
 import { loadCharactersFromConfig, loadSettingsFromConfig, saveCharactersToConfig } from './services/configService';
-import { loadCachedAudio } from './services/audioCache';
+import { loadCachedAudio, isTauriRuntime } from './services/audioCache';
+import { mediaUrlFor } from './utils/mediaUrl';
 import { loadImage } from './render/imageCache';
 import { detectSpeechFromVideo, measureImportedAudio } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
@@ -156,6 +157,7 @@ export function App() {
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const selectedItemIdRef = useRef<string | null>(null);
+  const clipboardRef = useRef<TimelineItem | null>(null);
   const [inspectedItemId, setInspectedItemId] = useState<string | null>(null);
 
   // Modals
@@ -172,6 +174,7 @@ export function App() {
   const [toast, setToast] = useState<string | null>(null);
   const [terminalOverlayEnabled, setTerminalOverlayEnabled] = useState(true);
   const autosaveEnabledRef = useRef(true);
+  const closingRef = useRef(false);
 
   // Panel layout (persisted)
   const [isScriptCollapsed, setIsScriptCollapsed] = useState(() => {
@@ -262,17 +265,23 @@ export function App() {
     [commitProject]
   );
 
+  const videoLoadTokenRef = useRef(0);
+
   const syncVideoSource = useCallback((path: string | null) => {
     rawVideoPathRef.current = path;
     setRawVideoPath(path);
-    setVideoSrc((previous) => {
-      if (previous?.startsWith('blob:')) {
-        try {
-          URL.revokeObjectURL(previous);
-        } catch {}
-      }
-      return path ? convertFileSrc(path) : null;
-    });
+    const token = ++videoLoadTokenRef.current;
+    setVideoSrc(null);
+    if (!path) return;
+    // WebKitGTK cannot play Tauri's asset: scheme directly; use a blob URL.
+    void mediaUrlFor(path)
+      .then((url) => {
+        if (videoLoadTokenRef.current === token) setVideoSrc(url);
+      })
+      .catch((err) => {
+        console.warn('[App] video load failed:', err);
+        if (videoLoadTokenRef.current === token) setVideoSrc(null);
+      });
   }, []);
 
   const applyProject = useCallback(
@@ -439,6 +448,73 @@ export function App() {
     },
     [updateItem]
   );
+
+  const autoSynthTimersRef = useRef<Map<string, number>>(new Map());
+
+  const scheduleVoiceResynthesis = useCallback(
+    (id: string) => {
+      const previous = autoSynthTimersRef.current.get(id);
+      if (previous) window.clearTimeout(previous);
+      const timer = window.setTimeout(() => {
+        autoSynthTimersRef.current.delete(id);
+        void ensureVoiceAudio(id);
+      }, 650);
+      autoSynthTimersRef.current.set(id, timer);
+    },
+    [ensureVoiceAudio]
+  );
+
+  /**
+   * Inspector edits that change the spoken audio invalidate the cached WAV
+   * immediately and re-synthesize after typing/sliding settles. Other fields
+   * (expression, position, volume) stay instant and don't call the engine.
+   */
+  const handleInspectorUpdate = useCallback(
+    (id: string, updates: Partial<TimelineItem>) => {
+      const item = projectRef.current.items.find((entry) => entry.id === id);
+      const affectsAudio =
+        item?.type === 'voice' &&
+        ['text', 'characterId', 'speedScale', 'pitchScale'].some((key) =>
+          Object.prototype.hasOwnProperty.call(updates, key)
+        );
+
+      if (!affectsAudio) {
+        updateItem(id, updates);
+        return;
+      }
+
+      const nextText =
+        typeof (updates as Partial<VoiceItem>).text === 'string'
+          ? (updates as Partial<VoiceItem>).text || ''
+          : (item as VoiceItem).text;
+      const timer = autoSynthTimersRef.current.get(id);
+      if (timer) {
+        window.clearTimeout(timer);
+        autoSynthTimersRef.current.delete(id);
+      }
+
+      updateItem(id, {
+        ...updates,
+        audioBlob: undefined,
+        audioBlobUrl: undefined,
+        audioKey: undefined,
+        phonemes: undefined,
+        isSynthesizing: nextText.trim().length > 0,
+      } as Partial<TimelineItem>);
+
+      if (nextText.trim().length > 0) {
+        scheduleVoiceResynthesis(id);
+      }
+    },
+    [scheduleVoiceResynthesis, updateItem]
+  );
+
+  useEffect(() => {
+    return () => {
+      autoSynthTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+      autoSynthTimersRef.current.clear();
+    };
+  }, []);
 
   // Hydrate audio for projects loaded from YAML/cache without re-synthesizing.
   useEffect(() => {
@@ -652,6 +728,51 @@ export function App() {
     return () => window.clearTimeout(timer);
   }, [project, videoDuration]);
 
+  // Make the final edit durable even if the app is closed before the debounce.
+  useEffect(() => {
+    const flush = () => {
+      if (!autosaveEnabledRef.current) return;
+      autosaveProjectOnUnload(projectWithDuration(projectRef.current, videoDurationRef.current));
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush();
+    };
+    window.addEventListener('beforeunload', flush);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      window.removeEventListener('beforeunload', flush);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, []);
+
+  // Tauri close requests can be paused until the native autosave is written.
+  useEffect(() => {
+    if (!isTauriRuntime()) return;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void getCurrentWindow()
+      .onCloseRequested(async (event) => {
+        if (closingRef.current) return;
+        if (!autosaveEnabledRef.current) return;
+        event.preventDefault();
+        try {
+          await autosaveProject(projectWithDuration(projectRef.current, videoDurationRef.current));
+        } finally {
+          closingRef.current = true;
+          await getCurrentWindow().close();
+        }
+      })
+      .then((un) => {
+        if (disposed) un();
+        else unlisten = un;
+      })
+      .catch((err) => console.warn('[App] close handler failed:', err));
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   useEffect(() => {
     void saveCharactersToConfig(characters);
   }, [characters]);
@@ -764,13 +885,11 @@ export function App() {
   useEffect(() => {
     const initialPath = projectRef.current.timeline.videoPath;
     if (initialPath) {
-      rawVideoPathRef.current = initialPath;
-      setRawVideoPath(initialPath);
-      setVideoSrc(convertFileSrc(initialPath));
+      syncVideoSource(initialPath);
     }
     setVideoDuration(projectRef.current.timeline.duration || 15);
     videoDurationRef.current = projectRef.current.timeline.duration || 15;
-  }, []);
+  }, [syncVideoSource]);
 
   /* ------------------------------------------------------------------ */
   /* Item creation                                                       */
@@ -976,6 +1095,17 @@ export function App() {
 
   const handleDeleteItem = useCallback(
     (id: string) => {
+      const item = projectRef.current.items.find((it) => it.id === id);
+      if (item) {
+        const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
+        if (
+          item.locked ||
+          projectRef.current.tracks?.find((track) => track.id === trackKind)?.locked
+        ) {
+          setToast('Track is locked. Unlock it before deleting items.');
+          return;
+        }
+      }
       commitProject((previous) => ({
         ...previous,
         items: previous.items.filter((item) => item.id !== id),
@@ -1003,21 +1133,129 @@ export function App() {
     [commitProject]
   );
 
+  const handleCopyItem = useCallback((id: string) => {
+    const item = projectRef.current.items.find((entry) => entry.id === id);
+    if (!item) return;
+    clipboardRef.current = { ...item } as TimelineItem;
+    setToast(`Copied ${item.name || item.type}`);
+  }, []);
+
+  const handlePasteItem = useCallback(() => {
+    const source = clipboardRef.current;
+    if (!source) return;
+    const clone: TimelineItem = {
+      ...source,
+      id: newId(source.type),
+      name: `${source.name || source.type} copy`,
+      startTime: Number(currentTimeRef.current.toFixed(3)),
+    };
+    commitProject((previous) => ({ ...previous, items: [...previous.items, clone] }));
+    setSelectedItemId(clone.id);
+    setInspectedItemId(clone.id);
+    setToast('Pasted item at playhead');
+  }, [commitProject]);
+
   const handleSplitItem = async (id: string, splitTime: number) => {
-    const item = projectRef.current.items.find((it) => it.id === id);
-    if (!item || item.type !== 'voice') return;
-    if (splitTime <= item.startTime || splitTime >= item.startTime + item.duration) return;
+    const current = projectRef.current;
+    const item = current.items.find((it) => it.id === id);
+    if (!item || splitTime <= item.startTime || splitTime >= item.startTime + item.duration) return;
 
-    const splitRatio = (splitTime - item.startTime) / item.duration;
-    const cutIndex = Math.max(1, Math.floor(item.text.length * splitRatio));
-    const firstText = item.text.slice(0, cutIndex).trim();
-    const secondText = item.text.slice(cutIndex).trim();
-    if (!firstText || !secondText) return;
+    const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
+    if (current.tracks?.find((track) => track.id === trackKind)?.locked) {
+      setToast('Track is locked. Unlock it before splitting items.');
+      return;
+    }
 
-    updateItem(id, { text: firstText });
-    await ensureVoiceAudio(id, true);
-    await handleAddVoiceItem(item.characterId, secondText, splitTime);
+    const endTime = item.startTime + item.duration;
+
+    if (item.type === 'voice') {
+      const splitRatio = (splitTime - item.startTime) / item.duration;
+      const cutIndex = Math.max(1, Math.floor(item.text.length * splitRatio));
+      const firstText = item.text.slice(0, cutIndex).trim();
+      const secondText = item.text.slice(cutIndex).trim();
+      if (!firstText || !secondText) return;
+
+      updateItem(id, {
+        text: firstText,
+        subtitleText: undefined,
+        duration: splitTime - item.startTime,
+        audioBlob: undefined,
+        audioBlobUrl: undefined,
+        audioKey: undefined,
+        isSynthesizing: true,
+      } as Partial<TimelineItem>);
+      await ensureVoiceAudio(id, true);
+
+      // The first half may resynthesize shorter/longer than the original
+      // split point. Start the second half just after it and keep every
+      // voice setting (speed, pitch, expression, animation, volume).
+      const first = projectRef.current.items.find((entry) => entry.id === id);
+      const firstEnd = first ? first.startTime + first.duration : splitTime;
+      const secondStart = Number(Math.max(splitTime, firstEnd + 0.15).toFixed(2));
+      const clone: VoiceItem = {
+        ...item,
+        id: newId('voice'),
+        name: `${item.name} (2)`,
+        text: secondText,
+        subtitleText: undefined,
+        startTime: secondStart,
+        duration: Math.max(0.2, endTime - splitTime),
+        audioBlob: undefined,
+        audioBlobUrl: undefined,
+        audioKey: undefined,
+        phonemes: undefined,
+        isSynthesizing: true,
+      };
+      commitProject((previous) => ({ ...previous, items: [...previous.items, clone] }));
+      setSelectedItemId(clone.id);
+      await ensureVoiceAudio(clone.id);
+      setToast('Split voice item');
+      return;
+    }
+
+    if (item.type === 'text') {
+      const splitRatio = (splitTime - item.startTime) / item.duration;
+      const cutIndex = Math.max(1, Math.floor(item.text.length * splitRatio));
+      const firstText = item.text.slice(0, cutIndex).trim();
+      const secondText = item.text.slice(cutIndex).trim();
+      if (!firstText || !secondText) return;
+      const clone: TextItem = {
+        ...item,
+        id: newId('text'),
+        name: `${item.name} (2)`,
+        text: secondText,
+        startTime: splitTime,
+        duration: endTime - splitTime,
+      };
+      updateItem(id, { text: firstText, duration: splitTime - item.startTime });
+      commitProject((previous) => ({ ...previous, items: [...previous.items, clone] }));
+      setToast('Split text item');
+      return;
+    }
+
+    if (item.type === 'audio') {
+      const clone: AudioItem = {
+        ...item,
+        id: newId('audio'),
+        name: `${item.name} (2)`,
+        startTime: splitTime,
+        duration: endTime - splitTime,
+        offset: Math.max(0, item.offset ?? 0) + (splitTime - item.startTime),
+      };
+      updateItem(id, { duration: splitTime - item.startTime });
+      commitProject((previous) => ({ ...previous, items: [...previous.items, clone] }));
+      setToast('Split audio item');
+      return;
+    }
+
+    setToast('Only voice, text, and audio items can be split.');
   };
+
+  const handleSplitSelected = useCallback(() => {
+    const id = selectedItemIdRef.current;
+    if (!id) return;
+    void handleSplitItem(id, currentTimeRef.current);
+  }, [handleSplitItem]);
 
   const handlePlaySingle = async (item: VoiceItem) => {
     const url = await ensureVoiceAudio(item.id);
@@ -1497,6 +1735,17 @@ export function App() {
           if (selected) handleDuplicateItem(selected);
           return;
         }
+        if (!editable && key === 'c') {
+          event.preventDefault();
+          const selected = selectedItemIdRef.current;
+          if (selected) handleCopyItem(selected);
+          return;
+        }
+        if (!editable && key === 'v') {
+          event.preventDefault();
+          handlePasteItem();
+          return;
+        }
         return;
       }
 
@@ -1518,6 +1767,11 @@ export function App() {
         if (selected) handleDeleteItem(selected);
         return;
       }
+      if (event.key.toLowerCase() === 's') {
+        event.preventDefault();
+        handleSplitSelected();
+        return;
+      }
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
         handleSeek(currentTimeRef.current - (event.shiftKey ? 1 : 1 / 30));
@@ -1532,13 +1786,16 @@ export function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
+    handleCopyItem,
     handleDeleteItem,
     handleDuplicateItem,
     handleNewProject,
     handleOpenProject,
+    handlePasteItem,
     handleRedo,
     handleSaveProject,
     handleSeek,
+    handleSplitSelected,
     handleTogglePlay,
     handleUndo,
   ]);
@@ -1676,6 +1933,7 @@ export function App() {
             height={project.timeline.height}
             tracks={tracks}
             showTerminal={terminalOverlayEnabled}
+            videoVolume={project.timeline.videoVolume ?? 1}
           />
         </div>
 
@@ -1773,6 +2031,7 @@ export function App() {
               setSelectedItemId(id);
               setInspectedItemId(id);
             }}
+            onSplitSelected={handleSplitSelected}
           />
         </div>
       ) : (
@@ -1857,7 +2116,7 @@ export function App() {
         item={inspectedItem}
         characters={characters}
         onClose={() => setInspectedItemId(null)}
-        onUpdate={updateItem}
+        onUpdate={handleInspectorUpdate}
         onDelete={handleDeleteItem}
         onSeek={handleSeek}
         onSynthesize={handleSynthesizeItem}

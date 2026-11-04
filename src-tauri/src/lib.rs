@@ -699,6 +699,8 @@ pub struct ExportAudioClip {
     pub duration: f64,
     pub volume: f64,
     #[serde(default)]
+    pub offset: f64,
+    #[serde(default)]
     pub loop_audio: bool,
     #[serde(default)]
     pub fade_in: f64,
@@ -730,6 +732,14 @@ struct ExportProgress {
     message: String,
 }
 
+/// Shared handle for the FFmpeg process currently owned by an export.
+/// The UI can cancel a render even while the blocking encode command is running.
+#[derive(Default)]
+struct ExportProcessState {
+    child: std::sync::Arc<std::sync::Mutex<Option<std::process::Child>>>,
+    cancelled: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
 #[tauri::command]
 fn begin_export_job() -> Result<String, String> {
     let stamp = std::time::SystemTime::now()
@@ -751,8 +761,28 @@ fn write_export_frame(job_dir: String, index: u32, png_base64: String) -> Result
 }
 
 #[tauri::command]
-fn cancel_export_job(job_dir: String) -> Result<(), String> {
+fn cancel_export_job(
+    job_dir: String,
+    output_path: Option<String>,
+    state: tauri::State<'_, ExportProcessState>,
+) -> Result<(), String> {
+    state
+        .cancelled
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    let child = state
+        .child
+        .lock()
+        .map_err(|_| "エクスポート状態ロック失敗".to_string())?
+        .take();
+    if let Some(mut child) = child {
+        let _ = child.kill();
+        let _ = child.wait();
+    }
     let _ = fs::remove_dir_all(&job_dir);
+    if let Some(output_path) = output_path {
+        let clean = expand_tilde(&output_path);
+        let _ = fs::remove_file(clean);
+    }
     Ok(())
 }
 
@@ -775,12 +805,30 @@ fn probe_has_audio(path: &str) -> bool {
 }
 
 #[tauri::command]
-fn finish_export_job(
+async fn finish_export_job(
+    payload: ExportJobPayload,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    // FFmpeg can run for minutes. Keep it off the main thread so the UI keeps
+    // receiving `export-progress` events and the cancel button stays usable.
+    tauri::async_runtime::spawn_blocking(move || finish_export_job_blocking(payload, app))
+        .await
+        .map_err(|e| format!("エクスポートタスク失敗: {}", e))?
+}
+
+fn finish_export_job_blocking(
     payload: ExportJobPayload,
     app: tauri::AppHandle,
 ) -> Result<String, String> {
     use std::io::{BufRead, BufReader};
-    use tauri::Emitter;
+    use std::sync::atomic::Ordering;
+    use tauri::{Emitter, Manager};
+
+    let state = app.state::<ExportProcessState>();
+
+    state
+        .cancelled
+        .store(false, std::sync::atomic::Ordering::SeqCst);
 
     let frames_dir = std::path::Path::new(&payload.job_dir).join("frames");
     if !frames_dir.exists() {
@@ -872,9 +920,13 @@ fn finish_export_job(
 
     for (i, clip) in audio_input_indices.iter().enumerate() {
         let input_idx = 2 + i;
+        let offset = clip.offset.max(0.0);
+        let source_end = offset + clip.duration.max(0.05);
         let mut chain = format!(
-            "[{}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={}",
+            "[{}:a]atrim=start={}:end={},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo,volume={}",
             input_idx,
+            offset,
+            source_end,
             clip.volume.max(0.0)
         );
         if clip.fade_in > 0.001 {
@@ -885,12 +937,10 @@ fn finish_export_job(
             chain.push_str(&format!(",afade=t=out:st={}:d={}", start, clip.fade_out));
         }
         let delay_ms = (clip.start.max(0.0) * 1000.0) as u64;
-        let trim_end = (clip.start + clip.duration).max(0.1);
         chain.push_str(&format!(
-            ",adelay={}|{},atrim=0:{},asetpts=PTS-STARTPTS[a{}];",
+            ",adelay={}|{},asetpts=PTS-STARTPTS[a{}];",
             delay_ms,
             delay_ms,
-            trim_end,
             i
         ));
         filter.push_str(&chain);
@@ -959,12 +1009,14 @@ fn finish_export_job(
         .map_err(|e| format!("FFmpeg起動失敗: {}", e))?;
 
     let stdout = child.stdout.take();
-    if let Some(stdout) = stdout {
+    let stderr = child.stderr.take();
+
+    let stdout_thread = if let Some(stdout) = stdout {
         let app_handle = app.clone();
         let total = duration;
-        std::thread::spawn(move || {
+        Some(std::thread::spawn(move || {
             let reader = BufReader::new(stdout);
-            for line in reader.lines().flatten() {
+            for line in reader.lines().map_while(Result::ok) {
                 if let Some(value) = line.strip_prefix("out_time_ms=") {
                     if let Ok(ms) = value.trim().parse::<f64>() {
                         let percent = ((ms / 1_000_000.0) / total * 100.0).clamp(0.0, 100.0);
@@ -979,16 +1031,90 @@ fn finish_export_job(
                     }
                 }
             }
-        });
+        }))
+    } else {
+        None
+    };
+
+    // Drain stderr concurrently; FFmpeg writes a lot to it and a full pipe
+    // would otherwise deadlock the encoder.
+    let stderr_thread = std::thread::spawn(move || {
+        use std::io::Read;
+        let mut text = String::new();
+        if let Some(mut stderr) = stderr {
+            let _ = stderr.read_to_string(&mut text);
+        }
+        text
+    });
+
+    {
+        let mut guard = state
+            .child
+            .lock()
+            .map_err(|_| "エクスポート状態ロック失敗".to_string())?;
+        *guard = Some(child);
     }
 
-    let output = child
-        .wait_with_output()
-        .map_err(|e| format!("FFmpeg実行失敗: {}", e))?;
+    let mut exit_status: Option<std::process::ExitStatus> = None;
+    loop {
+        if state.cancelled.load(Ordering::SeqCst) {
+            let child = state
+                .child
+                .lock()
+                .map_err(|_| "エクスポート状態ロック失敗".to_string())?
+                .take();
+            if let Some(mut child) = child {
+                let _ = child.kill();
+                let _ = child.wait();
+            }
+            break;
+        }
 
-    if !output.status.success() {
-        let err = String::from_utf8_lossy(&output.stderr);
-        let tail: String = err.lines().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+        let mut guard = state
+            .child
+            .lock()
+            .map_err(|_| "エクスポート状態ロック失敗".to_string())?;
+        match guard.as_mut() {
+            Some(child) => match child.try_wait() {
+                Ok(Some(status)) => {
+                    exit_status = Some(status);
+                    *guard = None;
+                    break;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    *guard = None;
+                    return Err(format!("FFmpeg待機失敗: {}", e));
+                }
+            },
+            None => break,
+        }
+        drop(guard);
+        std::thread::sleep(std::time::Duration::from_millis(40));
+    }
+
+    if let Some(handle) = stdout_thread {
+        let _ = handle.join();
+    }
+    let stderr_text = stderr_thread.join().unwrap_or_default();
+
+    if state.cancelled.load(Ordering::SeqCst) {
+        let _ = fs::remove_dir_all(&payload.job_dir);
+        let _ = fs::remove_file(&output_path);
+        return Err("エクスポートはキャンセルされました".to_string());
+    }
+
+    let succeeded = exit_status.map(|status| status.success()).unwrap_or(false);
+    if !succeeded {
+        let tail: String = stderr_text
+            .lines()
+            .rev()
+            .take(12)
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .collect::<Vec<_>>()
+            .join("\n");
         return Err(format!("FFmpeg書き出しエラー:\n{}", tail));
     }
 
@@ -1008,6 +1134,7 @@ fn finish_export_job(
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(ExportProcessState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![

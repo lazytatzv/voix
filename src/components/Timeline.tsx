@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ZoomIn,
   ZoomOut,
@@ -17,9 +17,11 @@ import {
   Trash2,
   SlidersHorizontal,
   Maximize2,
+  Scissors,
 } from 'lucide-react';
 import { Character, ItemType, TimelineItem, TrackKind, TrackState } from '../types';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
+import { getWaveformPeaks } from '../services/waveformCache';
 
 interface TimelineProps {
   items: TimelineItem[];
@@ -37,6 +39,7 @@ interface TimelineProps {
   onAddItem: (type: ItemType) => void;
   onUpdateTrack: (id: TrackKind, updates: Partial<TrackState>) => void;
   onInspectItem: (id: string) => void;
+  onSplitSelected?: () => void;
 }
 
 interface RowDef {
@@ -57,6 +60,7 @@ const ROWS: RowDef[] = [
 ];
 
 const RULER_HEIGHT = 24;
+const HEADER_WIDTH = 184;
 
 const ITEM_COLORS: Record<string, { bg: string; border: string; text: string }> = {
   voice: { bg: '#075985', border: '#0ea5e9', text: '#e0f2fe' },
@@ -76,6 +80,56 @@ function rulerStep(pxPerSecond: number): number {
   return candidates.find((step) => step * pxPerSecond >= 62) || 600;
 }
 
+interface WaveformProps {
+  cacheKey: string;
+  src: string;
+  blob?: Blob;
+  color: string;
+}
+
+const Waveform: React.FC<WaveformProps> = ({ cacheKey, src, blob, color }) => {
+  const [peaks, setPeaks] = useState<number[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setPeaks([]);
+    void getWaveformPeaks(cacheKey, src, blob).then((next) => {
+      if (!cancelled) setPeaks(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [cacheKey, src, blob]);
+
+  if (peaks.length === 0) return null;
+
+  const path = peaks
+    .map((peak, index) => {
+      const x = peaks.length === 1 ? 50 : (index / (peaks.length - 1)) * 100;
+      const height = Math.max(2, peak * 92);
+      return `M${x.toFixed(2)} ${(50 - height / 2).toFixed(2)}V${(50 + height / 2).toFixed(2)}`;
+    })
+    .join('');
+
+  return (
+    <svg
+      className="absolute inset-0 w-full h-full pointer-events-none"
+      viewBox="0 0 100 100"
+      preserveAspectRatio="none"
+      aria-hidden="true"
+    >
+      <path
+        d={path}
+        stroke={color}
+        strokeWidth={1}
+        strokeLinecap="round"
+        opacity={0.55}
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
+};
+
 export const Timeline: React.FC<TimelineProps> = ({
   items,
   characters,
@@ -92,6 +146,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onAddItem,
   onUpdateTrack,
   onInspectItem,
+  onSplitSelected,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -120,7 +175,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       const container = scrollRef.current;
       if (!container) return;
       const rect = container.getBoundingClientRect();
-      const x = clientX - rect.left + container.scrollLeft - 128; // label column width
+      const x = clientX - rect.left + container.scrollLeft - HEADER_WIDTH; // label column width
       onSeek(snapTime(xToTime(x), !disableSnap));
     },
     [onSeek, pxPerSecond]
@@ -142,6 +197,11 @@ export const Timeline: React.FC<TimelineProps> = ({
     e.stopPropagation();
     e.preventDefault();
     if (e.button !== 0) return;
+    const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
+    if (item.locked || tracks.find((track) => track.id === trackKind)?.locked) {
+      onSelectItem(item.id);
+      return;
+    }
     const startX = e.clientX;
     const startTime = item.startTime;
     const startDuration = item.duration;
@@ -186,12 +246,30 @@ export const Timeline: React.FC<TimelineProps> = ({
     const color = ITEM_COLORS[item.type];
     const isSelected = selectedItemId === item.id;
     const isDragging = draggingItemId === item.id;
+    const locked = item.locked || tracks.find((track) => track.id === rowKind)?.locked;
 
     let label = item.name;
     if (item.type === 'voice') label = getSubtitleDisplayText(item.text);
     if (item.type === 'text') label = item.text;
     if (item.type === 'audio') label = item.name || item.src.split('/').pop() || 'Audio';
     if (item.type === 'image') label = item.name || item.src.split('/').pop() || 'Image';
+
+    const waveform =
+      item.type === 'voice' && item.audioBlob ? (
+        <Waveform
+          cacheKey={item.audioKey || item.audioBlobUrl || item.id}
+          src={item.audioBlobUrl || ''}
+          blob={item.audioBlob}
+          color="#e0f2fe"
+        />
+      ) : item.type === 'audio' && item.src ? (
+        <Waveform
+          cacheKey={item.audioKey || item.src}
+          src={item.src}
+          blob={item.audioBlob}
+          color="#fef3c7"
+        />
+      ) : null;
 
     return (
       <div
@@ -203,45 +281,54 @@ export const Timeline: React.FC<TimelineProps> = ({
         }}
         onMouseEnter={() => setHoveredItemId(item.id)}
         onMouseLeave={() => setHoveredItemId(null)}
-        className={`group absolute top-1 bottom-1 rounded-[2px] flex items-center px-1.5 text-xs cursor-grab active:cursor-grabbing select-none overflow-hidden ${
+        className={`group absolute top-1 bottom-1 rounded-[2px] flex items-center px-1.5 text-xs select-none overflow-hidden ${
+          locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'
+        } ${
           isDragging ? 'ring-2 ring-white z-30 shadow-lg' : isSelected ? 'ring-1 ring-white z-20' : 'z-10'
         }`}
         style={{
           left,
           width,
-          backgroundColor: item.type === 'voice' ? color.bg : color.bg,
+          backgroundColor: color.bg,
           color: color.text,
           border: `1px solid ${item.type === 'voice' ? charColor(item.characterId) : color.border}`,
           opacity: item.hidden ? 0.35 : 1,
           boxShadow: isSelected ? `0 0 0 1px ${color.border}` : undefined,
         }}
-        title={`${label}\n${item.startTime.toFixed(2)}s → ${(item.startTime + item.duration).toFixed(2)}s\nDrag to move / right edge to resize / double-click to inspect`}
+        title={`${label}\n${item.startTime.toFixed(2)}s → ${(item.startTime + item.duration).toFixed(2)}s\n${
+          locked
+            ? 'Track is locked — unlock it in the track header to edit'
+            : 'Drag to move / right edge to resize / double-click to inspect'
+        }`}
       >
+        {waveform}
         {item.type === 'voice' && (
           <span
-            className="w-1 self-stretch mr-1 flex-shrink-0"
+            className="relative z-10 w-1 self-stretch mr-1 flex-shrink-0"
             style={{ backgroundColor: charColor(item.characterId) }}
           />
         )}
-        <span className="truncate font-mono text-[11px]">{label}</span>
-        {(hoveredItemId === item.id || isSelected) && item.type !== 'voice' && (
+        <span className="relative z-10 truncate font-mono text-[11px]">{label}</span>
+        {(hoveredItemId === item.id || isSelected) && !locked && (
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
               onDeleteItem(item.id);
             }}
-            className="ml-auto p-0.5 text-white/70 hover:text-white flex-shrink-0"
+            className="relative z-10 ml-auto p-0.5 text-white/70 hover:text-white flex-shrink-0"
             title="Delete item"
           >
             <Trash2 className="w-3 h-3" />
           </button>
         )}
-        <div
-          onMouseDown={(e) => beginItemDrag(e, item, 'resize')}
-          className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/40"
-          title="Resize duration"
-        />
+        {!locked && (
+          <div
+            onMouseDown={(e) => beginItemDrag(e, item, 'resize')}
+            className="absolute right-0 top-0 bottom-0 w-1.5 cursor-ew-resize hover:bg-white/40"
+            title="Resize duration"
+          />
+        )}
       </div>
     );
   };
@@ -289,6 +376,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                 <SlidersHorizontal className="w-3 h-3" />
                 Inspect
               </button>
+              {onSplitSelected && (
+                <button
+                  type="button"
+                  onClick={onSplitSelected}
+                  className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#c4c7c5] hover:text-white border border-[#2e3135] flex items-center gap-1"
+                  title="Split selected item at the playhead (S)"
+                >
+                  <Scissors className="w-3 h-3" />
+                  Split
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => onDeleteItem(selectedItemId)}
@@ -330,28 +428,34 @@ export const Timeline: React.FC<TimelineProps> = ({
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-auto min-h-0 relative">
-        <div className="flex" style={{ width: 128 + timelineWidth }}>
+        <div className="flex" style={{ width: HEADER_WIDTH + timelineWidth }}>
           {/* Left sticky track headers */}
-          <div className="sticky left-0 z-40 w-32 flex-shrink-0 bg-[#111214] border-r border-[#222426]">
+          <div
+            className="sticky left-0 z-40 flex-shrink-0 bg-[#111214] border-r border-[#222426]"
+            style={{ width: HEADER_WIDTH }}
+          >
             <div className="h-6 border-b border-[#222426] px-3 flex items-center text-[10px] font-mono text-[#8e918f] uppercase">
               Tracks
             </div>
             {ROWS.map((row) => {
               const track = tracks.find((t) => t.id === row.kind);
               const Icon = row.icon;
+              const dimmed = track?.visible === false;
               return (
                 <div
                   key={row.kind}
-                  className="border-b border-[#222426] px-2 flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5]"
+                  className={`border-b border-[#222426] px-1.5 flex items-center gap-1 text-[11px] font-mono text-[#c4c7c5] ${
+                    dimmed ? 'opacity-55' : ''
+                  }`}
                   style={{ height: row.height }}
                 >
                   <Icon className="w-3 h-3 text-[#8e918f] flex-shrink-0" />
-                  <span className="truncate flex-1">{row.label}</span>
+                  <span className="truncate flex-1 min-w-0 text-[10px]">{row.label}</span>
                   {row.addType && (
                     <button
                       type="button"
                       onClick={() => onAddItem(row.addType!)}
-                      className="p-0.5 rounded hover:bg-[#25272a] text-[#8ab4f8]"
+                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#25272a] text-[#8ab4f8] flex-shrink-0"
                       title={`Add ${row.label} item at playhead`}
                     >
                       <Plus className="w-3 h-3" />
@@ -362,7 +466,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       <button
                         type="button"
                         onClick={() => onUpdateTrack(row.kind, { visible: !track.visible })}
-                        className="p-0.5 rounded hover:bg-[#25272a] text-[#8e918f]"
+                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#25272a] text-[#8e918f] flex-shrink-0"
                         title={track.visible ? 'Hide track in preview/export' : 'Show track'}
                       >
                         {track.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3 text-rose-400" />}
@@ -370,7 +474,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       <button
                         type="button"
                         onClick={() => onUpdateTrack(row.kind, { muted: !track.muted })}
-                        className="p-0.5 rounded hover:bg-[#25272a] text-[#8e918f]"
+                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#25272a] text-[#8e918f] flex-shrink-0"
                         title={track.muted ? 'Unmute track' : 'Mute track'}
                       >
                         {track.muted ? <VolumeX className="w-3 h-3 text-rose-400" /> : <Volume2 className="w-3 h-3" />}
@@ -378,7 +482,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                       <button
                         type="button"
                         onClick={() => onUpdateTrack(row.kind, { locked: !track.locked })}
-                        className="p-0.5 rounded hover:bg-[#25272a] text-[#8e918f]"
+                        className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#25272a] text-[#8e918f] flex-shrink-0"
                         title={track.locked ? 'Unlock track' : 'Lock track (prevent edits)'}
                       >
                         {track.locked ? <Lock className="w-3 h-3 text-amber-400" /> : <Unlock className="w-3 h-3" />}

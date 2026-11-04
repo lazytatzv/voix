@@ -111,6 +111,30 @@ export async function readProjectPath(path: string): Promise<VoixProject> {
   return projectFromYaml(text);
 }
 
+/** Synchronously mirror the autosave into localStorage (safe inside beforeunload). */
+export function autosaveProjectLocalOnly(project: VoixProject): void {
+  try {
+    localStorage.setItem(AUTOSAVE_LOCAL_KEY, projectToYaml(projectWithDuration(project)));
+  } catch (err) {
+    console.warn('[projectService] localStorage autosave skipped:', err);
+  }
+}
+
+/** Fire-and-forget native autosave used when the window is closing. */
+export function autosaveProjectOnUnload(project: VoixProject): void {
+  autosaveProjectLocalOnly(project);
+  if (!isTauriRuntime()) return;
+  const yaml = projectToYaml(projectWithDuration(project));
+  void invoke<string>('get_config_dir_path')
+    .then((configDir) =>
+      invoke('write_text_file', {
+        path: `${configDir}/${AUTOSAVE_FILE_NAME}`,
+        content: yaml,
+      })
+    )
+    .catch((err) => console.warn('[projectService] unload autosave failed:', err));
+}
+
 export async function autosaveProject(project: VoixProject): Promise<void> {
   const yaml = projectToYaml(projectWithDuration(project));
   try {

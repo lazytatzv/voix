@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   X,
   Download,
@@ -9,12 +9,13 @@ import {
   FolderOpen,
   Terminal,
   Gauge,
+  Square,
 } from 'lucide-react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
 import { save as saveDialog } from '@tauri-apps/plugin-dialog';
 import { ExportSettings, VoixProject } from '../types';
-import { executeExportVideo, ExportProgressEvent } from '../services/exportService';
+import { executeExportVideo, ExportProgressEvent, cancelActiveExport } from '../services/exportService';
 import { AppSettings, DEFAULT_APP_SETTINGS, loadSettingsFromConfig } from '../services/configService';
 import { isTauriRuntime } from '../services/audioCache';
 
@@ -67,9 +68,21 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [includeBackgroundAudio, setIncludeBackgroundAudio] = useState(true);
   const [showTerminalOverlay, setShowTerminalOverlay] = useState(true);
+  const exportActiveRef = useRef(false);
+  const abortRef = useRef<AbortController | null>(null);
 
   const duration = Math.max(project.timeline.duration, videoDuration || 0, 0.5);
   const estimatedFrames = Math.ceil(duration * settings.overlayFps);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    // Fresh modal each time it opens; keep the chosen output path/settings.
+    setResultMessage(null);
+    setErrorMessage(null);
+    setPercent(0);
+    setPhase('');
+    setStatus('');
+  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -101,11 +114,14 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     if (!isOpen || !isTauriRuntime()) return;
     let unlisten: UnlistenFn | undefined;
     listen<{ phase: string; percent: number; message: string }>('export-progress', (event) => {
+      // Ignore late FFmpeg events after the JS export promise has settled;
+      // they used to race the final 100% and leave the bar at 99%.
+      if (!exportActiveRef.current) return;
       const payload = event.payload;
       setPhase(payload.phase);
       setStatus(payload.message);
       if (payload.phase === 'encoding') {
-        setPercent(65 + Math.max(0, Math.min(100, payload.percent)) * 0.34);
+        setPercent(65 + Math.max(0, Math.min(100, payload.percent)) * 0.35);
       } else if (payload.phase === 'done') {
         setPercent(100);
       }
@@ -157,8 +173,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setPercent(0);
     setPhase('preparing');
     setStatus('Preparing project...');
+    const controller = new AbortController();
+    abortRef.current = controller;
+    exportActiveRef.current = true;
 
     const onProgress = (event: ExportProgressEvent) => {
+      if (!exportActiveRef.current) return;
       setPhase(event.phase);
       setStatus(event.message);
       setPercent(Math.max(0, Math.min(100, event.percent)));
@@ -182,6 +202,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         backgroundPath: videoPath,
         backgroundVolume: includeBackgroundAudio ? project.timeline.videoVolume ?? 1 : 0,
         showTerminal: showTerminalOverlay,
+        signal: controller.signal,
         onProgress,
       });
       setResultMessage(result);
@@ -189,11 +210,26 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       setPhase('done');
       setStatus('Export complete');
     } catch (err) {
-      setErrorMessage(String(err));
-      setPhase('error');
+      if (controller.signal.aborted) {
+        setPhase('cancelled');
+        setStatus('Export cancelled. Partial output was removed.');
+        setPercent(0);
+      } else {
+        setErrorMessage(String(err));
+        setPhase('error');
+      }
     } finally {
+      exportActiveRef.current = false;
+      abortRef.current = null;
       setIsExporting(false);
     }
+  };
+
+  const handleCancelExport = () => {
+    abortRef.current?.abort();
+    exportActiveRef.current = false;
+    void cancelActiveExport();
+    setStatus('Cancelling export...');
   };
 
   const setResolution = (index: number) => {
@@ -389,7 +425,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
           </div>
 
-          {(isExporting || percent > 0 || errorMessage || resultMessage) && (
+          {(isExporting || percent > 0 || errorMessage || resultMessage || phase === 'cancelled') && (
             <section className="bg-[#0d0e10] border border-[#242629] rounded-sm p-3 space-y-2">
               <div className="flex items-center justify-between text-xs">
                 <span className="flex items-center gap-1.5 text-[#c4c7c5] font-mono uppercase">
@@ -397,6 +433,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                     <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
                   ) : resultMessage ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  ) : phase === 'cancelled' ? (
+                    <Square className="w-3 h-3 text-[#8e918f]" />
                   ) : (
                     <Loader2 className="w-3.5 h-3.5 text-[#8ab4f8] animate-spin" />
                   )}
@@ -407,7 +445,13 @@ export const ExportModal: React.FC<ExportModalProps> = ({
               <div className="h-1.5 w-full bg-[#222428] rounded-sm overflow-hidden">
                 <div
                   className={`h-full transition-all ${
-                    errorMessage ? 'bg-rose-500' : resultMessage ? 'bg-emerald-500' : 'bg-[#3b82f6]'
+                    errorMessage
+                      ? 'bg-rose-500'
+                      : resultMessage
+                      ? 'bg-emerald-500'
+                      : phase === 'cancelled'
+                      ? 'bg-[#4b5563]'
+                      : 'bg-[#3b82f6]'
                   }`}
                   style={{ width: `${Math.max(percent, isExporting ? 2 : 0)}%` }}
                 />
@@ -433,6 +477,15 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         </div>
 
         <div className="px-4 py-3 border-t border-[#242629] flex items-center justify-end gap-2 flex-shrink-0">
+          {isExporting && (
+            <button
+              type="button"
+              onClick={handleCancelExport}
+              className="px-3 py-1.5 text-xs text-rose-300 hover:text-rose-200 border border-[#4c1d24] bg-[#2a1518] rounded-sm hover:bg-[#35181c] flex items-center gap-1.5"
+            >
+              <Square className="w-3 h-3 fill-current" /> Cancel Export
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}

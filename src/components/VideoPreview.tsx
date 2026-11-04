@@ -3,7 +3,7 @@ import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User, FlipHorizont
 import { AudioItem, Character, TimelineItem, TrackState } from '../types';
 import { drawOverlayFrame } from '../render/overlayRenderer';
 import { loadImage, collectCharacterImageSources } from '../render/imageCache';
-import { toAssetUrl } from '../utils/imageUtils';
+import { mediaUrlFor } from '../utils/mediaUrl';
 
 interface VideoPreviewProps {
   videoSrc: string | null;
@@ -22,6 +22,8 @@ interface VideoPreviewProps {
   height?: number;
   tracks?: TrackState[];
   showTerminal?: boolean;
+  /** Background video volume from project settings (0 - 2). */
+  videoVolume?: number;
 }
 
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
@@ -41,12 +43,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   height = 1080,
   tracks,
   showTerminal = true,
+  videoVolume = 1,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const bgmAudiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  const bgmSrcsRef = useRef<Map<string, string>>(new Map());
   const currentTimeRef = useRef(currentTime);
   const isPlayingRef = useRef(isPlaying);
   const [isMuted, setIsMuted] = useState(false);
@@ -54,6 +58,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [imageVersion, setImageVersion] = useState(0);
   const pendingSeekTimeRef = useRef<number | null>(null);
+  const isMutedRef = useRef(isMuted);
+  isMutedRef.current = isMuted;
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -87,19 +93,30 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   );
   useEffect(() => {
     const map = bgmAudiosRef.current;
+    const srcs = bgmSrcsRef.current;
     const ids = new Set(audioItems.map((item) => item.id));
     map.forEach((audio, id) => {
       if (!ids.has(id)) {
         audio.pause();
         map.delete(id);
+        srcs.delete(id);
       }
     });
     audioItems.forEach((item) => {
-      if (map.has(item.id)) return;
-      const audio = new Audio(toAssetUrl(item.src));
+      const existing = map.get(item.id);
+      if (existing && srcs.get(item.id) === item.src) {
+        existing.loop = Boolean(item.loop);
+        return;
+      }
+      existing?.pause();
+      const audio = new Audio();
       audio.preload = 'auto';
       audio.loop = Boolean(item.loop);
       map.set(item.id, audio);
+      srcs.set(item.id, item.src);
+      void mediaUrlFor(item.src).then((url) => {
+        if (map.get(item.id) === audio) audio.src = url;
+      });
     });
   }, [audioItems]);
 
@@ -113,6 +130,18 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       video.pause();
     }
   }, [isPlaying, videoSrc]);
+
+  // Match the project's background-video level; the dedicated mute button
+  // silences all preview audio without discarding the configured volume.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.volume = Math.max(0, Math.min(1, videoVolume));
+  }, [videoVolume, videoSrc]);
+
+  useEffect(() => {
+    if (previewAudioRef.current) previewAudioRef.current.muted = isMuted;
+  }, [isMuted]);
 
   // Precise seek while paused.
   useEffect(() => {
@@ -160,20 +189,38 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   };
 
   useEffect(() => {
-    if (activeAudioUrl && previewAudioRef.current) {
-      previewAudioRef.current.src = activeAudioUrl;
-      previewAudioRef.current.play().catch(() => {});
+    const audio = previewAudioRef.current;
+    if (!audio) return;
+    if (activeAudioUrl) {
+      if (audio.src !== activeAudioUrl) audio.src = activeAudioUrl;
+      audio.muted = isMuted;
+      audio.play().catch(() => {});
+    } else {
+      audio.pause();
+      audio.removeAttribute('src');
     }
-  }, [activeAudioUrl]);
+  }, [activeAudioUrl, isMuted]);
+
+  // Draw the preview at a capped backing resolution. The project is still
+  // rendered in project coordinates, so text and images keep their layout
+  // while 4K projects avoid rendering millions of pixels every frame.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const scale = Math.min(1, 1280 / Math.max(1, width), 720 / Math.max(1, height));
+    canvas.width = Math.max(2, Math.round(width * scale));
+    canvas.height = Math.max(2, Math.round(height * scale));
+  }, [width, height]);
 
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    ctx.setTransform(canvas.width / Math.max(1, width), 0, 0, canvas.height / Math.max(1, height), 0, 0);
     drawOverlayFrame(ctx, {
-      width: canvas.width,
-      height: canvas.height,
+      width,
+      height,
       time: currentTime,
       characters,
       items,
@@ -183,22 +230,38 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       showTerminal,
       showSafeArea,
     });
-  }, [characters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion]);
+  }, [characters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height]);
+
+  const renderFrameRef = useRef(renderFrame);
+  renderFrameRef.current = renderFrame;
+
+  // Paused previews only redraw when the project, playhead or toggles change.
+  useEffect(() => {
+    if (!isPlaying) renderFrame();
+  }, [renderFrame, isPlaying]);
 
   useEffect(() => {
+    if (!isPlaying) {
+      bgmAudiosRef.current.forEach((audio) => audio.pause());
+      return;
+    }
+
     let raf = 0;
     const loop = () => {
-      renderFrame();
+      renderFrameRef.current();
 
       // Keep BGM / audio items in sync with the playhead.
       const map = bgmAudiosRef.current;
       audioItems.forEach((item) => {
         const audio = map.get(item.id);
         if (!audio) return;
-        const active = currentTimeRef.current >= item.startTime && currentTimeRef.current < item.startTime + item.duration;
+        const active =
+          currentTimeRef.current >= item.startTime &&
+          currentTimeRef.current < item.startTime + item.duration;
+        audio.muted = isMutedRef.current;
         audio.volume = Math.max(0, Math.min(1, item.volume ?? 1));
         if (isPlayingRef.current && active && tracks?.find((t) => t.id === 'audio')?.muted !== true) {
-          const expected = currentTimeRef.current - item.startTime;
+          const expected = currentTimeRef.current - item.startTime + Math.max(0, item.offset ?? 0);
           if (audio.paused) {
             try {
               audio.currentTime = Math.max(0, expected);
@@ -218,7 +281,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  }, [renderFrame, audioItems, tracks]);
+  }, [isPlaying, audioItems, tracks]);
 
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -352,7 +415,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           <button
             onClick={() => setIsMuted(!isMuted)}
             className="p-1.5 rounded-sm hover:bg-[#202226] text-[#9ca3af] hover:text-white border border-transparent hover:border-[#2a2c30] transition"
-            title={isMuted ? 'Unmute background video' : 'Mute background video'}
+            title={isMuted ? 'Unmute preview audio' : 'Mute preview audio'}
           >
             {isMuted ? <VolumeX className="w-4 h-4 text-rose-400" /> : <Volume2 className="w-4 h-4" />}
           </button>

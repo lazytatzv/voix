@@ -120,6 +120,8 @@ export interface AudioItem extends BaseTimelineItem {
   type: 'audio';
   src: string;
   volume: number;
+  /** Seconds trimmed from the start of the source audio. */
+  offset?: number;
   isBgm?: boolean;
   loop?: boolean;
   fadeIn?: number;

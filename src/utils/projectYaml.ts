@@ -64,7 +64,16 @@ export function computeProjectDuration(items: TimelineItem[], videoDuration = 0)
 
 function stripVolatileItemFields(item: TimelineItem): TimelineItem {
   if (item.type === 'voice') {
-    const { audioBlob: _blob, audioBlobUrl: _url, ...rest } = item;
+    const {
+      audioBlob: _blob,
+      audioBlobUrl: _url,
+      isSynthesizing: _synthesizing,
+      ...rest
+    } = item;
+    return rest as TimelineItem;
+  }
+  if (item.type === 'audio') {
+    const { audioBlob: _blob, ...rest } = item;
     return rest as TimelineItem;
   }
   return item;
@@ -201,6 +210,7 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
       type: 'audio',
       src: String(rec.src ?? ''),
       volume: Number(rec.volume ?? 1),
+      offset: rec.offset !== undefined ? Math.max(0, Number(rec.offset)) : 0,
       isBgm: Boolean(rec.isBgm),
       loop: Boolean(rec.loop),
       fadeIn: rec.fadeIn !== undefined ? Number(rec.fadeIn) : undefined,

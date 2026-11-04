@@ -491,7 +491,12 @@ function drawCharacters(
 
 export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: OverlayRenderOptions): void {
   const { width, height, time, items, characters, tracks } = options;
-  ctx.clearRect(0, 0, width, height);
+  // Clear the whole backing store even when the caller renders with a scale
+  // transform (the preview uses a capped-resolution canvas).
+  ctx.save();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+  ctx.restore();
 
   const visibleItems = items.filter((item) => !item.hidden);
   const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');

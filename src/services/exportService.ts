@@ -24,7 +24,7 @@ import { getSubtitleDisplayText } from '../utils/pronunciation';
 export { blobToBase64 };
 
 export interface ExportProgressEvent {
-  phase: 'preparing' | 'rendering' | 'encoding' | 'done' | 'error';
+  phase: 'preparing' | 'rendering' | 'encoding' | 'done' | 'error' | 'cancelled';
   percent: number;
   message: string;
 }
@@ -38,6 +38,8 @@ export interface ExecuteExportOptions {
   backgroundVolume?: number;
   /** Render terminal-style overlay boxes for voice items with terminal data. */
   showTerminal?: boolean;
+  /** Abort long frame renders. The Rust export job is cleaned up via cancelActiveExport. */
+  signal?: AbortSignal;
   onProgress?: (event: ExportProgressEvent) => void;
 }
 
@@ -46,9 +48,32 @@ interface AudioClipPayload {
   start: number;
   duration: number;
   volume: number;
+  /** Seconds trimmed from the source before the clip is placed. */
+  offset: number;
   loop_audio: boolean;
   fade_in: number;
   fade_out: number;
+}
+
+/** Rust-side temporary directory for the export currently in flight. */
+let activeJobDir: string | null = null;
+let activeOutputPath: string | null = null;
+
+/**
+ * Cancel the in-flight export. Safe to call from a UI cancel button: the
+ * Rust command also stops FFmpeg and removes the partially written output.
+ */
+export async function cancelActiveExport(): Promise<void> {
+  const jobDir = activeJobDir;
+  const outputPath = activeOutputPath;
+  if (!jobDir) return;
+  activeJobDir = null;
+  activeOutputPath = null;
+  try {
+    await invoke('cancel_export_job', { jobDir, outputPath });
+  } catch (err) {
+    console.warn('[export] cancel failed:', err);
+  }
 }
 
 function trackFlag(project: VoixProject, id: string, flag: 'visible' | 'muted'): boolean {
@@ -149,7 +174,18 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
 
   report({ phase: 'preparing', percent: 0, message: 'Preparing assets...' });
 
+  const throwIfAborted = () => {
+    if (options.signal?.aborted) {
+      const error = new Error('Export cancelled');
+      error.name = 'AbortError';
+      throw error;
+    }
+  };
+
+  throwIfAborted();
   const jobDir = await invoke<string>('begin_export_job');
+  activeJobDir = jobDir;
+  activeOutputPath = outputPath;
   try {
     // 1. Preload all images used by the compositor.
     const imageSources = collectCharacterImageSources(project.characters);
@@ -169,6 +205,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         (item): item is VoiceItem => item.type === 'voice' && !item.hidden && item.text.trim().length > 0
       );
       for (let i = 0; i < voices.length; i++) {
+        throwIfAborted();
         const item = voices[i];
         report({
           phase: 'preparing',
@@ -183,6 +220,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
             start: Math.max(0, item.startTime),
             duration: Math.max(0.05, item.duration),
             volume: Math.max(0, item.volumeScale ?? 1),
+            offset: 0,
             loop_audio: false,
             fade_in: 0,
             fade_out: 0,
@@ -196,6 +234,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
     if (!musicMuted) {
       const audios = audioItemsOf(project.items);
       for (let i = 0; i < audios.length; i++) {
+        throwIfAborted();
         const item = audios[i];
         try {
           const path = await sourceToWavPath(jobDir, item.src, 1000 + i, item.audioBlob);
@@ -205,6 +244,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
             start: Math.max(0, item.startTime),
             duration: Math.max(0.05, item.duration),
             volume: Math.max(0, item.volume ?? 1),
+            offset: Math.max(0, item.offset ?? 0),
             loop_audio: Boolean(item.loop),
             fade_in: Math.max(0, item.fadeIn ?? 0),
             fade_out: Math.max(0, item.fadeOut ?? 0),
@@ -224,6 +264,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
 
     const totalFrames = Math.max(1, Math.ceil(duration * overlayFps));
     for (let frame = 0; frame < totalFrames; frame++) {
+      throwIfAborted();
       const time = Math.min(duration - 0.0001, frame / overlayFps);
       drawOverlayFrame(ctx, {
         width,
@@ -252,6 +293,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
     }
 
     report({ phase: 'encoding', percent: 65, message: 'Encoding with FFmpeg...' });
+    throwIfAborted();
 
     const result = await invoke<string>('finish_export_job', {
       payload: {
@@ -270,13 +312,22 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         audio_clips: audioClips,
       },
     });
+    activeJobDir = null;
+    activeOutputPath = null;
     report({ phase: 'done', percent: 100, message: 'Export complete' });
     return result;
   } catch (err) {
-    try {
-      await invoke('cancel_export_job', { jobDir });
-    } catch {}
-    report({ phase: 'error', percent: 0, message: String(err) });
+    const aborted = options.signal?.aborted || (err instanceof Error && err.name === 'AbortError');
+    if (activeJobDir) {
+      await cancelActiveExport();
+    } else {
+      activeOutputPath = null;
+    }
+    if (aborted) {
+      report({ phase: 'cancelled', percent: 0, message: 'Export cancelled' });
+    } else {
+      report({ phase: 'error', percent: 0, message: String(err) });
+    }
     throw err;
   }
 }
