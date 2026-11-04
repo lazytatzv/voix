@@ -360,13 +360,34 @@ function drawTerminalWindow(
   ctx.restore();
 }
 
-function drawCharacters(
-  ctx: CanvasRenderingContext2D,
+export interface CharacterLayout {
+  character: Character;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  flipped: boolean;
+}
+
+interface CharacterSprite {
+  character: Character;
+  charVoice: VoiceItem | undefined;
+  idleImg: HTMLImageElement | null;
+  activeImg: HTMLImageElement;
+  isSpeaking: boolean;
+}
+
+/**
+ * Resolve which tachie is actually visible in each slot. The renderer shows
+ * one character per left/center/right slot: the active speaker, the most
+ * recent speaker in that slot, or the first character assigned there.
+ */
+function resolveCharacterSprites(
   options: OverlayRenderOptions,
   activeVoice: VoiceItem | undefined,
   voices: VoiceItem[]
-) {
-  const { time, width, height, characters, isPlaying } = options;
+): CharacterSprite[] {
+  const { time, characters, isPlaying } = options;
   const slots: Record<'left' | 'right' | 'center', Character[]> = {
     left: [],
     right: [],
@@ -377,6 +398,8 @@ function drawCharacters(
     if (char.position === 'hidden' || !char.avatar?.idle) return;
     if (slots[char.position]) slots[char.position].push(char);
   });
+
+  const sprites: CharacterSprite[] = [];
 
   (Object.keys(slots) as Array<'left' | 'right' | 'center'>).forEach((pos) => {
     const charsInSlot = slots[pos];
@@ -434,56 +457,117 @@ function drawCharacters(
     }
     if (!activeImg) return;
 
+    sprites.push({ character: char, charVoice, idleImg, activeImg, isSpeaking });
+  });
+
+  return sprites;
+}
+
+function computeCharacterLayout(
+  sprite: CharacterSprite,
+  options: OverlayRenderOptions,
+  withAnimation: boolean
+): CharacterLayout & { alpha: number } {
+  const { time, width, height, isPlaying } = options;
+  const { character: char, charVoice, idleImg, activeImg, isSpeaking } = sprite;
+
+  let animOffsetX = 0;
+  let animOffsetY = 0;
+  let animScale = 1;
+  let alpha = 1;
+  if (withAnimation && isSpeaking && isPlaying && charVoice) {
+    const progress = time - charVoice.startTime;
+    const anim = charVoice.anim || 'bounce';
+    if (anim === 'bounce' && progress < 0.26) {
+      animOffsetY = -Math.sin((progress / 0.26) * Math.PI) * 24;
+    } else if (anim === 'pop' && progress < 0.2) {
+      animScale = 1 + Math.sin((progress / 0.2) * Math.PI) * 0.08;
+    } else if (anim === 'shake' && progress < 0.35) {
+      animOffsetX = Math.sin(progress * 50) * 10 * (1 - progress / 0.35);
+    } else if (anim === 'nod' && progress < 0.24) {
+      animOffsetY = Math.sin((progress / 0.24) * Math.PI) * 16;
+    } else if (anim === 'slide' && progress < 0.3) {
+      animOffsetX = -(1 - progress / 0.3) * 60;
+    } else if (anim === 'fade' && progress < 0.3) {
+      alpha = Math.max(0, progress / 0.3);
+    }
+  }
+
+  const baseScale = (charVoice?.scale ?? char.scale ?? 1) * animScale;
+  const charHeight = height * 0.54 * baseScale;
+  const baseRatio =
+    idleImg && idleImg.naturalWidth && idleImg.naturalHeight
+      ? idleImg.naturalWidth / idleImg.naturalHeight
+      : activeImg.naturalWidth / activeImg.naturalHeight;
+  const charWidth = baseRatio * charHeight;
+
+  let charX = 80;
+  if (char.customX !== undefined) charX = char.customX;
+  else if (char.position === 'right') charX = width - charWidth - 80;
+  else if (char.position === 'center') charX = (width - charWidth) / 2;
+  charX += animOffsetX;
+
+  let charY = height - charHeight;
+  if (char.customY !== undefined) charY = char.customY;
+  charY += animOffsetY;
+
+  const flipped =
+    charVoice?.flipH !== undefined ? Boolean(charVoice.flipH) : Boolean(char.flipH || char.flipX);
+
+  return {
+    character: char,
+    x: charX,
+    y: charY,
+    width: charWidth,
+    height: charHeight,
+    flipped,
+    alpha,
+  };
+}
+
+/**
+ * Returns the on-screen rectangles of the tachie currently visible at `time`.
+ * The preview uses this for drag-to-position hit testing.
+ */
+export function getCharacterLayouts(options: OverlayRenderOptions): CharacterLayout[] {
+  if (options.showCharacters === false) return [];
+  if (!trackVisible(options.tracks, 'character')) return [];
+  const visibleItems = options.items.filter((item) => !item.hidden);
+  const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');
+  const activeVoice = activeVoiceAt(visibleItems, options.time);
+  return resolveCharacterSprites(options, activeVoice, voices).map((sprite) => {
+    const layout = computeCharacterLayout(sprite, options, false);
+    return {
+      character: layout.character,
+      x: layout.x,
+      y: layout.y,
+      width: layout.width,
+      height: layout.height,
+      flipped: layout.flipped,
+    };
+  });
+}
+
+function drawCharacters(
+  ctx: CanvasRenderingContext2D,
+  options: OverlayRenderOptions,
+  activeVoice: VoiceItem | undefined,
+  voices: VoiceItem[]
+) {
+  const sprites = resolveCharacterSprites(options, activeVoice, voices);
+  sprites.forEach((sprite) => {
+    const layout = computeCharacterLayout(sprite, options, true);
+    const { activeImg, isSpeaking } = sprite;
+
     ctx.save();
     ctx.filter = isSpeaking ? 'none' : 'brightness(0.88)';
-
-    let animOffsetX = 0;
-    let animOffsetY = 0;
-    let animScale = 1;
-    if (isSpeaking && isPlaying && charVoice) {
-      const progress = time - charVoice.startTime;
-      const anim = charVoice.anim || 'bounce';
-      if (anim === 'bounce' && progress < 0.26) {
-        animOffsetY = -Math.sin((progress / 0.26) * Math.PI) * 24;
-      } else if (anim === 'pop' && progress < 0.2) {
-        animScale = 1 + Math.sin((progress / 0.2) * Math.PI) * 0.08;
-      } else if (anim === 'shake' && progress < 0.35) {
-        animOffsetX = Math.sin(progress * 50) * 10 * (1 - progress / 0.35);
-      } else if (anim === 'nod' && progress < 0.24) {
-        animOffsetY = Math.sin((progress / 0.24) * Math.PI) * 16;
-      } else if (anim === 'slide' && progress < 0.3) {
-        animOffsetX = -(1 - progress / 0.3) * 60;
-      } else if (anim === 'fade' && progress < 0.3) {
-        ctx.globalAlpha = Math.max(0, progress / 0.3);
-      }
-    }
-
-    const baseScale = (charVoice?.scale ?? char.scale ?? 1) * animScale;
-    const charHeight = height * 0.54 * baseScale;
-    const baseRatio =
-      idleImg && idleImg.naturalWidth && idleImg.naturalHeight
-        ? idleImg.naturalWidth / idleImg.naturalHeight
-        : activeImg.naturalWidth / activeImg.naturalHeight;
-    const charWidth = baseRatio * charHeight;
-
-    let charX = 80;
-    if (char.customX !== undefined) charX = char.customX;
-    else if (char.position === 'right') charX = width - charWidth - 80;
-    else if (char.position === 'center') charX = (width - charWidth) / 2;
-    charX += animOffsetX;
-
-    let charY = height - charHeight;
-    if (char.customY !== undefined) charY = char.customY;
-    charY += animOffsetY;
-
-    const flipped =
-      charVoice?.flipH !== undefined ? Boolean(charVoice.flipH) : Boolean(char.flipH || char.flipX);
-    if (flipped) {
-      ctx.translate(charX + charWidth, 0);
+    ctx.globalAlpha = layout.alpha;
+    if (layout.flipped) {
+      ctx.translate(layout.x + layout.width, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(activeImg, 0, charY, charWidth, charHeight);
+      ctx.drawImage(activeImg, 0, layout.y, layout.width, layout.height);
     } else {
-      ctx.drawImage(activeImg, charX, charY, charWidth, charHeight);
+      ctx.drawImage(activeImg, layout.x, layout.y, layout.width, layout.height);
     }
     ctx.restore();
   });

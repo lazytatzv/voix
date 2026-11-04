@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { Header } from './components/Header';
+import { Header, type RecentProjectEntry } from './components/Header';
 import { VideoPreview } from './components/VideoPreview';
 import { ScriptEditor } from './components/ScriptEditor';
 import { Timeline } from './components/Timeline';
@@ -54,10 +54,31 @@ import { matchCharacter, ParsedScriptLine, ParsedYamlConfig } from './utils/scri
 import { soundEffectManager } from './utils/soundEffects';
 
 const AUTOSAVE_LOCAL_KEY = 'voix_project_autosave_v2';
+const RECENT_PROJECTS_KEY = 'voix_recent_projects_v1';
 const VIDEO_EXTENSIONS = ['mp4', 'mkv', 'webm', 'mov', 'avi', 'm4v'];
 const AUDIO_EXTENSIONS = ['wav', 'mp3', 'ogg', 'flac', 'm4a', 'aac', 'opus'];
 const IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'];
 const PROJECT_EXTENSIONS = ['yaml', 'yml', 'voix', 'json'];
+
+function loadRecentProjects(): RecentProjectEntry[] {
+  try {
+    const raw = localStorage.getItem(RECENT_PROJECTS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter(
+        (entry): entry is RecentProjectEntry =>
+          Boolean(entry) &&
+          typeof entry.path === 'string' &&
+          typeof entry.name === 'string' &&
+          typeof entry.savedAt === 'number'
+      )
+      .slice(0, 8);
+  } catch {
+    return [];
+  }
+}
 
 function fileExtension(path: string): string {
   return path.split('.').pop()?.toLowerCase() || '';
@@ -138,6 +159,7 @@ export function App() {
 
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const projectPathRef = useRef<string | null>(null);
+  const [recentProjects, setRecentProjects] = useState<RecentProjectEntry[]>(loadRecentProjects);
   const [isDirty, setIsDirty] = useState(false);
 
   const undoRef = useRef<VoixProject[]>([]);
@@ -284,6 +306,27 @@ export function App() {
       });
   }, []);
 
+  const recordRecentProject = useCallback((name: string, path: string | null) => {
+    if (!path) return;
+    setRecentProjects((previous) => {
+      const next = [
+        { path, name: name || path.split('/').pop() || path, savedAt: Date.now() },
+        ...previous.filter((entry) => entry.path !== path),
+      ].slice(0, 8);
+      try {
+        localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const clearRecentProjects = useCallback(() => {
+    setRecentProjects([]);
+    try {
+      localStorage.removeItem(RECENT_PROJECTS_KEY);
+    } catch {}
+  }, []);
+
   const applyProject = useCallback(
     (loaded: VoixProject, path: string | null) => {
       const next: VoixProject = {
@@ -297,6 +340,7 @@ export function App() {
       setProject(next);
       setProjectPath(path);
       projectPathRef.current = path;
+      if (path) recordRecentProject(next.name, path);
       setIsDirty(false);
       undoRef.current = [];
       redoRef.current = [];
@@ -311,7 +355,7 @@ export function App() {
       videoDurationRef.current = next.timeline.duration || 15;
       syncVideoSource(next.timeline.videoPath || null);
     },
-    [syncVideoSource]
+    [syncVideoSource, recordRecentProject]
   );
 
   // Restore the native autosave when localStorage was cleared or too small.
@@ -662,13 +706,14 @@ export function App() {
         setProjectPath(result.path);
         projectPathRef.current = result.path;
         setIsDirty(false);
+        recordRecentProject(result.project.name, result.path);
         setToast(`Saved ${result.path.split('/').pop()}`);
       } catch (err) {
         console.error('[App] save failed:', err);
         setToast(`Save failed: ${String(err)}`);
       }
     },
-    []
+    [recordRecentProject]
   );
 
   const handleOpenProject = useCallback(async () => {
@@ -682,6 +727,27 @@ export function App() {
       setToast(`Open failed: ${String(err)}`);
     }
   }, [applyProject]);
+
+  const handleOpenRecentProject = useCallback(
+    async (path: string) => {
+      try {
+        const loaded = await readProjectPath(path);
+        applyProject(loaded, path);
+        setToast(`Opened ${path.split('/').pop()}`);
+      } catch (err) {
+        console.error('[App] open recent failed:', err);
+        setToast(`Open failed: ${String(err)}`);
+        setRecentProjects((previous) => {
+          const next = previous.filter((entry) => entry.path !== path);
+          try {
+            localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+      }
+    },
+    [applyProject]
+  );
 
   const handleNewProject = useCallback(() => {
     const fresh = createEmptyProject('Untitled Project');
@@ -1907,6 +1973,9 @@ export function App() {
         onSaveProjectAs={() => void handleSaveProject(true)}
         onOpenProject={() => void handleOpenProject()}
         onNewProject={handleNewProject}
+        recentProjects={recentProjects}
+        onOpenRecentProject={(path) => void handleOpenRecentProject(path)}
+        onClearRecentProjects={clearRecentProjects}
         onUndo={handleUndo}
         onRedo={handleRedo}
         canUndo={undoRefState.canUndo}
@@ -1934,6 +2003,7 @@ export function App() {
             tracks={tracks}
             showTerminal={terminalOverlayEnabled}
             videoVolume={project.timeline.videoVolume ?? 1}
+            onCharacterMove={(id, x, y) => handleUpdateCharacter(id, { customX: x, customY: y })}
           />
         </div>
 

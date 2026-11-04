@@ -719,6 +719,8 @@ pub struct ExportJobPayload {
     pub fps: u32,
     pub overlay_fps: u32,
     pub duration: f64,
+    #[serde(default)]
+    pub start_time: f64,
     pub crf: u32,
     pub preset: String,
     pub background_volume: f64,
@@ -863,7 +865,10 @@ fn finish_export_job_blocking(
         .filter(|p| !p.trim().is_empty())
     {
         let bg = expand_tilde(bg);
-        // Loop the background video so it always covers the full timeline.
+        // Start the background at the export range start, then loop so it
+        // always covers the full requested duration.
+        cmd.arg("-ss")
+            .arg(format!("{:.3}", payload.start_time.max(0.0)));
         cmd.arg("-stream_loop").arg("-1");
         cmd.arg("-i").arg(&bg);
         has_bg_audio = probe_has_audio(&bg);

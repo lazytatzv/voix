@@ -38,6 +38,9 @@ export interface ExecuteExportOptions {
   backgroundVolume?: number;
   /** Render terminal-style overlay boxes for voice items with terminal data. */
   showTerminal?: boolean;
+  /** Export only this portion of the timeline, in seconds. */
+  startTime?: number;
+  endTime?: number;
   /** Abort long frame renders. The Rust export job is cleaned up via cancelActiveExport. */
   signal?: AbortSignal;
   onProgress?: (event: ExportProgressEvent) => void;
@@ -165,7 +168,13 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
   }
 
   const { project, settings, outputPath } = options;
-  const duration = Math.max(0.5, project.timeline.duration);
+  const timelineDuration = Math.max(0.5, project.timeline.duration);
+  const exportStart = Math.max(0, Math.min(timelineDuration - 0.5, options.startTime ?? 0));
+  const exportEnd = Math.max(
+    exportStart + 0.5,
+    Math.min(timelineDuration, options.endTime ?? timelineDuration)
+  );
+  const duration = exportEnd - exportStart;
   const width = Math.max(2, settings.width);
   const height = Math.max(2, settings.height);
   const fps = settings.fps;
@@ -215,12 +224,15 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         try {
           const path = await ensureVoiceWavPath(item, project.characters, i);
           if (!path) continue;
+          const clipStart = Math.max(item.startTime, exportStart);
+          const clipEnd = Math.min(item.startTime + item.duration, exportEnd);
+          if (clipEnd - clipStart < 0.02) continue;
           audioClips.push({
             path,
-            start: Math.max(0, item.startTime),
-            duration: Math.max(0.05, item.duration),
+            start: clipStart - exportStart,
+            duration: clipEnd - clipStart,
             volume: Math.max(0, item.volumeScale ?? 1),
-            offset: 0,
+            offset: Math.max(0, clipStart - item.startTime),
             loop_audio: false,
             fade_in: 0,
             fade_out: 0,
@@ -239,15 +251,19 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         try {
           const path = await sourceToWavPath(jobDir, item.src, 1000 + i, item.audioBlob);
           if (!path) continue;
+          const clipStart = Math.max(item.startTime, exportStart);
+          const clipEnd = Math.min(item.startTime + item.duration, exportEnd);
+          if (clipEnd - clipStart < 0.02) continue;
+          const itemEnd = item.startTime + item.duration;
           audioClips.push({
             path,
-            start: Math.max(0, item.startTime),
-            duration: Math.max(0.05, item.duration),
+            start: clipStart - exportStart,
+            duration: clipEnd - clipStart,
             volume: Math.max(0, item.volume ?? 1),
-            offset: Math.max(0, item.offset ?? 0),
+            offset: Math.max(0, item.offset ?? 0) + (clipStart - item.startTime),
             loop_audio: Boolean(item.loop),
-            fade_in: Math.max(0, item.fadeIn ?? 0),
-            fade_out: Math.max(0, item.fadeOut ?? 0),
+            fade_in: item.startTime >= exportStart ? Math.max(0, item.fadeIn ?? 0) : 0,
+            fade_out: itemEnd <= exportEnd ? Math.max(0, item.fadeOut ?? 0) : 0,
           });
         } catch (err) {
           console.warn('[export] audio preparation failed:', item.src, err);
@@ -265,7 +281,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
     const totalFrames = Math.max(1, Math.ceil(duration * overlayFps));
     for (let frame = 0; frame < totalFrames; frame++) {
       throwIfAborted();
-      const time = Math.min(duration - 0.0001, frame / overlayFps);
+      const time = Math.min(exportEnd - 0.0001, exportStart + frame / overlayFps);
       drawOverlayFrame(ctx, {
         width,
         height,
@@ -306,6 +322,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         fps,
         overlay_fps: overlayFps,
         duration,
+        start_time: exportStart,
         crf: settings.crf,
         preset: settings.preset,
         background_volume: videoMuted ? 0 : options.backgroundVolume ?? project.timeline.videoVolume ?? 1,

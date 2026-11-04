@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User, FlipHorizontal, Crop } from 'lucide-react';
 import { AudioItem, Character, TimelineItem, TrackState } from '../types';
-import { drawOverlayFrame } from '../render/overlayRenderer';
+import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
 import { loadImage, collectCharacterImageSources } from '../render/imageCache';
 import { mediaUrlFor } from '../utils/mediaUrl';
 
@@ -24,6 +24,8 @@ interface VideoPreviewProps {
   showTerminal?: boolean;
   /** Background video volume from project settings (0 - 2). */
   videoVolume?: number;
+  /** Persist a dragged tachie position in project coordinates. */
+  onCharacterMove?: (characterId: string, x: number, y: number) => void;
 }
 
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
@@ -44,6 +46,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   tracks,
   showTerminal = true,
   videoVolume = 1,
+  onCharacterMove,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -60,6 +63,26 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const pendingSeekTimeRef = useRef<number | null>(null);
   const isMutedRef = useRef(isMuted);
   isMutedRef.current = isMuted;
+
+  // Drag-to-place tachie. The live position is kept locally while dragging so
+  // undo history receives a single entry when the pointer is released.
+  const [characterDrag, setCharacterDrag] = useState<{ id: string; x: number; y: number } | null>(
+    null
+  );
+  const [hoveredCharacter, setHoveredCharacter] = useState<CharacterLayout | null>(null);
+  const characterDragRef = useRef<{
+    id: string;
+    grabX: number;
+    grabY: number;
+    width: number;
+    height: number;
+    moved: boolean;
+    x: number;
+    y: number;
+    startClientX: number;
+    startClientY: number;
+  } | null>(null);
+  const suppressCanvasClickRef = useRef(false);
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -212,6 +235,148 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     canvas.height = Math.max(2, Math.round(height * scale));
   }, [width, height]);
 
+  const displayCharacters = useMemo(() => {
+    if (!characterDrag) return characters;
+    return characters.map((character) =>
+      character.id === characterDrag.id
+        ? { ...character, customX: characterDrag.x, customY: characterDrag.y }
+        : character
+    );
+  }, [characters, characterDrag]);
+
+  const projectPoint = useCallback(
+    (clientX: number, clientY: number) => {
+      const canvas = canvasRef.current;
+      if (!canvas) return { x: 0, y: 0 };
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: ((clientX - rect.left) / Math.max(1, rect.width)) * width,
+        y: ((clientY - rect.top) / Math.max(1, rect.height)) * height,
+      };
+    },
+    [width, height]
+  );
+
+  const hitTestCharacter = useCallback(
+    (clientX: number, clientY: number): CharacterLayout | null => {
+      if (!showAvatar) return null;
+      const point = projectPoint(clientX, clientY);
+      return (
+        getCharacterLayouts({
+          width,
+          height,
+          time: currentTime,
+          characters: displayCharacters,
+          items,
+          tracks,
+          isPlaying: false,
+          showCharacters: showAvatar,
+        })
+          .slice()
+          .sort((a, b) => (a.character.zIndex ?? 0) - (b.character.zIndex ?? 0))
+          .reverse()
+          .find(
+            (layout) =>
+              point.x >= layout.x &&
+              point.x <= layout.x + layout.width &&
+              point.y >= layout.y &&
+              point.y <= layout.y + layout.height
+          ) ?? null
+      );
+    },
+    [projectPoint, width, height, currentTime, displayCharacters, items, tracks, showAvatar]
+  );
+
+  const handleCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event.button !== 0) return;
+    const hit = hitTestCharacter(event.clientX, event.clientY);
+    if (!hit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    suppressCanvasClickRef.current = true;
+    const point = projectPoint(event.clientX, event.clientY);
+    characterDragRef.current = {
+      id: hit.character.id,
+      grabX: point.x - hit.x,
+      grabY: point.y - hit.y,
+      width: hit.width,
+      height: hit.height,
+      moved: false,
+      x: hit.x,
+      y: hit.y,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+    };
+    setHoveredCharacter(null);
+    setCharacterDrag({ id: hit.character.id, x: hit.x, y: hit.y });
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {}
+  };
+
+  const handleCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = characterDragRef.current;
+    if (!drag) {
+      const hit = hitTestCharacter(event.clientX, event.clientY);
+      setHoveredCharacter((previous) =>
+        previous?.character.id === hit?.character.id ? previous : hit
+      );
+      return;
+    }
+
+    if (
+      !drag.moved &&
+      Math.hypot(event.clientX - drag.startClientX, event.clientY - drag.startClientY) > 3
+    ) {
+      drag.moved = true;
+    }
+
+    const point = projectPoint(event.clientX, event.clientY);
+    // Keep at least a sliver of the tachie on screen, and snap to the frame
+    // edges / horizontal centre so aligned layouts are easy to reproduce.
+    let nextX = Math.max(
+      -drag.width * 0.85,
+      Math.min(width - drag.width * 0.15, point.x - drag.grabX)
+    );
+    let nextY = Math.max(
+      -drag.height * 0.2,
+      Math.min(height - drag.height * 0.2, point.y - drag.grabY)
+    );
+    const xTargets = [0, (width - drag.width) / 2, width - drag.width];
+    for (const target of xTargets) {
+      if (Math.abs(nextX - target) < 18) nextX = target;
+    }
+    const yTargets = [height - drag.height, (height - drag.height) / 2];
+    for (const target of yTargets) {
+      if (Math.abs(nextY - target) < 18) nextY = target;
+    }
+    drag.x = nextX;
+    drag.y = nextY;
+    setCharacterDrag({ id: drag.id, x: nextX, y: nextY });
+  };
+
+  const handleCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const drag = characterDragRef.current;
+    if (!drag) return;
+    characterDragRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {}
+    setCharacterDrag(null);
+    if (drag.moved) {
+      onCharacterMove?.(drag.id, Math.round(drag.x), Math.round(drag.y));
+    }
+  };
+
+  const handleCanvasPointerCancel = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!characterDragRef.current) return;
+    characterDragRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {}
+    setCharacterDrag(null);
+  };
+
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -222,7 +387,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       width,
       height,
       time: currentTime,
-      characters,
+      characters: displayCharacters,
       items,
       tracks,
       isPlaying,
@@ -230,7 +395,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       showTerminal,
       showSafeArea,
     });
-  }, [characters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height]);
+  }, [displayCharacters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height]);
 
   const renderFrameRef = useRef(renderFrame);
   renderFrameRef.current = renderFrame;
@@ -334,9 +499,36 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           ref={canvasRef}
           width={width}
           height={height}
-          className="absolute inset-0 w-full h-full object-contain cursor-pointer select-none"
-          onClick={onTogglePlay}
+          className={`absolute inset-0 w-full h-full object-contain select-none ${
+            hoveredCharacter ? 'cursor-move' : 'cursor-pointer'
+          }`}
+          onClick={() => {
+            if (suppressCanvasClickRef.current) {
+              suppressCanvasClickRef.current = false;
+              return;
+            }
+            onTogglePlay();
+          }}
+          onPointerDown={handleCanvasPointerDown}
+          onPointerMove={handleCanvasPointerMove}
+          onPointerUp={handleCanvasPointerUp}
+          onPointerCancel={handleCanvasPointerCancel}
+          onPointerLeave={() => {
+            if (!characterDragRef.current) setHoveredCharacter(null);
+          }}
+          aria-label="Preview: click to play or pause, drag a character to reposition it"
         />
+        {hoveredCharacter && (
+          <div
+            className="absolute pointer-events-none border border-dashed border-[#8ab4f8]/80 rounded-sm transition-opacity"
+            style={{
+              left: `${(hoveredCharacter.x / Math.max(1, width)) * 100}%`,
+              top: `${(hoveredCharacter.y / Math.max(1, height)) * 100}%`,
+              width: `${(hoveredCharacter.width / Math.max(1, width)) * 100}%`,
+              height: `${(hoveredCharacter.height / Math.max(1, height)) * 100}%`,
+            }}
+          />
+        )}
       </div>
 
       <div className="px-3.5 py-2 bg-[#141517] flex items-center justify-between gap-3 border-t border-[#222428]">

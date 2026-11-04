@@ -1,4 +1,4 @@
-import React, { useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Upload,
   Download,
@@ -15,8 +15,16 @@ import {
   FilePlus2,
   Undo2,
   Redo2,
+  History,
+  FileText,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
+
+export interface RecentProjectEntry {
+  path: string;
+  name: string;
+  savedAt: number;
+}
 
 interface HeaderProps {
   projectName: string;
@@ -35,6 +43,9 @@ interface HeaderProps {
   onSaveProjectAs?: () => void;
   onOpenProject?: () => void;
   onNewProject?: () => void;
+  recentProjects?: RecentProjectEntry[];
+  onOpenRecentProject?: (path: string) => void;
+  onClearRecentProjects?: () => void;
   onUndo?: () => void;
   onRedo?: () => void;
   canUndo?: boolean;
@@ -60,6 +71,9 @@ export const Header: React.FC<HeaderProps> = ({
   onSaveProjectAs,
   onOpenProject,
   onNewProject,
+  recentProjects = [],
+  onOpenRecentProject,
+  onClearRecentProjects,
   onUndo,
   onRedo,
   canUndo,
@@ -68,6 +82,21 @@ export const Header: React.FC<HeaderProps> = ({
   projectPath,
 }) => {
   const videoInputRef = useRef<HTMLInputElement | null>(null);
+  const recentMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isRecentOpen, setIsRecentOpen] = useState(false);
+
+  useEffect(() => {
+    if (!isRecentOpen) return;
+    const close = (event: PointerEvent) => {
+      if (!recentMenuRef.current?.contains(event.target as Node)) setIsRecentOpen(false);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [isRecentOpen]);
+
+  useEffect(() => {
+    if (recentProjects.length === 0) setIsRecentOpen(false);
+  }, [recentProjects.length]);
 
   const handlePickVideo = async () => {
     try {
@@ -156,6 +185,69 @@ export const Header: React.FC<HeaderProps> = ({
             >
               <FolderOpen className="w-3.5 h-3.5" />
             </button>
+          )}
+          {onOpenRecentProject && recentProjects.length > 0 && (
+            <div ref={recentMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsRecentOpen((value) => !value)}
+                className={`p-1 rounded hover:bg-[#222427] transition ${
+                  isRecentOpen ? 'text-[#8ab4f8] bg-[#222427]' : 'text-[#8e918f] hover:text-[#c4c7c5]'
+                }`}
+                title="Open Recent Project"
+                aria-haspopup="menu"
+                aria-expanded={isRecentOpen}
+              >
+                <History className="w-3.5 h-3.5" />
+              </button>
+              {isRecentOpen && (
+                <div
+                  role="menu"
+                  className="absolute left-0 top-full mt-2 z-[70] w-80 bg-[#16181b] border border-[#2c2e32] rounded-sm shadow-2xl overflow-hidden"
+                >
+                  <div className="px-3 py-1.5 border-b border-[#242629] flex items-center justify-between">
+                    <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                      Recent projects
+                    </span>
+                    {onClearRecentProjects && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onClearRecentProjects();
+                          setIsRecentOpen(false);
+                        }}
+                        className="text-[10px] font-mono text-[#8e918f] hover:text-rose-300"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-72 overflow-y-auto py-1">
+                    {recentProjects.map((entry) => (
+                      <button
+                        key={entry.path}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setIsRecentOpen(false);
+                          onOpenRecentProject(entry.path);
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-[#202226] transition"
+                        title={entry.path}
+                      >
+                        <span className="flex items-center gap-1.5 text-[11px] text-[#e3e3e3] truncate">
+                          <FileText className="w-3 h-3 text-[#8ab4f8] flex-shrink-0" />
+                          {entry.name || entry.path.split('/').pop()}
+                        </span>
+                        <span className="block mt-0.5 pl-[18px] text-[10px] font-mono text-[#6f7276] truncate">
+                          {entry.path}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
           {onSaveProject && (
             <button

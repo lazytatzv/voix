@@ -68,11 +68,24 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [includeBackgroundAudio, setIncludeBackgroundAudio] = useState(true);
   const [showTerminalOverlay, setShowTerminalOverlay] = useState(true);
+  const [rangeStart, setRangeStart] = useState(0);
+  const [rangeEnd, setRangeEnd] = useState(0);
   const exportActiveRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const duration = Math.max(project.timeline.duration, videoDuration || 0, 0.5);
-  const estimatedFrames = Math.ceil(duration * settings.overlayFps);
+  const rangeError =
+    rangeStart < 0
+      ? 'Start must be zero or greater.'
+      : rangeEnd <= rangeStart
+      ? 'End must be after start.'
+      : rangeEnd > duration + 1e-6
+      ? `End must be within the project duration (${duration.toFixed(2)}s).`
+      : null;
+  const rangeDuration = rangeError
+    ? duration
+    : Math.max(0.5, Math.min(duration, rangeEnd) - Math.max(0, rangeStart));
+  const estimatedFrames = Math.ceil(rangeDuration * settings.overlayFps);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -82,6 +95,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setPercent(0);
     setPhase('');
     setStatus('');
+    setRangeStart(0);
+    setRangeEnd(Math.max(project.timeline.duration, videoDuration || 0, 0.5));
   }, [isOpen]);
 
   useEffect(() => {
@@ -167,6 +182,12 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       setErrorMessage('Choose an output file first.');
       return;
     }
+    if (rangeError) {
+      setErrorMessage(rangeError);
+      return;
+    }
+    const exportStart = Math.max(0, rangeStart);
+    const exportEnd = Math.min(duration, Math.max(exportStart + 0.5, rangeEnd));
     setIsExporting(true);
     setResultMessage(null);
     setErrorMessage(null);
@@ -202,6 +223,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         backgroundPath: videoPath,
         backgroundVolume: includeBackgroundAudio ? project.timeline.videoVolume ?? 1 : 0,
         showTerminal: showTerminalOverlay,
+        startTime: exportStart,
+        endTime: exportEnd,
         signal: controller.signal,
         onProgress,
       });
@@ -288,6 +311,58 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
             <p className="text-[10px] text-[#6f7276] font-mono">
               Extension selects the container: .mp4 / .mkv → H.264 + AAC, .webm → VP9 + Opus.
+            </p>
+          </section>
+
+          <section className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-mono uppercase tracking-wider text-[#8e918f]">
+                Export range
+              </label>
+              <button
+                type="button"
+                onClick={() => {
+                  setRangeStart(0);
+                  setRangeEnd(duration);
+                }}
+                disabled={isExporting}
+                className="text-[10px] font-mono text-[#8ab4f8] hover:text-[#aecbfa] disabled:opacity-30"
+              >
+                Full timeline
+              </button>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block space-y-1">
+                <span className="text-[10px] font-mono text-[#6f7276]">Start (seconds)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={duration}
+                  step={0.1}
+                  value={rangeStart}
+                  onChange={(e) => setRangeStart(Number(e.target.value))}
+                  disabled={isExporting}
+                  className="w-full bg-[#0d0e10] border border-[#2a2c30] rounded-sm px-2.5 py-2 text-xs font-mono text-[#e3e3e3] focus:outline-none focus:border-[#8ab4f8]"
+                />
+              </label>
+              <label className="block space-y-1">
+                <span className="text-[10px] font-mono text-[#6f7276]">End (seconds)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={duration}
+                  step={0.1}
+                  value={rangeEnd}
+                  onChange={(e) => setRangeEnd(Number(e.target.value))}
+                  disabled={isExporting}
+                  className="w-full bg-[#0d0e10] border border-[#2a2c30] rounded-sm px-2.5 py-2 text-xs font-mono text-[#e3e3e3] focus:outline-none focus:border-[#8ab4f8]"
+                />
+              </label>
+            </div>
+            <p className={`text-[10px] font-mono ${rangeError ? 'text-rose-300' : 'text-[#6f7276]'}`}>
+              {rangeError
+                ? rangeError
+                : `${rangeDuration.toFixed(2)}s selected · ${estimatedFrames} overlay frames`}
             </p>
           </section>
 
@@ -411,7 +486,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           <div className="bg-[#0d0e10] border border-[#242629] rounded-sm p-3 grid grid-cols-3 gap-3 text-xs font-mono">
             <div>
               <div className="text-[10px] text-[#6f7276] uppercase">Duration</div>
-              <div className="text-[#e3e3e3]">{duration.toFixed(2)}s</div>
+              <div className="text-[#e3e3e3]">{rangeDuration.toFixed(2)}s</div>
             </div>
             <div>
               <div className="text-[10px] text-[#6f7276] uppercase">Overlay frames</div>
@@ -420,7 +495,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             <div>
               <div className="text-[10px] text-[#6f7276] uppercase">Estimated size</div>
               <div className="text-[#e3e3e3]">
-                ~{Math.max(1, Math.round((duration * settings.width * settings.height) / 7_000_000))} MB
+                ~{Math.max(1, Math.round((rangeDuration * settings.width * settings.height) / 7_000_000))} MB
               </div>
             </div>
           </div>
@@ -497,7 +572,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
           <button
             type="button"
             onClick={handleStartExport}
-            disabled={isExporting || project.items.length === 0}
+            disabled={isExporting || project.items.length === 0 || Boolean(rangeError)}
             className="px-4 py-1.5 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] rounded-sm text-xs font-mono font-semibold flex items-center gap-1.5 disabled:opacity-30"
           >
             {isExporting ? (

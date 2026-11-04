@@ -245,7 +245,13 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                     <button
                       key={p.id}
                       type="button"
-                      onClick={() => onUpdateCharacter(char.id, { position: p.id })}
+                      onClick={() =>
+                        onUpdateCharacter(char.id, {
+                          position: p.id,
+                          customX: undefined,
+                          customY: undefined,
+                        })
+                      }
                       className={`py-2 px-3 rounded-xl text-xs font-medium border text-center transition ${
                         char.position === p.id
                           ? 'bg-[#8ab4f8] text-[#001d35] border-[#8ab4f8] shadow-sm font-semibold'
@@ -255,6 +261,20 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       {p.label}
                     </button>
                   ))}
+                </div>
+                <div className="flex items-center justify-between gap-2 text-[10px] text-[#8e918f]">
+                  <span>Tip: drag a tachie in the preview to place it freely.</span>
+                  {(char.customX !== undefined || char.customY !== undefined) && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onUpdateCharacter(char.id, { customX: undefined, customY: undefined })
+                      }
+                      className="px-2 py-1 rounded border border-[#3c4043] text-[#c4c7c5] hover:border-[#8e918f] hover:text-white whitespace-nowrap"
+                    >
+                      Reset custom position
+                    </button>
+                  )}
                 </div>
 
                 {/* Flip Horizontally */}
