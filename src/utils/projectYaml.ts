@@ -1,6 +1,7 @@
 import YAML from 'yaml';
 import {
   Character,
+  ItemAnimation,
   SubtitleStyle,
   TextItem,
   TimelineItem,
@@ -119,6 +120,23 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+const ITEM_ANIMATIONS: ItemAnimation[] = [
+  'none',
+  'fade',
+  'slide-up',
+  'slide-down',
+  'slide-left',
+  'slide-right',
+  'zoom',
+  'pop',
+];
+
+function normalizeAnimation(value: unknown): ItemAnimation | undefined {
+  return typeof value === 'string' && ITEM_ANIMATIONS.includes(value as ItemAnimation)
+    ? (value as ItemAnimation)
+    : undefined;
+}
+
 function normalizeStyle(raw: unknown, fallback: SubtitleStyle = DEFAULT_SUBTITLE_STYLE): SubtitleStyle {
   const rec = asRecord(raw);
   return {
@@ -179,6 +197,10 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
     name: String(rec.name ?? type),
     hidden: Boolean(rec.hidden),
     locked: Boolean(rec.locked),
+    fadeIn: rec.fadeIn !== undefined ? Math.max(0, Number(rec.fadeIn)) : undefined,
+    fadeOut: rec.fadeOut !== undefined ? Math.max(0, Number(rec.fadeOut)) : undefined,
+    animIn: normalizeAnimation(rec.animIn),
+    animOut: normalizeAnimation(rec.animOut),
   };
 
   if (type === 'voice') {

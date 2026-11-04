@@ -17,6 +17,7 @@ import {
   AudioItem,
   Character,
   ImageItem,
+  ItemAnimation,
   SubtitleStyle,
   TextItem,
   TimelineItem,
@@ -39,6 +40,17 @@ interface ItemInspectorProps {
 const labelClass = 'text-[10px] font-mono uppercase tracking-wider text-[#8e918f]';
 const inputClass =
   'w-full bg-[#0d0e10] border border-[#2a2c30] rounded-sm px-2.5 py-1.5 text-xs text-[#e3e3e3] focus:outline-none focus:border-[#8ab4f8]';
+
+const ANIMATION_OPTIONS: Array<{ value: ItemAnimation; label: string }> = [
+  { value: 'none', label: 'None' },
+  { value: 'fade', label: 'Fade' },
+  { value: 'slide-up', label: 'Slide up' },
+  { value: 'slide-down', label: 'Slide down' },
+  { value: 'slide-left', label: 'Slide left' },
+  { value: 'slide-right', label: 'Slide right' },
+  { value: 'zoom', label: 'Zoom' },
+  { value: 'pop', label: 'Pop' },
+];
 
 const Field: React.FC<{ label: string; children: React.ReactNode; className?: string }> = ({
   label,
@@ -512,6 +524,67 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                   </div>
                 </section>
 
+                <section className="border-t border-[#242629] pt-4 space-y-3">
+                  <span className={labelClass}>Motion</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumberField
+                      label="Fade in (s)"
+                      value={text.fadeIn ?? 0}
+                      step={0.05}
+                      min={0}
+                      onChange={(value) => patch({ fadeIn: value } as Partial<TimelineItem>)}
+                    />
+                    <NumberField
+                      label="Fade out (s)"
+                      value={text.fadeOut ?? 0}
+                      step={0.05}
+                      min={0}
+                      onChange={(value) => patch({ fadeOut: value } as Partial<TimelineItem>)}
+                    />
+                    <Field label="In animation">
+                      <select
+                        value={text.animIn || 'none'}
+                        onChange={(e) => {
+                          const value = e.target.value as ItemAnimation;
+                          patch({
+                            animIn: value,
+                            fadeIn: value === 'none' ? text.fadeIn : text.fadeIn || 0.35,
+                          } as Partial<TimelineItem>);
+                        }}
+                        className={inputClass}
+                      >
+                        {ANIMATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Out animation">
+                      <select
+                        value={text.animOut || 'none'}
+                        onChange={(e) => {
+                          const value = e.target.value as ItemAnimation;
+                          patch({
+                            animOut: value,
+                            fadeOut: value === 'none' ? text.fadeOut : text.fadeOut || 0.35,
+                          } as Partial<TimelineItem>);
+                        }}
+                        className={inputClass}
+                      >
+                        {ANIMATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                  <p className="text-[10px] text-[#6f7276] font-mono">
+                    Fade duration drives the enter/exit motion. Preview and export share this timing.
+                  </p>
+                </section>
+
                 <section className="border-t border-[#242629] pt-4 grid grid-cols-2 gap-3">
                   <NumberField
                     label="Font size"
@@ -685,6 +758,63 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     />
                     Flip horizontally
                   </label>
+                </div>
+                <div className="border-t border-[#242629] pt-4 space-y-3">
+                  <span className={labelClass}>Motion</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumberField
+                      label="Fade in (s)"
+                      value={image.fadeIn ?? 0}
+                      step={0.05}
+                      min={0}
+                      onChange={(value) => patch({ fadeIn: value } as Partial<TimelineItem>)}
+                    />
+                    <NumberField
+                      label="Fade out (s)"
+                      value={image.fadeOut ?? 0}
+                      step={0.05}
+                      min={0}
+                      onChange={(value) => patch({ fadeOut: value } as Partial<TimelineItem>)}
+                    />
+                    <Field label="In animation">
+                      <select
+                        value={image.animIn || 'none'}
+                        onChange={(e) => {
+                          const value = e.target.value as ItemAnimation;
+                          patch({
+                            animIn: value,
+                            fadeIn: value === 'none' ? image.fadeIn : image.fadeIn || 0.35,
+                          } as Partial<TimelineItem>);
+                        }}
+                        className={inputClass}
+                      >
+                        {ANIMATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Out animation">
+                      <select
+                        value={image.animOut || 'none'}
+                        onChange={(e) => {
+                          const value = e.target.value as ItemAnimation;
+                          patch({
+                            animOut: value,
+                            fadeOut: value === 'none' ? image.fadeOut : image.fadeOut || 0.35,
+                          } as Partial<TimelineItem>);
+                        }}
+                        className={inputClass}
+                      >
+                        {ANIMATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
                 </div>
               </section>
             );

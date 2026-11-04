@@ -1,5 +1,6 @@
 import { Character, ImageItem, SubtitleStyle, TextItem, TimelineItem, TrackState, VoiceItem } from '../types';
 import { getCachedImage } from './imageCache';
+import { computeItemMotion } from './itemMotion';
 import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } from '../utils/pronunciation';
 
 export interface OverlayRenderOptions {
@@ -125,6 +126,11 @@ interface StyledTextOptions {
   align?: 'left' | 'center' | 'right';
   opacity?: number;
   rotation?: number;
+  /** Pixel offset from the configured center, used by enter/exit motion. */
+  offsetX?: number;
+  offsetY?: number;
+  /** Uniform scale around the text center. */
+  scale?: number;
   /** Default line height multiplier. */
   lineHeight?: number;
 }
@@ -135,6 +141,8 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
   const rubyMode = style.rubyDisplay || 'above';
   let displayText = options.text || '';
   if (rubyMode === 'hidden') displayText = getSubtitleDisplayText(displayText);
+  const centerX = options.centerX + (options.offsetX ?? 0);
+  const centerY = options.centerY + (options.offsetY ?? 0);
 
   const font = `${style.fontWeight || '900'} ${style.fontSize || 48}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
   ctx.save();
@@ -147,12 +155,14 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
   const lines = wrapText(ctx, displayText, Math.max(40, options.maxWidth));
   const lineHeight = (style.fontSize || 48) * (options.lineHeight ?? 1.32);
   const totalHeight = (lines.length - 1) * lineHeight;
-  const blockTop = options.centerY - totalHeight / 2;
+  const blockTop = centerY - totalHeight / 2;
 
-  if (options.rotation) {
-    ctx.translate(options.centerX, options.centerY);
-    ctx.rotate((options.rotation * Math.PI) / 180);
-    ctx.translate(-options.centerX, -options.centerY);
+  const scale = options.scale ?? 1;
+  if (options.rotation || scale !== 1) {
+    ctx.translate(centerX, centerY);
+    if (options.rotation) ctx.rotate((options.rotation * Math.PI) / 180);
+    if (scale !== 1) ctx.scale(scale, scale);
+    ctx.translate(-centerX, -centerY);
   }
 
   lines.forEach((lineText, lineIndex) => {
@@ -168,10 +178,10 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
     const lineWidth = tokenWidths.reduce((sum, w) => sum + w, 0);
     const leftX =
       align === 'center'
-        ? options.centerX - lineWidth / 2
+        ? centerX - lineWidth / 2
         : align === 'left'
-        ? options.centerX - options.maxWidth / 2
-        : options.centerX + options.maxWidth / 2 - lineWidth;
+        ? centerX - options.maxWidth / 2
+        : centerX + options.maxWidth / 2 - lineWidth;
 
     const bgPaddingX = 26;
     const bgPaddingY = 13;
@@ -182,7 +192,7 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
           : lineWidth + bgPaddingX * 2;
       const bgX =
         style.bgStyle === 'banner'
-          ? options.centerX - bgW / 2
+          ? centerX - bgW / 2
           : leftX - bgPaddingX;
       const rubyExtra = hasRuby ? (style.fontSize || 48) * 0.32 : 0;
       ctx.save();
@@ -596,11 +606,16 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
     images.forEach((item) => {
       const img = getCachedImage(item.src);
       if (!img) return;
+      const motion = computeItemMotion(item, time);
+      if (motion.alpha <= 0.001) return;
       ctx.save();
-      ctx.globalAlpha = item.opacity ?? 1;
-      ctx.translate(item.x + item.width / 2, item.y + item.height / 2);
+      ctx.globalAlpha = (item.opacity ?? 1) * motion.alpha;
+      ctx.translate(
+        item.x + item.width / 2 + motion.offsetX,
+        item.y + item.height / 2 + motion.offsetY
+      );
       if (item.rotation) ctx.rotate((item.rotation * Math.PI) / 180);
-      if (item.flipH) ctx.scale(-1, 1);
+      ctx.scale(motion.scale * (item.flipH ? -1 : 1), motion.scale);
       ctx.drawImage(img, -item.width / 2, -item.height / 2, item.width, item.height);
       ctx.restore();
     });
@@ -618,6 +633,8 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       )
       .sort((a, b) => a.layer - b.layer);
     texts.forEach((item) => {
+      const motion = computeItemMotion(item, time);
+      if (motion.alpha <= 0.001) return;
       drawStyledText(ctx, {
         text: item.text,
         style: item.style,
@@ -625,8 +642,11 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
         centerY: (height * (item.yPercent ?? 50)) / 100,
         maxWidth: (width * (item.widthPercent ?? 80)) / 100,
         align: item.align || item.style.align || 'center',
-        opacity: item.opacity ?? 1,
+        opacity: (item.opacity ?? 1) * motion.alpha,
         rotation: item.rotation,
+        offsetX: motion.offsetX,
+        offsetY: motion.offsetY,
+        scale: motion.scale,
       });
     });
   }
@@ -643,15 +663,21 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
     };
     const subtitleText = activeVoice.subtitleText || activeVoice.text;
     if (subtitleText) {
-      drawStyledText(ctx, {
-        text: subtitleText,
-        style,
-        centerX: ((style.xOffsetPercent ?? 50) / 100) * width,
-        centerY: ((100 - (style.yOffsetPercent ?? 12)) / 100) * height,
-        maxWidth: width * 0.88,
-        align: style.align || 'center',
-        opacity: 1,
-      });
+      const motion = computeItemMotion(activeVoice, time);
+      if (motion.alpha > 0.001) {
+        drawStyledText(ctx, {
+          text: subtitleText,
+          style,
+          centerX: ((style.xOffsetPercent ?? 50) / 100) * width,
+          centerY: ((100 - (style.yOffsetPercent ?? 12)) / 100) * height,
+          maxWidth: width * 0.88,
+          align: style.align || 'center',
+          opacity: motion.alpha,
+          offsetX: motion.offsetX,
+          offsetY: motion.offsetY,
+          scale: motion.scale,
+        });
+      }
     }
   }
 

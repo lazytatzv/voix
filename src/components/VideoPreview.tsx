@@ -424,7 +424,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           currentTimeRef.current >= item.startTime &&
           currentTimeRef.current < item.startTime + item.duration;
         audio.muted = isMutedRef.current;
-        audio.volume = Math.max(0, Math.min(1, item.volume ?? 1));
+        const fadeIn = Math.max(0, item.fadeIn ?? 0);
+        const fadeOut = Math.max(0, item.fadeOut ?? 0);
+        const elapsed = currentTimeRef.current - item.startTime;
+        const remaining = item.startTime + item.duration - currentTimeRef.current;
+        const fadeGain =
+          (fadeIn > 0 ? Math.max(0, Math.min(1, elapsed / fadeIn)) : 1) *
+          (fadeOut > 0 ? Math.max(0, Math.min(1, remaining / fadeOut)) : 1);
+        audio.volume = Math.max(0, Math.min(1, (item.volume ?? 1) * fadeGain));
         if (isPlayingRef.current && active && tracks?.find((t) => t.id === 'audio')?.muted !== true) {
           const expected = currentTimeRef.current - item.startTime + Math.max(0, item.offset ?? 0);
           if (audio.paused) {

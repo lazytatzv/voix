@@ -4,6 +4,17 @@
 
 export type ItemType = 'voice' | 'video' | 'audio' | 'text' | 'image';
 
+/** Enter/exit motion for visual timeline items. */
+export type ItemAnimation =
+  | 'none'
+  | 'fade'
+  | 'slide-up'
+  | 'slide-down'
+  | 'slide-left'
+  | 'slide-right'
+  | 'zoom'
+  | 'pop';
+
 export interface BaseTimelineItem {
   id: string;
   type: ItemType;
@@ -14,6 +25,14 @@ export interface BaseTimelineItem {
   /** When true the item is still persisted but skipped by preview/export. */
   hidden?: boolean;
   locked?: boolean;
+  /** Seconds spent fading in at the item start. */
+  fadeIn?: number;
+  /** Seconds spent fading out before the item end. */
+  fadeOut?: number;
+  /** Motion used while fading in. */
+  animIn?: ItemAnimation;
+  /** Motion used while fading out. */
+  animOut?: ItemAnimation;
 }
 
 // 充実した字幕スタイル定義（二重縁取り・シャドウ・背景プレート対応）
@@ -124,8 +143,6 @@ export interface AudioItem extends BaseTimelineItem {
   offset?: number;
   isBgm?: boolean;
   loop?: boolean;
-  fadeIn?: number;
-  fadeOut?: number;
   /** Cached audio key when the source was imported into Voix. */
   audioKey?: string;
   /** In-memory blob for preview/export; never persisted. */
