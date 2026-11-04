@@ -1,5 +1,5 @@
 // ==========================================
-// Voix Core Data Model
+// Voix Core Data Model (YMM4-class timeline)
 // ==========================================
 
 export type ItemType = 'voice' | 'video' | 'audio' | 'text' | 'image';
@@ -11,6 +11,9 @@ export interface BaseTimelineItem {
   startTime: number;
   duration: number;
   name: string;
+  /** When true the item is still persisted but skipped by preview/export. */
+  hidden?: boolean;
+  locked?: boolean;
 }
 
 // 充実した字幕スタイル定義（二重縁取り・シャドウ・背景プレート対応）
@@ -20,7 +23,7 @@ export interface SubtitleStyle {
   fontSize: number;
   fontFamily: string;
   fontWeight: '600' | '700' | '800' | '900';
-  
+
   // 縁取り 1 (メイン)
   strokeColor: string;
   strokeWidth: number;
@@ -40,10 +43,17 @@ export interface SubtitleStyle {
   bgColor?: string;
 
   // ルビ (ふりがな) 表示オプション
-  rubyDisplay?: 'above' | 'hidden' | 'inline'; // 'above': 文字の上に小さく表示, 'hidden': 字幕は単語のみ表示, 'inline': 原文のまま表示
+  rubyDisplay?: 'above' | 'hidden' | 'inline';
 
   // 画面配置
-  yOffsetPercent: number; // 画面下部からの距離 % (例: 10)
+  yOffsetPercent: number; // 画面下部からの距離 %
+  xOffsetPercent?: number; // 字幕の水平位置 %
+  align?: 'left' | 'center' | 'right';
+}
+
+// 汎用テキストテロップ（字幕とは独立して画面に配置）
+export interface TextStyle extends SubtitleStyle {
+  widthPercent?: number;
 }
 
 export interface CharacterAvatar {
@@ -65,17 +75,25 @@ export interface Character {
   customX?: number; // 画面X座標 (ピクセル)
   customY?: number; // 画面Y座標 (ピクセル)
   scale?: number; // 立ち絵基本拡大率 (1.0 = 標準)
-  flipH?: boolean; // 左右反転 (Horizontal Flip)
+  flipH?: boolean; // 左右反転
   flipX?: boolean;
+  /** Base volume for this speaker's voice, 0.0 - 2.0 */
+  voiceVolume?: number;
+  /** Draw order relative to other characters (higher = in front). */
+  zIndex?: number;
 }
 
 export interface VoiceItem extends BaseTimelineItem {
   type: 'voice';
   characterId: string;
   text: string;
-  expression?: string; // 'default' | 'smile' | 'shock' | 'trouble' | 'angry'
+  /** Text shown in the subtitle. Falls back to text. */
+  subtitleText?: string;
+  expression?: string;
   audioBlobUrl?: string;
   audioBlob?: Blob;
+  /** Stable key of the WAV cached at ~/.cache/voix/audio. */
+  audioKey?: string;
   phonemes?: PhonemeTiming[];
   isSynthesizing?: boolean;
   speedScale?: number;
@@ -85,10 +103,10 @@ export interface VoiceItem extends BaseTimelineItem {
     cmd: string;
     output?: string;
   };
-  se?: string; // 効果音: 'pop' | 'chime' | 'punch' | 'error' | 'success' | 'laser' | 'typing' または音声パス
-  anim?: 'bounce' | 'pop' | 'slide' | 'fade' | 'none' | string; // 立ち絵アニメーション
-  flipH?: boolean; // セリフ単位の左右反転オーバーライド
-  scale?: number; // 立ち絵の拡大率
+  se?: string;
+  anim?: 'bounce' | 'pop' | 'slide' | 'fade' | 'shake' | 'nod' | 'none' | string;
+  flipH?: boolean;
+  scale?: number;
 }
 
 export interface VideoItem extends BaseTimelineItem {
@@ -103,33 +121,77 @@ export interface AudioItem extends BaseTimelineItem {
   src: string;
   volume: number;
   isBgm?: boolean;
+  loop?: boolean;
+  fadeIn?: number;
+  fadeOut?: number;
+  /** Cached audio key when the source was imported into Voix. */
+  audioKey?: string;
+  /** In-memory blob for preview/export; never persisted. */
+  audioBlob?: Blob;
 }
 
 export interface TextItem extends BaseTimelineItem {
   type: 'text';
   text: string;
   style: SubtitleStyle;
+  /** Horizontal center position in percent of the canvas (0-100). */
+  xPercent?: number;
+  /** Vertical center position in percent of the canvas (0-100). */
+  yPercent?: number;
+  widthPercent?: number;
+  align?: 'left' | 'center' | 'right';
+  rotation?: number;
+  opacity?: number;
 }
 
-export type TimelineItem = VoiceItem | VideoItem | AudioItem | TextItem;
+export interface ImageItem extends BaseTimelineItem {
+  type: 'image';
+  src: string;
+  /** Position and size in project pixels. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  opacity?: number;
+  rotation?: number;
+  flipH?: boolean;
+}
+
+export type TimelineItem = VoiceItem | VideoItem | AudioItem | TextItem | ImageItem;
+
+export type TrackKind = 'video' | 'character' | 'voice' | 'text' | 'image' | 'audio';
+
+export interface TrackState {
+  id: TrackKind;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+  muted: boolean;
+}
+
+export interface TimelineSettings {
+  duration: number;
+  fps: 30 | 60;
+  width: number;
+  height: number;
+  backgroundColor?: string;
+  /** Frame rate used for the transparent overlay compositor during export. */
+  overlayFps?: number;
+  /** Absolute path to the background video used by preview and export. */
+  videoPath?: string;
+  /** Background video audio volume (0.0 - 2.0). */
+  videoVolume?: number;
+}
 
 export interface VoixProject {
-  formatVersion: '1.0.0';
+  formatVersion: '1.0.0' | '1.1.0';
   name: string;
-  timeline: {
-    duration: number;
-    fps: 30 | 60;
-    width: number;
-    height: number;
-  };
+  timeline: TimelineSettings;
   characters: Character[];
   items: TimelineItem[];
-  layers: {
-    id: number;
-    name: string;
-    isLocked?: boolean;
-    isVisible?: boolean;
-  }[];
+  tracks?: TrackState[];
+  /** Optional free-form project notes. */
+  notes?: string;
 }
 
 export interface PhonemeTiming {
@@ -146,4 +208,16 @@ export interface Speaker {
   id: string;
   name: string;
   styles: SpeakerStyle[];
+}
+
+export interface ExportSettings {
+  outputPath: string;
+  fps: 30 | 60;
+  width: number;
+  height: number;
+  overlayFps: number;
+  crf: number;
+  preset: 'ultrafast' | 'fast' | 'medium' | 'slow';
+  hardwareAcceleration: 'auto' | 'vaapi' | 'nvenc' | 'cpu';
+  format: 'mp4' | 'webm' | 'mkv';
 }

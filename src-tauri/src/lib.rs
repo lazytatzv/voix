@@ -426,10 +426,167 @@ fn extract_video_keyframes(video_path: String, count: Option<u32>) -> Result<Vec
 }
 
 fn get_voix_config_dir() -> std::path::PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
-    let path = std::path::PathBuf::from(home).join(".config").join("voix");
+    let base = std::env::var("XDG_CONFIG_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
+                .join(".config")
+        });
+    let path = base.join("voix");
     let _ = fs::create_dir_all(&path);
     path
+}
+
+fn get_voix_cache_dir() -> std::path::PathBuf {
+    let base = std::env::var("XDG_CACHE_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
+                .join(".cache")
+        });
+    let path = base.join("voix");
+    let _ = fs::create_dir_all(&path);
+    path
+}
+
+fn get_voix_data_dir() -> std::path::PathBuf {
+    let base = std::env::var("XDG_DATA_HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| {
+            std::path::PathBuf::from(std::env::var("HOME").unwrap_or_else(|_| ".".to_string()))
+                .join(".local").join("share")
+        });
+    let path = base.join("voix");
+    let _ = fs::create_dir_all(&path);
+    path
+}
+
+fn decode_base64_data(data: &str) -> Result<Vec<u8>, String> {
+    let clean = if let Some(idx) = data.find("base64,") {
+        &data[idx + 7..]
+    } else {
+        data
+    };
+    use base64::Engine;
+    base64::engine::general_purpose::STANDARD
+        .decode(clean.trim())
+        .map_err(|e| format!("Base64デコードエラー: {}", e))
+}
+
+fn expand_tilde(path: &str) -> String {
+    if path == "~" {
+        return std::env::var("HOME").unwrap_or_else(|_| path.to_string());
+    }
+    if let Some(rest) = path.strip_prefix("~/") {
+        let home = std::env::var("HOME").unwrap_or_default();
+        return format!("{}/{}", home.trim_end_matches('/'), rest);
+    }
+    path.to_string()
+}
+
+#[tauri::command]
+fn get_config_dir_path() -> String {
+    get_voix_config_dir().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+fn get_home_dir_path() -> String {
+    std::env::var("HOME").unwrap_or_else(|_| ".".to_string())
+}
+
+#[tauri::command]
+fn get_cache_dir_path() -> String {
+    get_voix_cache_dir().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+fn get_data_dir_path() -> String {
+    get_voix_data_dir().to_string_lossy().to_string()
+}
+
+#[tauri::command]
+fn read_text_file(path: String) -> Result<String, String> {
+    fs::read_to_string(&path).map_err(|e| format!("読み込み失敗 ({}): {}", path, e))
+}
+
+#[tauri::command]
+fn write_text_file(path: String, content: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    fs::write(&path, content).map_err(|e| format!("保存失敗 ({}): {}", path, e))
+}
+
+#[tauri::command]
+fn write_binary_file(path: String, data_base64: String) -> Result<(), String> {
+    if let Some(parent) = std::path::Path::new(&path).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let bytes = decode_base64_data(&data_base64)?;
+    fs::write(&path, bytes).map_err(|e| format!("保存失敗 ({}): {}", path, e))
+}
+
+#[tauri::command]
+fn read_binary_base64(path: String) -> Result<String, String> {
+    let bytes = fs::read(&path).map_err(|e| format!("読み込み失敗 ({}): {}", path, e))?;
+    use base64::Engine;
+    Ok(base64::engine::general_purpose::STANDARD.encode(&bytes))
+}
+
+#[tauri::command]
+fn file_exists(path: String) -> bool {
+    std::path::Path::new(&path).exists()
+}
+
+#[tauri::command]
+fn save_audio_cache(key: String, data_base64: String) -> Result<String, String> {
+    let dir = get_voix_cache_dir().join("audio");
+    let _ = fs::create_dir_all(&dir);
+    let safe_key = key
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect::<String>();
+    let path = dir.join(format!("{}.wav", safe_key));
+    let bytes = decode_base64_data(&data_base64)?;
+    fs::write(&path, bytes).map_err(|e| format!("音声キャッシュ保存失敗: {}", e))?;
+    Ok(path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn load_audio_cache(key: String) -> Result<Option<String>, String> {
+    let dir = get_voix_cache_dir().join("audio");
+    let safe_key = key
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect::<String>();
+    let path = dir.join(format!("{}.wav", safe_key));
+    if !path.exists() {
+        return Ok(None);
+    }
+    read_binary_base64(path.to_string_lossy().to_string()).map(Some)
+}
+
+#[tauri::command]
+fn clear_audio_cache() -> Result<(), String> {
+    let dir = get_voix_cache_dir().join("audio");
+    if dir.exists() {
+        fs::remove_dir_all(&dir).map_err(|e| format!("キャッシュ削除失敗: {}", e))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn open_cache_directory() -> Result<(), String> {
+    let dir = get_voix_cache_dir();
+    let _ = Command::new("xdg-open").arg(&dir).spawn();
+    Ok(())
+}
+
+#[tauri::command]
+fn open_data_directory() -> Result<(), String> {
+    let dir = get_voix_data_dir();
+    let _ = Command::new("xdg-open").arg(&dir).spawn();
+    Ok(())
 }
 
 #[tauri::command]
@@ -531,6 +688,323 @@ fn read_file_data_url(file_path: String) -> Result<String, String> {
     Ok(format!("data:{};base64,{}", mime, b64))
 }
 
+// ==========================================================
+// Frame-accurate export pipeline (browser-rendered overlay PNGs)
+// ==========================================================
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ExportAudioClip {
+    pub path: String,
+    pub start: f64,
+    pub duration: f64,
+    pub volume: f64,
+    #[serde(default)]
+    pub loop_audio: bool,
+    #[serde(default)]
+    pub fade_in: f64,
+    #[serde(default)]
+    pub fade_out: f64,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ExportJobPayload {
+    pub job_dir: String,
+    pub output_path: String,
+    pub background_path: Option<String>,
+    pub background_color: String,
+    pub width: u32,
+    pub height: u32,
+    pub fps: u32,
+    pub overlay_fps: u32,
+    pub duration: f64,
+    pub crf: u32,
+    pub preset: String,
+    pub background_volume: f64,
+    pub audio_clips: Vec<ExportAudioClip>,
+}
+
+#[derive(Clone, Serialize)]
+struct ExportProgress {
+    phase: String,
+    percent: f64,
+    message: String,
+}
+
+#[tauri::command]
+fn begin_export_job() -> Result<String, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let dir = std::env::temp_dir().join(format!("voix_export_{}", stamp));
+    fs::create_dir_all(dir.join("frames")).map_err(|e| format!("一時ディレクトリ作成失敗: {}", e))?;
+    Ok(dir.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn write_export_frame(job_dir: String, index: u32, png_base64: String) -> Result<(), String> {
+    let frames = std::path::Path::new(&job_dir).join("frames");
+    fs::create_dir_all(&frames).map_err(|e| e.to_string())?;
+    let path = frames.join(format!("frame_{:06}.png", index));
+    let bytes = decode_base64_data(&png_base64)?;
+    fs::write(path, bytes).map_err(|e| format!("フレーム書き込み失敗: {}", e))
+}
+
+#[tauri::command]
+fn cancel_export_job(job_dir: String) -> Result<(), String> {
+    let _ = fs::remove_dir_all(&job_dir);
+    Ok(())
+}
+
+fn probe_has_audio(path: &str) -> bool {
+    Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-select_streams",
+            "a",
+            "-show_entries",
+            "stream=codec_type",
+            "-of",
+            "csv=p=0",
+            path,
+        ])
+        .output()
+        .map(|out| String::from_utf8_lossy(&out.stdout).contains("audio"))
+        .unwrap_or(false)
+}
+
+#[tauri::command]
+fn finish_export_job(
+    payload: ExportJobPayload,
+    app: tauri::AppHandle,
+) -> Result<String, String> {
+    use std::io::{BufRead, BufReader};
+    use tauri::Emitter;
+
+    let frames_dir = std::path::Path::new(&payload.job_dir).join("frames");
+    if !frames_dir.exists() {
+        return Err("描画フレームが見つかりません".to_string());
+    }
+
+    let output_path = expand_tilde(&payload.output_path);
+    if let Some(parent) = std::path::Path::new(&output_path).parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let is_webm = output_path.to_lowercase().ends_with(".webm");
+
+    let duration = payload.duration.max(0.1);
+    let width = payload.width.max(2);
+    let height = payload.height.max(2);
+    let fps = payload.fps.max(1);
+    let overlay_fps = payload.overlay_fps.max(1);
+    let crf = payload.crf.clamp(0, 51);
+    let preset = if ["ultrafast", "fast", "medium", "slow"].contains(&payload.preset.as_str()) {
+        payload.preset.clone()
+    } else {
+        "medium".to_string()
+    };
+
+    let mut cmd = Command::new("ffmpeg");
+    cmd.arg("-y");
+
+    let has_bg_audio;
+    if let Some(bg) = payload
+        .background_path
+        .as_deref()
+        .filter(|p| !p.trim().is_empty())
+    {
+        let bg = expand_tilde(bg);
+        // Loop the background video so it always covers the full timeline.
+        cmd.arg("-stream_loop").arg("-1");
+        cmd.arg("-i").arg(&bg);
+        has_bg_audio = probe_has_audio(&bg);
+    } else {
+        cmd.arg("-f")
+            .arg("lavfi")
+            .arg("-i")
+            .arg(format!(
+                "color=c={}:s={}x{}:r={}:d={}",
+                payload.background_color, width, height, fps, duration
+            ));
+        has_bg_audio = false;
+    }
+
+    cmd.arg("-framerate")
+        .arg(overlay_fps.to_string())
+        .arg("-i")
+        .arg(frames_dir.join("frame_%06d.png").to_string_lossy().to_string());
+
+    // Audio inputs start at index 2.
+    let mut audio_input_indices = Vec::new();
+    for clip in &payload.audio_clips {
+        let clip_path = expand_tilde(&clip.path);
+        if !std::path::Path::new(&clip_path).exists() {
+            continue;
+        }
+        if clip.loop_audio {
+            cmd.arg("-stream_loop").arg("-1");
+        }
+        cmd.arg("-i").arg(&clip_path);
+        // input index depends on background + overlay + previously added clips
+        audio_input_indices.push(clip.clone());
+    }
+
+    let mut filter = String::new();
+    filter.push_str(&format!(
+        "[0:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,tpad=stop_mode=clone:stop_duration={d}[bgv];",
+        w = width,
+        h = height,
+        d = duration
+    ));
+    filter.push_str(&format!(
+        "[1:v]format=rgba[ovl];[bgv][ovl]overlay=0:0:format=auto:shortest=0[v];"
+    ));
+
+    let mut amix_labels: Vec<String> = Vec::new();
+    if has_bg_audio && payload.background_volume > 0.001 {
+        filter.push_str(&format!(
+            "[0:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={}[abg];",
+            payload.background_volume
+        ));
+        amix_labels.push("[abg]".to_string());
+    }
+
+    for (i, clip) in audio_input_indices.iter().enumerate() {
+        let input_idx = 2 + i;
+        let mut chain = format!(
+            "[{}:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={}",
+            input_idx,
+            clip.volume.max(0.0)
+        );
+        if clip.fade_in > 0.001 {
+            chain.push_str(&format!(",afade=t=in:st=0:d={}", clip.fade_in));
+        }
+        if clip.fade_out > 0.001 {
+            let start = (clip.duration - clip.fade_out).max(0.0);
+            chain.push_str(&format!(",afade=t=out:st={}:d={}", start, clip.fade_out));
+        }
+        let delay_ms = (clip.start.max(0.0) * 1000.0) as u64;
+        let trim_end = (clip.start + clip.duration).max(0.1);
+        chain.push_str(&format!(
+            ",adelay={}|{},atrim=0:{},asetpts=PTS-STARTPTS[a{}];",
+            delay_ms,
+            delay_ms,
+            trim_end,
+            i
+        ));
+        filter.push_str(&chain);
+        amix_labels.push(format!("[a{}]", i));
+    }
+
+    let has_audio = !amix_labels.is_empty();
+    if has_audio {
+        filter.push_str(&format!(
+            "{}amix=inputs={}:duration=longest:normalize=0,alimiter=limit=0.95,atrim=0:{}[outa]",
+            amix_labels.join(""),
+            amix_labels.len(),
+            duration
+        ));
+        cmd.arg("-filter_complex").arg(filter);
+        cmd.arg("-map").arg("[v]");
+        cmd.arg("-map").arg("[outa]");
+    } else {
+        cmd.arg("-filter_complex").arg(filter);
+        cmd.arg("-map").arg("[v]");
+        cmd.arg("-an");
+    }
+
+    cmd.arg("-t").arg(format!("{:.3}", duration));
+    cmd.arg("-r").arg(fps.to_string());
+    if is_webm {
+        cmd.arg("-c:v").arg("libvpx-vp9");
+        cmd.arg("-b:v").arg("0");
+        cmd.arg("-crf").arg((crf + 10).min(63).to_string());
+        cmd.arg("-row-mt").arg("1");
+        cmd.arg("-pix_fmt").arg("yuv420p");
+        if has_audio {
+            cmd.arg("-c:a").arg("libopus");
+            cmd.arg("-b:a").arg("160k");
+        }
+    } else {
+        cmd.arg("-c:v").arg("libx264");
+        cmd.arg("-preset").arg(&preset);
+        cmd.arg("-crf").arg(crf.to_string());
+        cmd.arg("-pix_fmt").arg("yuv420p");
+        if output_path.to_lowercase().ends_with(".mp4") {
+            cmd.arg("-movflags").arg("+faststart");
+        }
+        if has_audio {
+            cmd.arg("-c:a").arg("aac");
+            cmd.arg("-b:a").arg("192k");
+        }
+    }
+    cmd.arg("-progress").arg("pipe:1");
+    cmd.arg("-nostats");
+    cmd.arg(&output_path);
+
+    let _ = app.emit(
+        "export-progress",
+        ExportProgress {
+            phase: "encoding".to_string(),
+            percent: 0.0,
+            message: "FFmpeg encoding video...".to_string(),
+        },
+    );
+
+    let mut child = cmd
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("FFmpeg起動失敗: {}", e))?;
+
+    let stdout = child.stdout.take();
+    if let Some(stdout) = stdout {
+        let app_handle = app.clone();
+        let total = duration;
+        std::thread::spawn(move || {
+            let reader = BufReader::new(stdout);
+            for line in reader.lines().flatten() {
+                if let Some(value) = line.strip_prefix("out_time_ms=") {
+                    if let Ok(ms) = value.trim().parse::<f64>() {
+                        let percent = ((ms / 1_000_000.0) / total * 100.0).clamp(0.0, 100.0);
+                        let _ = app_handle.emit(
+                            "export-progress",
+                            ExportProgress {
+                                phase: "encoding".to_string(),
+                                percent,
+                                message: format!("Encoding... {:.0}%", percent),
+                            },
+                        );
+                    }
+                }
+            }
+        });
+    }
+
+    let output = child
+        .wait_with_output()
+        .map_err(|e| format!("FFmpeg実行失敗: {}", e))?;
+
+    if !output.status.success() {
+        let err = String::from_utf8_lossy(&output.stderr);
+        let tail: String = err.lines().rev().take(12).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join("\n");
+        return Err(format!("FFmpeg書き出しエラー:\n{}", tail));
+    }
+
+    let _ = fs::remove_dir_all(&payload.job_dir);
+    let _ = app.emit(
+        "export-progress",
+        ExportProgress {
+            phase: "done".to_string(),
+            percent: 100.0,
+            message: "Export complete".to_string(),
+        },
+    );
+
+    Ok(format!("動画を書き出しました: {}", output_path))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -547,7 +1021,25 @@ pub fn run() {
             save_characters_config,
             load_characters_config,
             open_config_directory,
-            read_file_data_url
+            read_file_data_url,
+            get_config_dir_path,
+            get_home_dir_path,
+            get_cache_dir_path,
+            get_data_dir_path,
+            read_text_file,
+            write_text_file,
+            write_binary_file,
+            read_binary_base64,
+            file_exists,
+            save_audio_cache,
+            load_audio_cache,
+            clear_audio_cache,
+            open_cache_directory,
+            open_data_directory,
+            begin_export_job,
+            write_export_frame,
+            cancel_export_job,
+            finish_export_job
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

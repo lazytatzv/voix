@@ -1,9 +1,23 @@
 import { TTSProvider, VoicevoxProvider } from './VoicevoxProvider';
 import { Speaker, PhonemeTiming } from '../../types';
+import { makeCacheKey } from '../../utils/hash';
+import {
+  loadCachedAudio,
+  rememberCachedAudio,
+  saveCachedAudio,
+} from '../audioCache';
+
+export interface TTSResult {
+  audioBlob: Blob;
+  duration: number;
+  phonemes: PhonemeTiming[];
+  /** Stable disk-cache key; persisted into project YAML. */
+  audioKey: string;
+}
 
 export class TTSManager {
   private providers: Map<string, TTSProvider> = new Map();
-  private cache: Map<string, { audioBlob: Blob; duration: number; phonemes: PhonemeTiming[] }> = new Map();
+  private cache: Map<string, TTSResult> = new Map();
 
   constructor() {
     // デフォルトでローカルVOICEVOXを登録
@@ -20,6 +34,11 @@ export class TTSManager {
 
   registerProvider(provider: TTSProvider) {
     this.providers.set(provider.id, provider);
+  }
+
+  unregisterProvider(id: string) {
+    if (['voicevox', 'coeiroink', 'aivis'].includes(id)) return;
+    this.providers.delete(id);
   }
 
   getProviders(): TTSProvider[] {
@@ -50,30 +69,47 @@ export class TTSManager {
     return results;
   }
 
-  private getCacheKey(
+  getCacheKey(
     providerId: string,
     speakerId: number,
     text: string,
-    options?: { speedScale?: number; pitchScale?: number }
+    options?: { speedScale?: number; pitchScale?: number; volumeScale?: number }
   ): string {
-    const optStr = options ? `${options.speedScale || 1}_${options.pitchScale || 0}` : '';
-    return `${providerId}_${speakerId}_${text.trim()}_${optStr}`;
+    return makeCacheKey([
+      providerId,
+      speakerId,
+      text.trim(),
+      (options?.speedScale ?? 1).toFixed(3),
+      (options?.pitchScale ?? 0).toFixed(3),
+      (options?.volumeScale ?? 1).toFixed(3),
+    ]);
   }
 
   async synthesize(
     providerId: string,
     speakerId: number,
     text: string,
-    options?: { speedScale?: number; pitchScale?: number },
+    options?: { speedScale?: number; pitchScale?: number; volumeScale?: number },
     useCache = true
-  ): Promise<{
-    audioBlob: Blob;
-    duration: number;
-    phonemes: PhonemeTiming[];
-  }> {
+  ): Promise<TTSResult> {
     const key = this.getCacheKey(providerId, speakerId, text, options);
     if (useCache && this.cache.has(key)) {
       return this.cache.get(key)!;
+    }
+
+    // Disk cache survives app restarts and makes project reload instant.
+    if (useCache) {
+      const disk = await loadCachedAudio(key);
+      if (disk) {
+        const result: TTSResult = {
+          audioBlob: disk.blob,
+          duration: disk.duration,
+          phonemes: [],
+          audioKey: key,
+        };
+        this.cache.set(key, result);
+        return result;
+      }
     }
 
     const provider = this.providers.get(providerId);
@@ -82,8 +118,38 @@ export class TTSManager {
     }
 
     const result = await provider.synthesize(speakerId, text, options);
-    this.cache.set(key, result);
-    return result;
+    const complete: TTSResult = { ...result, audioKey: key };
+    this.cache.set(key, complete);
+    rememberCachedAudio(key, {
+      blob: result.audioBlob,
+      url: URL.createObjectURL(result.audioBlob),
+      duration: result.duration,
+    });
+    // Fire-and-forget disk persistence.
+    void saveCachedAudio(key, result.audioBlob);
+    return complete;
+  }
+
+  async synthesizeWithKey(
+    key: string,
+    providerId: string,
+    speakerId: number,
+    text: string,
+    options?: { speedScale?: number; pitchScale?: number; volumeScale?: number }
+  ): Promise<TTSResult> {
+    if (this.cache.has(key)) return this.cache.get(key)!;
+    const disk = await loadCachedAudio(key);
+    if (disk) {
+      const result: TTSResult = {
+        audioBlob: disk.blob,
+        duration: disk.duration,
+        phonemes: [],
+        audioKey: key,
+      };
+      this.cache.set(key, result);
+      return result;
+    }
+    return this.synthesize(providerId, speakerId, text, options, true);
   }
 }
 

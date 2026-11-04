@@ -43,7 +43,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   const [useVideoVision, setUseVideoVision] = useState(!!hasVideo);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
-  // Load from ~/.config/voix/settings.json
+  // Load from ~/.config/voix/settings.yaml
   useEffect(() => {
     if (isOpen) {
       loadSettingsFromConfig().then((s) => {
@@ -80,6 +80,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
     setStatusMessage('Preparing AI script generation...');
     try {
       await saveSettingsToConfig({
+        ...(await loadSettingsFromConfig()),
         aiProvider: provider,
         geminiApiKey: apiKey.trim(),
         remoteEndpoint: remoteEndpoint.trim(),

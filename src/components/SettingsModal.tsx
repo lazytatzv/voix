@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import YAML from 'yaml';
 import {
   X,
   Bot,
@@ -22,12 +23,15 @@ import {
   loadSettingsFromConfig,
   saveSettingsToConfig,
   openConfigFolder,
+  openCacheFolder,
   loadRawSettingsJson,
   saveRawSettingsJson,
   loadRawCharactersJson,
   saveRawCharactersJson,
   AppSettings,
+  DEFAULT_APP_SETTINGS,
 } from '../services/configService';
+import { clearAudioCache } from '../services/audioCache';
 import { ttsManager } from '../services/tts/TTSManager';
 import { VoicevoxProvider } from '../services/tts/VoicevoxProvider';
 
@@ -45,17 +49,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSettingsSaved,
 }) => {
   const [activeTab, setActiveTab] = useState<SettingsTab>('ai');
-  const [settings, setSettings] = useState<AppSettings>({
-    aiProvider: 'gemini',
-    geminiApiKey: '',
-    remoteEndpoint: 'http://192.168.1.100:11434',
-    remoteModel: 'qwen2.5:latest',
-    remoteOpenAiEndpoint: 'http://localhost:8000/v1',
-    voicevoxEndpoint: 'http://localhost:50021',
-    exportOutputPath: '/home/tatsv/myymm/output_video.mp4',
-    hardwareAcceleration: 'auto',
-    exportFps: 30,
-  });
+  const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_APP_SETTINGS });
 
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
@@ -95,11 +89,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setRawSaveSuccess(false);
     if (tab === 'settings') {
       const txt = await loadRawSettingsJson();
-      try {
-        setRawJsonText(JSON.stringify(JSON.parse(txt), null, 2));
-      } catch {
-        setRawJsonText(txt);
-      }
+      setRawJsonText(txt);
     } else {
       const txt = await loadRawCharactersJson();
       try {
@@ -139,7 +129,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSaveAll = async () => {
     setIsSaving(true);
-    setStatusMessage('Saving configuration to ~/.config/voix/settings.json...');
+    setStatusMessage('Saving configuration to ~/.config/voix/settings.yaml...');
     try {
       await saveSettingsToConfig(settings);
       onSettingsSaved?.(settings);
@@ -197,26 +187,40 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleSaveRawJson = async () => {
     setRawJsonError(null);
     try {
-      const parsed = JSON.parse(rawJsonText);
-      const formatted = JSON.stringify(parsed, null, 2);
       if (rawTab === 'settings') {
-        await saveRawSettingsJson(formatted);
+        const parsed = YAML.parse(rawJsonText);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          throw new Error('YAML root must be a mapping/object');
+        }
+        await saveRawSettingsJson(rawJsonText);
         const s = await loadSettingsFromConfig();
         setSettings(s);
       } else {
+        const parsed = JSON.parse(rawJsonText);
+        const formatted = JSON.stringify(parsed, null, 2);
         await saveRawCharactersJson(formatted);
       }
       setRawSaveSuccess(true);
       setTimeout(() => setRawSaveSuccess(false), 2500);
     } catch (err: unknown) {
-      setRawJsonError(`JSON Syntax Error: ${String(err)}`);
+      setRawJsonError(`${rawTab === 'settings' ? 'YAML' : 'JSON'} Syntax Error: ${String(err)}`);
     }
   };
 
   const handleAddTts = () => {
     if (!newTtsId.trim() || !newTtsEndpoint.trim()) return;
-    const provider = new VoicevoxProvider(newTtsId.trim(), newTtsName.trim() || newTtsId.trim(), newTtsEndpoint.trim());
-    ttsManager.registerProvider(provider);
+    const id = newTtsId.trim();
+    const name = newTtsName.trim() || id;
+    const endpoint = newTtsEndpoint.trim();
+    ttsManager.registerProvider(new VoicevoxProvider(id, name, endpoint));
+    setSettings((current) => {
+      const providers = current.ttsProviders || [];
+      if (providers.some((provider) => provider.id === id)) return current;
+      return {
+        ...current,
+        ttsProviders: [...providers, { id, name, endpoint, enabled: true }],
+      };
+    });
     setNewTtsId('');
     setNewTtsName('');
     setNewTtsEndpoint('http://localhost:50031');
@@ -564,7 +568,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           : 'text-[#8e918f] hover:text-white'
                       }`}
                     >
-                      settings.json
+                      settings.yaml
                     </button>
                     <button
                       type="button"
@@ -636,9 +640,93 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       type="text"
                       value={settings.exportOutputPath || ''}
                       onChange={(e) => setSettings((s) => ({ ...s, exportOutputPath: e.target.value }))}
-                      placeholder="/home/tatsv/myymm/output_video.mp4"
+                      placeholder="~/voix_output.mp4"
                       className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3.5 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
                     />
+                    <p className="text-[10px] text-[#6f7276] font-mono mt-1">
+                      `~` expands to $HOME. Extensions .mp4 / .mkv / .webm select the FFmpeg codecs.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">Width</label>
+                      <input
+                        type="number"
+                        value={settings.exportWidth || 1920}
+                        onChange={(e) => setSettings((s) => ({ ...s, exportWidth: Number(e.target.value) }))}
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">Height</label>
+                      <input
+                        type="number"
+                        value={settings.exportHeight || 1080}
+                        onChange={(e) => setSettings((s) => ({ ...s, exportHeight: Number(e.target.value) }))}
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
+                        Overlay FPS
+                      </label>
+                      <input
+                        type="number"
+                        min={5}
+                        max={30}
+                        value={settings.overlayFps || 15}
+                        onChange={(e) => setSettings((s) => ({ ...s, overlayFps: Number(e.target.value) }))}
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
+                        CRF (quality)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={51}
+                        value={settings.exportCrf ?? 20}
+                        onChange={(e) => setSettings((s) => ({ ...s, exportCrf: Number(e.target.value) }))}
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
+                        x264 Preset
+                      </label>
+                      <select
+                        value={settings.exportPreset || 'medium'}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            exportPreset: e.target.value as AppSettings['exportPreset'],
+                          }))
+                        }
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      >
+                        <option value="ultrafast">ultrafast</option>
+                        <option value="fast">fast</option>
+                        <option value="medium">medium</option>
+                        <option value="slow">slow</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
+                        Background color
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.backgroundColor || '#0f0f11'}
+                        onChange={(e) => setSettings((s) => ({ ...s, backgroundColor: e.target.value }))}
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -646,17 +734,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
                         Hardware Acceleration
                       </label>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-4 gap-2">
                         {[
                           { id: 'auto' as const, label: 'Auto' },
-                          { id: 'vaapi' as const, label: 'VA-API (Intel/AMD)' },
-                          { id: 'cpu' as const, label: 'CPU (x264)' },
+                          { id: 'vaapi' as const, label: 'VA-API' },
+                          { id: 'nvenc' as const, label: 'NVENC' },
+                          { id: 'cpu' as const, label: 'CPU' },
                         ].map((hw) => (
                           <button
                             key={hw.id}
                             type="button"
                             onClick={() => setSettings((s) => ({ ...s, hardwareAcceleration: hw.id }))}
-                            className={`py-2 px-2 rounded-xl text-xs font-medium border text-center transition ${
+                            className={`py-2 px-1 rounded-xl text-[11px] font-medium border text-center transition ${
                               settings.hardwareAcceleration === hw.id
                                 ? 'bg-[#004a77] text-[#c2e7ff] border-[#005c94] font-semibold'
                                 : 'bg-[#18191b] text-[#8e918f] border-[#2e3135] hover:text-white'
@@ -666,6 +755,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </button>
                         ))}
                       </div>
+                      <p className="text-[10px] text-[#6f7276] font-mono mt-1">
+                        The current frame-compositor pipeline always encodes with x264/VP9 for deterministic output.
+                      </p>
                     </div>
 
                     <div>
@@ -689,6 +781,61 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         ))}
                       </div>
                     </div>
+                  </div>
+
+                  <div className="border-t border-[#242628] pt-4">
+                    <label className="text-xs font-medium text-[#c4c7c5] block mb-2">
+                      Cache & Data Directories
+                    </label>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => void openConfigFolder()}
+                        className="px-3 py-1.5 rounded-lg text-xs bg-[#1e2023] hover:bg-[#282a2e] text-[#8ab4f8] border border-[#2e3135] flex items-center gap-1.5"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" /> ~/.config/voix
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void openCacheFolder()}
+                        className="px-3 py-1.5 rounded-lg text-xs bg-[#1e2023] hover:bg-[#282a2e] text-[#8ab4f8] border border-[#2e3135] flex items-center gap-1.5"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" /> ~/.cache/voix
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void clearAudioCache();
+                          setStatusMessage('Audio cache cleared');
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs bg-[#2a1518] hover:bg-[#3a1a1e] text-rose-300 border border-[#4c1d24] flex items-center gap-1.5"
+                      >
+                        <Terminal className="w-3.5 h-3.5" /> Clear audio cache
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap gap-4 pt-2">
+                    <label className="flex items-center gap-2 text-xs text-[#c4c7c5] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.autosave !== false}
+                        onChange={(e) => setSettings((s) => ({ ...s, autosave: e.target.checked }))}
+                        className="accent-[#3b82f6]"
+                      />
+                      Autosave to ~/.config/voix/autosave.voix.yaml
+                    </label>
+                    <label className="flex items-center gap-2 text-xs text-[#c4c7c5] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={settings.enableTerminalOverlay !== false}
+                        onChange={(e) =>
+                          setSettings((s) => ({ ...s, enableTerminalOverlay: e.target.checked }))
+                        }
+                        className="accent-[#3b82f6]"
+                      />
+                      Render terminal overlay lines
+                    </label>
                   </div>
                 </div>
               </div>
