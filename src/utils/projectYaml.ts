@@ -2,6 +2,7 @@ import YAML from 'yaml';
 import {
   Character,
   ItemAnimation,
+  Marker,
   SubtitleStyle,
   TextItem,
   TimelineItem,
@@ -98,6 +99,7 @@ export function projectToYaml(project: VoixProject): string {
     tracks: clean.tracks,
     characters: clean.characters,
     items: clean.items,
+    ...(clean.markers && clean.markers.length > 0 ? { markers: clean.markers } : {}),
     ...(clean.notes ? { notes: clean.notes } : {}),
   };
   const header = [
@@ -135,6 +137,19 @@ function normalizeAnimation(value: unknown): ItemAnimation | undefined {
   return typeof value === 'string' && ITEM_ANIMATIONS.includes(value as ItemAnimation)
     ? (value as ItemAnimation)
     : undefined;
+}
+
+function normalizeMarker(raw: unknown, index: number): Marker | null {
+  const rec = asRecord(raw);
+  if (rec.time === undefined) return null;
+  const time = Number(rec.time);
+  if (!Number.isFinite(time)) return null;
+  return {
+    id: String(rec.id ?? `marker_${index}`),
+    time: Math.max(0, time),
+    label: rec.label ? String(rec.label) : undefined,
+    color: rec.color ? String(rec.color) : undefined,
+  };
 }
 
 function normalizeStyle(raw: unknown, fallback: SubtitleStyle = DEFAULT_SUBTITLE_STYLE): SubtitleStyle {
@@ -308,6 +323,12 @@ export function normalizeProject(raw: unknown, fallbackName = 'Untitled Project'
       : [],
     items: Array.isArray(root.items)
       ? (root.items.map((it, i) => normalizeItem(it, i)).filter(Boolean) as TimelineItem[])
+      : [],
+    markers: Array.isArray(root.markers)
+      ? (root.markers
+          .map((marker, i) => normalizeMarker(marker, i))
+          .filter(Boolean) as Marker[])
+          .sort((a, b) => a.time - b.time)
       : [],
     tracks: DEFAULT_TRACKS.map((track) => {
       const found = Array.isArray(root.tracks)

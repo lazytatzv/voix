@@ -18,6 +18,7 @@ import {
   AudioItem,
   Character,
   ImageItem,
+  Marker,
   TextItem,
   TimelineItem,
   TrackKind,
@@ -1323,6 +1324,33 @@ export function App() {
     void handleSplitItem(id, currentTimeRef.current);
   }, [handleSplitItem]);
 
+  const handleAddMarker = useCallback(() => {
+    const time = Math.max(0, Number(currentTimeRef.current.toFixed(3)));
+    const marker: Marker = {
+      id: newId('marker'),
+      time,
+      label: `Marker ${(projectRef.current.markers?.length ?? 0) + 1}`,
+      color: '#fbbf24',
+    };
+    commitProject((previous) => ({
+      ...previous,
+      markers: [...(previous.markers ?? []), marker].sort((a, b) => a.time - b.time),
+    }));
+    setToast(`Marker added at ${time.toFixed(2)}s`);
+  }, [commitProject]);
+
+  const handleDeleteMarker = useCallback(
+    (id: string) => {
+      const marker = projectRef.current.markers?.find((entry) => entry.id === id);
+      commitProject((previous) => ({
+        ...previous,
+        markers: (previous.markers ?? []).filter((entry) => entry.id !== id),
+      }));
+      if (marker) setToast(`Marker removed (${marker.time.toFixed(2)}s)`);
+    },
+    [commitProject]
+  );
+
   const handlePlaySingle = async (item: VoiceItem) => {
     const url = await ensureVoiceAudio(item.id);
     if (url) playVoiceAudio(item.id, url, item.volumeScale ?? 1);
@@ -1838,6 +1866,11 @@ export function App() {
         handleSplitSelected();
         return;
       }
+      if (event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        handleAddMarker();
+        return;
+      }
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
         handleSeek(currentTimeRef.current - (event.shiftKey ? 1 : 1 / 30));
@@ -1855,6 +1888,7 @@ export function App() {
     handleCopyItem,
     handleDeleteItem,
     handleDuplicateItem,
+    handleAddMarker,
     handleNewProject,
     handleOpenProject,
     handlePasteItem,
@@ -2102,6 +2136,9 @@ export function App() {
               setInspectedItemId(id);
             }}
             onSplitSelected={handleSplitSelected}
+            markers={project.markers ?? []}
+            onAddMarker={handleAddMarker}
+            onDeleteMarker={handleDeleteMarker}
           />
         </div>
       ) : (

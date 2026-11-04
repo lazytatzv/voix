@@ -24,6 +24,10 @@ function makeProject(): VoixProject {
     videoVolume: 0.35,
   };
   project.notes = 'Asset links and credits';
+  project.markers = [
+    { id: 'marker_cue_b', time: 8.5, label: 'Cue B', color: '#f97316' },
+    { id: 'marker_cue_a', time: 2, label: 'Cue A' },
+  ];
   project.tracks = project.tracks?.map((track) =>
     track.id === 'voice' ? { ...track, muted: true } : track.id === 'audio' ? { ...track, locked: true } : track
   );
@@ -116,6 +120,10 @@ describe('project YAML roundtrip', () => {
       videoVolume: 0.35,
     });
     expect(restored.notes).toBe('Asset links and credits');
+    expect(restored.markers).toEqual([
+      { id: 'marker_cue_a', time: 2, label: 'Cue A', color: undefined },
+      { id: 'marker_cue_b', time: 8.5, label: 'Cue B', color: '#f97316' },
+    ]);
     expect(restored.tracks?.find((track) => track.id === 'voice')?.muted).toBe(true);
     expect(restored.tracks?.find((track) => track.id === 'audio')?.locked).toBe(true);
 
@@ -195,6 +203,22 @@ describe('normalization and legacy import', () => {
       'text',
       'image',
       'audio',
+    ]);
+  });
+
+  it('normalizes and sorts markers while dropping invalid entries', () => {
+    const restored = normalizeProject({
+      name: 'Markers',
+      items: [],
+      markers: [
+        { id: 'late', time: 12.5, label: 'Late' },
+        { id: 'bad', time: 'nope' },
+        { time: 3 },
+      ],
+    });
+    expect(restored.markers).toEqual([
+      { id: 'marker_2', time: 3, label: undefined, color: undefined },
+      { id: 'late', time: 12.5, label: 'Late', color: undefined },
     ]);
   });
 

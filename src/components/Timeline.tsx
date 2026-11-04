@@ -18,10 +18,12 @@ import {
   SlidersHorizontal,
   Maximize2,
   Scissors,
+  Flag,
 } from 'lucide-react';
-import { Character, ItemType, TimelineItem, TrackKind, TrackState } from '../types';
+import { Character, ItemType, Marker, TimelineItem, TrackKind, TrackState } from '../types';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
 import { getWaveformPeaks } from '../services/waveformCache';
+import { snapTimelineTime } from '../utils/timelineSnap';
 
 interface TimelineProps {
   items: TimelineItem[];
@@ -40,6 +42,9 @@ interface TimelineProps {
   onUpdateTrack: (id: TrackKind, updates: Partial<TrackState>) => void;
   onInspectItem: (id: string) => void;
   onSplitSelected?: () => void;
+  markers?: Marker[];
+  onAddMarker?: () => void;
+  onDeleteMarker?: (id: string) => void;
 }
 
 interface RowDef {
@@ -70,9 +75,8 @@ const ITEM_COLORS: Record<string, { bg: string; border: string; text: string }> 
   video: { bg: '#1f2937', border: '#64748b', text: '#e2e8f0' },
 };
 
-function snapTime(time: number, enabled: boolean): number {
-  if (!enabled) return Math.max(0, Number(time.toFixed(3)));
-  return Math.max(0, Math.round(time * 20) / 20);
+function snapTime(time: number, enabled: boolean, markers: Marker[] = []): number {
+  return snapTimelineTime(time, enabled, markers);
 }
 
 function rulerStep(pxPerSecond: number): number {
@@ -147,6 +151,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   onUpdateTrack,
   onInspectItem,
   onSplitSelected,
+  markers = [],
+  onAddMarker,
+  onDeleteMarker,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -176,9 +183,9 @@ export const Timeline: React.FC<TimelineProps> = ({
       if (!container) return;
       const rect = container.getBoundingClientRect();
       const x = clientX - rect.left + container.scrollLeft - HEADER_WIDTH; // label column width
-      onSeek(snapTime(xToTime(x), !disableSnap));
+      onSeek(snapTime(xToTime(x), !disableSnap, markers));
     },
-    [onSeek, pxPerSecond]
+    [onSeek, pxPerSecond, markers]
   );
 
   const beginScrub = (e: React.MouseEvent) => {
@@ -215,10 +222,10 @@ export const Timeline: React.FC<TimelineProps> = ({
       }
       if (!moved) return;
       if (mode === 'move') {
-        onUpdateItem(item.id, { startTime: snapTime(startTime + delta, !event.altKey) });
+        onUpdateItem(item.id, { startTime: snapTime(startTime + delta, !event.altKey, markers) });
       } else {
         onUpdateItem(item.id, {
-          duration: Math.max(0.1, snapTime(startDuration + delta, !event.altKey)),
+          duration: Math.max(0.1, snapTime(startDuration + delta, !event.altKey, markers)),
         });
       }
     };
@@ -397,6 +404,20 @@ export const Timeline: React.FC<TimelineProps> = ({
               </button>
             </div>
           )}
+          {onAddMarker && (
+            <button
+              type="button"
+              onClick={onAddMarker}
+              className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-amber-300/90 hover:text-amber-200 border border-[#2e3135] flex items-center gap-1"
+              title="Add a marker at the playhead (M)"
+            >
+              <Flag className="w-3 h-3" />
+              Marker
+              {markers.length > 0 && (
+                <span className="font-mono text-[#8e918f]">{markers.length}</span>
+              )}
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 bg-[#0e0f11] px-2 py-0.5 rounded-sm border border-[#242629]">
@@ -520,6 +541,27 @@ export const Timeline: React.FC<TimelineProps> = ({
                   </div>
                 );
               })}
+              {markers.map((marker) => (
+                <button
+                  key={marker.id}
+                  type="button"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSeek(marker.time);
+                  }}
+                  onContextMenu={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onDeleteMarker?.(marker.id);
+                  }}
+                  className="absolute top-0 z-20 -translate-x-1/2 p-0.5 text-amber-300 hover:text-amber-100"
+                  style={{ left: timeToX(marker.time) }}
+                  title={`${marker.label || 'Marker'} · ${marker.time.toFixed(2)}s\nClick to seek · Right-click to delete`}
+                >
+                  <Flag className="w-3 h-3 fill-current" />
+                </button>
+              ))}
             </div>
 
             {/* Track lanes */}
@@ -553,6 +595,19 @@ export const Timeline: React.FC<TimelineProps> = ({
                   </React.Fragment>
                 ))}
               </div>
+            ))}
+
+            {markers.map((marker) => (
+              <div
+                key={`line_${marker.id}`}
+                className="absolute w-px pointer-events-none z-20 opacity-40"
+                style={{
+                  left: timeToX(marker.time),
+                  top: RULER_HEIGHT,
+                  height: totalRowsHeight,
+                  backgroundColor: marker.color || '#fbbf24',
+                }}
+              />
             ))}
 
             {/* Playhead */}

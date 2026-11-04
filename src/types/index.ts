@@ -202,6 +202,14 @@ export interface TimelineSettings {
   videoVolume?: number;
 }
 
+/** A named cue point on the timeline. */
+export interface Marker {
+  id: string;
+  time: number;
+  label?: string;
+  color?: string;
+}
+
 export interface VoixProject {
   formatVersion: '1.0.0' | '1.1.0';
   name: string;
@@ -209,6 +217,7 @@ export interface VoixProject {
   characters: Character[];
   items: TimelineItem[];
   tracks?: TrackState[];
+  markers?: Marker[];
   /** Optional free-form project notes. */
   notes?: string;
 }
