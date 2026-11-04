@@ -1,0 +1,427 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  X,
+  Settings2,
+  Monitor,
+  Film,
+  Volume2,
+  Eye,
+  EyeOff,
+  Lock,
+  Unlock,
+  VolumeX,
+  Trash2,
+  Check,
+  FileText,
+} from 'lucide-react';
+import { TimelineItem, TrackKind, TrackState, VoixProject } from '../types';
+
+interface ProjectSettingsModalProps {
+  isOpen: boolean;
+  project: VoixProject;
+  computedDuration: number;
+  onClose: () => void;
+  onApply: (next: {
+    name: string;
+    timeline: VoixProject['timeline'];
+    tracks: TrackState[];
+    items: TimelineItem[];
+    notes?: string;
+  }) => void;
+}
+
+const RESOLUTIONS = [
+  { label: '1920 × 1080 (FHD)', width: 1920, height: 1080 },
+  { label: '2560 × 1440 (QHD)', width: 2560, height: 1440 },
+  { label: '1280 × 720 (HD)', width: 1280, height: 720 },
+  { label: '1080 × 1920 (Shorts)', width: 1080, height: 1920 },
+  { label: '3840 × 2160 (4K)', width: 3840, height: 2160 },
+];
+
+const inputClass =
+  'w-full bg-[#0d0e10] border border-[#2a2c30] rounded-sm px-2.5 py-1.5 text-xs text-[#e3e3e3] focus:outline-none focus:border-[#8ab4f8]';
+
+const TRACK_LABELS: Record<TrackKind, string> = {
+  video: 'Video',
+  character: 'Characters',
+  voice: 'Voice / Captions',
+  text: 'Text / Telop',
+  image: 'Images',
+  audio: 'BGM / SE',
+};
+
+function patchTrack(tracks: TrackState[], id: TrackKind, updates: Partial<TrackState>): TrackState[] {
+  return tracks.map((track) => (track.id === id ? { ...track, ...updates } : track));
+}
+
+function scaleItems(items: TimelineItem[], scaleX: number, scaleY: number): TimelineItem[] {
+  const fontScale = Math.min(scaleX, scaleY);
+  return items.map((item) => {
+    if (item.type === 'image') {
+      return {
+        ...item,
+        x: Math.round(item.x * scaleX),
+        y: Math.round(item.y * scaleY),
+        width: Math.max(4, Math.round(item.width * scaleX)),
+        height: Math.max(4, Math.round(item.height * scaleY)),
+      };
+    }
+    if (item.type === 'text') {
+      const style = item.style;
+      return {
+        ...item,
+        style: {
+          ...style,
+          fontSize: Math.max(8, Math.round(style.fontSize * fontScale)),
+          strokeWidth: Math.max(0, Math.round(style.strokeWidth * fontScale)),
+          outerStrokeWidth:
+            style.outerStrokeWidth !== undefined
+              ? Math.max(0, Math.round(style.outerStrokeWidth * fontScale))
+              : undefined,
+          shadowBlur: style.shadowBlur !== undefined ? Math.round(style.shadowBlur * fontScale) : undefined,
+          shadowOffsetY:
+            style.shadowOffsetY !== undefined ? Math.round(style.shadowOffsetY * fontScale) : undefined,
+        },
+      };
+    }
+    return item;
+  });
+}
+
+export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
+  isOpen,
+  project,
+  computedDuration,
+  onClose,
+  onApply,
+}) => {
+  const [name, setName] = useState(project.name);
+  const [timeline, setTimeline] = useState(project.timeline);
+  const [tracks, setTracks] = useState<TrackState[]>(project.tracks || []);
+  const [scaleContent, setScaleContent] = useState(true);
+  const [notes, setNotes] = useState(project.notes || '');
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setName(project.name);
+    setTimeline(project.timeline);
+    setTracks(project.tracks || []);
+    setNotes(project.notes || '');
+    setScaleContent(true);
+  }, [isOpen, project]);
+
+  const resolutionIndex = useMemo(
+    () => RESOLUTIONS.findIndex((r) => r.width === timeline.width && r.height === timeline.height),
+    [timeline.width, timeline.height]
+  );
+
+  if (!isOpen) return null;
+
+  const setResolution = (index: number) => {
+    const resolution = RESOLUTIONS[index];
+    if (!resolution) return;
+    setTimeline((prev) => ({ ...prev, width: resolution.width, height: resolution.height }));
+  };
+
+  const handleApply = () => {
+    const width = Math.max(320, Math.round(timeline.width / 2) * 2);
+    const height = Math.max(240, Math.round(timeline.height / 2) * 2);
+    const nextTimeline = {
+      ...timeline,
+      width,
+      height,
+      fps: timeline.fps === 60 ? 60 : 30,
+      overlayFps: Math.max(1, Math.min(60, Number(timeline.overlayFps) || 15)),
+      videoVolume:
+        timeline.videoVolume !== undefined ? Math.max(0, Math.min(2, timeline.videoVolume)) : 1,
+    } as VoixProject['timeline'];
+    const scaleX = width / project.timeline.width;
+    const scaleY = height / project.timeline.height;
+    const items =
+      scaleContent && (scaleX !== 1 || scaleY !== 1)
+        ? scaleItems(project.items, scaleX, scaleY)
+        : project.items;
+    onApply({
+      name: name.trim() || 'Untitled Project',
+      timeline: nextTimeline,
+      tracks,
+      items,
+      notes: notes.trim() || undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-3xl max-h-[92vh] overflow-hidden bg-[#141517] border border-[#2c2e32] rounded-sm shadow-2xl flex flex-col">
+        <div className="px-4 py-3 border-b border-[#242629] flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <Settings2 className="w-4 h-4 text-[#8ab4f8]" />
+            <h2 className="text-sm font-semibold text-[#e3e3e3] bg-[#141517]">Project Settings</h2>
+            <span className="text-[10px] font-mono text-[#8e918f] border border-[#2e3135] rounded px-1.5 py-0.5">
+              {timeline.width} × {timeline.height} · {timeline.fps} fps
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1 rounded hover:bg-[#24272b] text-[#8e918f] hover:text-white"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+          <section className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 col-span-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">Project name</span>
+              <input value={name} onChange={(e) => setName(e.target.value)} className={inputClass} />
+            </label>
+
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">Resolution</span>
+              <select
+                value={resolutionIndex >= 0 ? resolutionIndex : -1}
+                onChange={(e) => setResolution(Number(e.target.value))}
+                className={inputClass}
+              >
+                {resolutionIndex < 0 && (
+                  <option value={-1}>
+                    Custom {timeline.width} × {timeline.height}
+                  </option>
+                )}
+                {RESOLUTIONS.map((r, i) => (
+                  <option key={r.label} value={i}>
+                    {r.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <label className="space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">Width</span>
+                <input
+                  type="number"
+                  min={320}
+                  max={7680}
+                  step={2}
+                  value={timeline.width}
+                  onChange={(e) => setTimeline((prev) => ({ ...prev, width: Number(e.target.value) }))}
+                  className={inputClass}
+                />
+              </label>
+              <label className="space-y-1">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">Height</span>
+                <input
+                  type="number"
+                  min={240}
+                  max={4320}
+                  step={2}
+                  value={timeline.height}
+                  onChange={(e) => setTimeline((prev) => ({ ...prev, height: Number(e.target.value) }))}
+                  className={inputClass}
+                />
+              </label>
+            </div>
+          </section>
+
+          <section className="border-t border-[#242629] pt-4 grid grid-cols-3 gap-3">
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                <Film className="w-3 h-3 inline mr-1" />
+                Timeline FPS
+              </span>
+              <select
+                value={timeline.fps}
+                onChange={(e) =>
+                  setTimeline((prev) => ({ ...prev, fps: Number(e.target.value) === 60 ? 60 : 30 }))
+                }
+                className={inputClass}
+              >
+                <option value={30}>30 fps</option>
+                <option value={60}>60 fps</option>
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                Overlay FPS (export)
+              </span>
+              <input
+                type="number"
+                min={5}
+                max={60}
+                value={timeline.overlayFps ?? 15}
+                onChange={(e) =>
+                  setTimeline((prev) => ({ ...prev, overlayFps: Number(e.target.value) }))
+                }
+                className={inputClass}
+              />
+            </label>
+            <div className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">Duration</span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-[#c4c7c5] flex-1">{computedDuration.toFixed(2)}s</span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setTimeline((prev) => ({
+                      ...prev,
+                      duration: Math.max(prev.duration || 0, computedDuration),
+                    }))
+                  }
+                  className="px-2 py-1 text-[10px] font-mono bg-[#181a1d] border border-[#2a2c30] rounded-sm text-[#8ab4f8]"
+                  title="Store the current computed duration in the project"
+                >
+                  Fit
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="border-t border-[#242629] pt-4 grid grid-cols-2 gap-3">
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                <Monitor className="w-3 h-3 inline mr-1" />
+                Background color
+              </span>
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="color"
+                  value={/^#[0-9a-fA-F]{6}$/.test(timeline.backgroundColor || '') ? timeline.backgroundColor : '#0f0f11'}
+                  onChange={(e) => setTimeline((prev) => ({ ...prev, backgroundColor: e.target.value }))}
+                  className="w-8 h-8 bg-transparent border border-[#2a2c30] rounded-sm cursor-pointer p-0.5"
+                />
+                <input
+                  value={timeline.backgroundColor || '#0f0f11'}
+                  onChange={(e) => setTimeline((prev) => ({ ...prev, backgroundColor: e.target.value }))}
+                  className={inputClass}
+                />
+              </div>
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                <Volume2 className="w-3 h-3 inline mr-1" />
+                Background video volume ({(timeline.videoVolume ?? 1).toFixed(2)})
+              </span>
+              <input
+                type="range"
+                min={0}
+                max={2}
+                step={0.01}
+                value={timeline.videoVolume ?? 1}
+                onChange={(e) =>
+                  setTimeline((prev) => ({ ...prev, videoVolume: Number(e.target.value) }))
+                }
+                className="w-full accent-[#3b82f6]"
+              />
+            </label>
+
+            <div className="col-span-2 flex items-center justify-between bg-[#101113] border border-[#242629] rounded-sm px-3 py-2">
+              <div className="min-w-0">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                  Background video
+                </div>
+                <div className="text-[11px] font-mono text-[#c4c7c5] truncate">
+                  {timeline.videoPath || 'None (solid color background)'}
+                </div>
+              </div>
+              {timeline.videoPath && (
+                <button
+                  type="button"
+                  onClick={() => setTimeline((prev) => ({ ...prev, videoPath: undefined }))}
+                  className="px-2 py-1 text-[10px] font-mono bg-[#2a1518] border border-[#4c1d24] rounded-sm text-rose-300 hover:text-rose-200 flex items-center gap-1"
+                >
+                  <Trash2 className="w-3 h-3" /> Clear
+                </button>
+              )}
+            </div>
+          </section>
+
+          <section className="border-t border-[#242629] pt-4 space-y-2">
+            <div className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">Tracks</div>
+            <div className="grid grid-cols-2 gap-1.5">
+              {tracks.map((track) => (
+                <div
+                  key={track.id}
+                  className="flex items-center gap-1.5 bg-[#101113] border border-[#242629] rounded-sm px-2 py-1.5"
+                >
+                  <span className="text-[11px] font-mono text-[#c4c7c5] flex-1 truncate">
+                    {TRACK_LABELS[track.id] || track.name}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setTracks((prev) => patchTrack(prev, track.id, { visible: !track.visible }))}
+                    className="p-1 rounded hover:bg-[#24272b] text-[#8e918f]"
+                    title={track.visible ? 'Hide track' : 'Show track'}
+                  >
+                    {track.visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3 text-rose-400" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTracks((prev) => patchTrack(prev, track.id, { muted: !track.muted }))}
+                    className="p-1 rounded hover:bg-[#24272b] text-[#8e918f]"
+                    title={track.muted ? 'Unmute track' : 'Mute track'}
+                  >
+                    {track.muted ? <VolumeX className="w-3 h-3 text-rose-400" /> : <Volume2 className="w-3 h-3" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTracks((prev) => patchTrack(prev, track.id, { locked: !track.locked }))}
+                    className="p-1 rounded hover:bg-[#24272b] text-[#8e918f]"
+                    title={track.locked ? 'Unlock track' : 'Lock track'}
+                  >
+                    {track.locked ? <Lock className="w-3 h-3 text-amber-400" /> : <Unlock className="w-3 h-3" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="border-t border-[#242629] pt-4 space-y-2">
+            <label className="flex items-center gap-2 text-[11px] font-mono text-[#c4c7c5] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={scaleContent}
+                onChange={(e) => setScaleContent(e.target.checked)}
+                className="accent-[#3b82f6]"
+              />
+              Scale image positions/sizes and text font sizes when resolution changes
+            </label>
+            <label className="space-y-1 block">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                <FileText className="w-3 h-3 inline mr-1" />
+                Notes (saved in project YAML)
+              </span>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                className={`${inputClass} resize-y`}
+                placeholder="Project memo, script links, asset credits..."
+              />
+            </label>
+          </section>
+        </div>
+
+        <div className="px-4 py-3 border-t border-[#242629] flex items-center justify-end gap-2 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-xs text-[#c4c7c5] hover:text-white border border-[#2a2c30] rounded-sm hover:bg-[#1e2023]"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleApply}
+            className="px-4 py-1.5 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] rounded-sm text-xs font-mono font-semibold flex items-center gap-1.5"
+          >
+            <Check className="w-3.5 h-3.5" /> Apply
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};

@@ -36,6 +36,8 @@ export interface ExecuteExportOptions {
   backgroundPath?: string | null;
   /** Optional background audio; uses the project video volume by default. */
   backgroundVolume?: number;
+  /** Render terminal-style overlay boxes for voice items with terminal data. */
+  showTerminal?: boolean;
   onProgress?: (event: ExportProgressEvent) => void;
 }
 
@@ -231,7 +233,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         items: project.items,
         tracks: project.tracks,
         isPlaying: true,
-        showTerminal: true,
+        showTerminal: options.showTerminal !== false,
         showSafeArea: false,
       });
       const pngBase64 = canvas.toDataURL('image/png');

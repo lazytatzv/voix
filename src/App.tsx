@@ -13,6 +13,7 @@ import { ExportModal } from './components/ExportModal';
 import { AiVideoGeneratorModal } from './components/AiVideoGeneratorModal';
 import { TachieImportModal } from './components/TachieImportModal';
 import { SettingsModal } from './components/SettingsModal';
+import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { ItemInspector } from './components/ItemInspector';
 import {
   AudioItem,
@@ -165,9 +166,12 @@ export function App() {
   const [isTachieModalOpen, setIsTachieModalOpen] = useState(false);
   const [tachieTargetCharId, setTachieTargetCharId] = useState<string | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
+  const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [terminalOverlayEnabled, setTerminalOverlayEnabled] = useState(true);
+  const autosaveEnabledRef = useRef(true);
 
   // Panel layout (persisted)
   const [isScriptCollapsed, setIsScriptCollapsed] = useState(() => {
@@ -258,6 +262,19 @@ export function App() {
     [commitProject]
   );
 
+  const syncVideoSource = useCallback((path: string | null) => {
+    rawVideoPathRef.current = path;
+    setRawVideoPath(path);
+    setVideoSrc((previous) => {
+      if (previous?.startsWith('blob:')) {
+        try {
+          URL.revokeObjectURL(previous);
+        } catch {}
+      }
+      return path ? convertFileSrc(path) : null;
+    });
+  }, []);
+
   const applyProject = useCallback(
     (loaded: VoixProject, path: string | null) => {
       const next: VoixProject = {
@@ -283,18 +300,9 @@ export function App() {
       currentTimeRef.current = 0;
       setVideoDuration(next.timeline.duration || 15);
       videoDurationRef.current = next.timeline.duration || 15;
-      setRawVideoPath(next.timeline.videoPath || null);
-      rawVideoPathRef.current = next.timeline.videoPath || null;
-      setVideoSrc((previous) => {
-        if (previous?.startsWith('blob:')) {
-          try {
-            URL.revokeObjectURL(previous);
-          } catch {}
-        }
-        return next.timeline.videoPath ? convertFileSrc(next.timeline.videoPath) : null;
-      });
+      syncVideoSource(next.timeline.videoPath || null);
     },
-    []
+    [syncVideoSource]
   );
 
   // Restore the native autosave when localStorage was cleared or too small.
@@ -606,7 +614,38 @@ export function App() {
     setToast('New project');
   }, [applyProject]);
 
+  const handleApplyProjectSettings = useCallback(
+    (next: {
+      name: string;
+      timeline: VoixProject['timeline'];
+      tracks: TrackState[];
+      items: TimelineItem[];
+      notes?: string;
+    }) => {
+      if ((next.timeline.videoPath || null) !== (rawVideoPathRef.current || null)) {
+        syncVideoSource(next.timeline.videoPath || null);
+      }
+      commitProject((previous) => ({
+        ...previous,
+        name: next.name,
+        timeline: {
+          ...next.timeline,
+          duration: Math.max(
+            next.timeline.duration || 0,
+            computeProjectDuration(next.items, videoDurationRef.current)
+          ),
+        },
+        tracks: next.tracks,
+        items: next.items,
+        notes: next.notes,
+      }));
+      setToast('Project settings applied');
+    },
+    [commitProject, syncVideoSource]
+  );
+
   useEffect(() => {
+    if (!autosaveEnabledRef.current) return;
     const timer = window.setTimeout(() => {
       void autosaveProject(projectWithDuration(projectRef.current, videoDurationRef.current));
     }, 1200);
@@ -622,6 +661,8 @@ export function App() {
     let cancelled = false;
     void loadSettingsFromConfig().then((settings) => {
       if (cancelled) return;
+      autosaveEnabledRef.current = settings.autosave !== false;
+      setTerminalOverlayEnabled(settings.enableTerminalOverlay !== false);
       if (settings.voicevoxEndpoint) {
         ttsManager.registerProvider(
           new VoicevoxProvider('voicevox', 'VOICEVOX', settings.voicevoxEndpoint)
@@ -681,16 +722,7 @@ export function App() {
 
   const applyVideoPath = useCallback(
     (path: string | null) => {
-      rawVideoPathRef.current = path;
-      setRawVideoPath(path);
-      setVideoSrc((previous) => {
-        if (previous?.startsWith('blob:')) {
-          try {
-            URL.revokeObjectURL(previous);
-          } catch {}
-        }
-        return path ? convertFileSrc(path) : null;
-      });
+      syncVideoSource(path);
       commitProject(
         (previousProject) => ({
           ...previousProject,
@@ -699,7 +731,7 @@ export function App() {
         false
       );
     },
-    [commitProject]
+    [commitProject, syncVideoSource]
   );
 
   const handleVideoSelect = useCallback(
@@ -1608,6 +1640,7 @@ export function App() {
         onAutoTranscribe={handleAutoTranscribe}
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
         onExportVideo={() => setIsExportModalOpen(true)}
         onOpenAiVideoGenerator={() => setIsAiVideoModalOpen(true)}
         hasVideo={Boolean(videoSrc)}
@@ -1642,6 +1675,7 @@ export function App() {
             width={project.timeline.width}
             height={project.timeline.height}
             tracks={tracks}
+            showTerminal={terminalOverlayEnabled}
           />
         </div>
 
@@ -1803,7 +1837,19 @@ export function App() {
       <SettingsModal
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
-        onSettingsSaved={() => setToast('Settings saved to ~/.config/voix/settings.yaml')}
+        onSettingsSaved={(saved) => {
+          autosaveEnabledRef.current = saved.autosave !== false;
+          setTerminalOverlayEnabled(saved.enableTerminalOverlay !== false);
+          setToast('Settings saved to ~/.config/voix/settings.yaml');
+        }}
+      />
+
+      <ProjectSettingsModal
+        isOpen={isProjectSettingsOpen}
+        project={project}
+        computedDuration={totalDuration}
+        onClose={() => setIsProjectSettingsOpen(false)}
+        onApply={handleApplyProjectSettings}
       />
 
       <ItemInspector

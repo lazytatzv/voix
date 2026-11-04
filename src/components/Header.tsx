@@ -7,6 +7,7 @@ import {
   Bot,
   Layers,
   Settings,
+  Settings2,
   User,
   Save,
   SaveAll,
@@ -24,6 +25,7 @@ interface HeaderProps {
   onAutoTranscribe: () => void;
   onOpenCharacterSettings: () => void;
   onOpenSettings?: () => void;
+  onOpenProjectSettings?: () => void;
   onExportVideo: () => void;
   onOpenAiVideoGenerator: () => void;
   hasVideo: boolean;
@@ -48,6 +50,7 @@ export const Header: React.FC<HeaderProps> = ({
   onAutoTranscribe,
   onOpenCharacterSettings,
   onOpenSettings,
+  onOpenProjectSettings,
   onExportVideo,
   onOpenAiVideoGenerator,
   hasVideo,
@@ -195,6 +198,17 @@ export const Header: React.FC<HeaderProps> = ({
               title="Redo (Ctrl+Shift+Z / Ctrl+Y)"
             >
               <Redo2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          <span className="w-px h-4 bg-[#2a2c30] mx-0.5" />
+          {onOpenProjectSettings && (
+            <button
+              type="button"
+              onClick={onOpenProjectSettings}
+              className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-[#c4c7c5] transition"
+              title="Project settings (resolution, tracks, background)"
+            >
+              <Settings2 className="w-3.5 h-3.5" />
             </button>
           )}
         </div>

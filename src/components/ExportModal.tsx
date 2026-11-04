@@ -66,6 +66,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [resultMessage, setResultMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [includeBackgroundAudio, setIncludeBackgroundAudio] = useState(true);
+  const [showTerminalOverlay, setShowTerminalOverlay] = useState(true);
 
   const duration = Math.max(project.timeline.duration, videoDuration || 0, 0.5);
   const estimatedFrames = Math.ceil(duration * settings.overlayFps);
@@ -78,6 +79,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
       if (cancelled) return;
       const next = settingsFromApp(app, project);
       setSettings(next);
+      setShowTerminalOverlay(app.enableTerminalOverlay !== false);
       if (!outputPath) {
         let suggested = next.outputPath;
         if (suggested.startsWith('~/') && isTauriRuntime()) {
@@ -179,6 +181,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
         outputPath,
         backgroundPath: videoPath,
         backgroundVolume: includeBackgroundAudio ? project.timeline.videoVolume ?? 1 : 0,
+        showTerminal: showTerminalOverlay,
         onProgress,
       });
       setResultMessage(result);
