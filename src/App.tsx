@@ -410,15 +410,12 @@ export function App() {
     [syncVideoSource, recordRecentProject]
   );
 
-  // Restore the native autosave when localStorage was cleared or too small.
+  // Restore the native autosave from ~/.config/voix/autosave.voix.yaml
   useEffect(() => {
-    if (projectRef.current.items.length > 0) return;
     let cancelled = false;
     void loadAutosaveProject().then((restored) => {
-      if (cancelled || !restored || restored.items.length === 0) return;
-      if (projectRef.current.items.length > 0) return;
+      if (cancelled || !restored) return;
       applyProject(restored, null);
-      setToast('Restored autosave from ~/.config/voix/autosave.voix.yaml');
     });
     return () => {
       cancelled = true;
