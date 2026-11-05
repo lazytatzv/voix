@@ -144,6 +144,12 @@ export function generateYamlConfigHeader(characters: Character[]): string {
 }
 
 /**
+ * セリフ間の標準間隔（ポーズ時間）。0.15s は早口すぎて語尾の余韻が衝突しやすいため、
+ * 自然で聞き取りやすい会話リズムを保つ 0.25s（250ms）を基準間隔として採用。
+ */
+export const DEFAULT_LINE_GAP = 0.25;
+
+/**
  * タイムラインの音声アイテムをYAMLテキストにシリアライズ
  * エンジニアに最高にマッチした簡潔な記法 (- z: ..., - m(smile): ...) を標準サポート
  */
@@ -159,9 +165,6 @@ export function itemsToRawText(
 
   let prevEndTime = 0;
   const blocks: string[] = [];
-  // The parser places 0.15s between consecutive lines, so subtract that
-  // baseline when emitting a pause to keep timings stable across round-trips.
-  const DEFAULT_LINE_GAP = 0.15;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];

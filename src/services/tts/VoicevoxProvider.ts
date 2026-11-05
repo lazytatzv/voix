@@ -122,6 +122,10 @@ export class VoicevoxProvider implements TTSProvider {
     if (options?.speedScale) audioQuery.speedScale = options.speedScale;
     if (options?.pitchScale) audioQuery.pitchScale = options.pitchScale;
 
+    // 語尾の母音・息の減衰がプツッと切れないように十分な余韻（最低0.20s）を確保
+    audioQuery.postPhonemeLength = Math.max(audioQuery.postPhonemeLength ?? 0, 0.2);
+    audioQuery.prePhonemeLength = Math.max(audioQuery.prePhonemeLength ?? 0, 0.1);
+
     // 音素タイミング・尺を計算 (speedScale反映)
     const phonemes: PhonemeTiming[] = [];
     const speed = audioQuery.speedScale || 1.0;

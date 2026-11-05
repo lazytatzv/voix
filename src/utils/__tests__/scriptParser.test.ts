@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { itemsToRawText, parseScriptWithConfig } from '../scriptParser';
+import { DEFAULT_LINE_GAP, itemsToRawText, parseScriptWithConfig } from '../scriptParser';
 import { defaultCharacters } from '../defaultCharacters';
 import type { VoiceItem } from '../../types';
 
@@ -31,14 +31,14 @@ describe('itemsToRawText YAML round-trip', () => {
         continue;
       }
       starts.push(cursor);
-      cursor += durations.get(line.text)! + 0.15;
+      cursor += durations.get(line.text)! + DEFAULT_LINE_GAP;
     }
 
     expect(starts).toEqual([0, 1.5, 3]);
   });
 
   it('does not add a pause for the default gap between lines', () => {
-    const items = [voice('a', 'one', 0, 1), voice('b', 'two', 1.15, 1)];
+    const items = [voice('a', 'one', 0, 1), voice('b', 'two', 1 + DEFAULT_LINE_GAP, 1)];
     expect(itemsToRawText(items, defaultCharacters)).not.toContain('pause:');
   });
 });

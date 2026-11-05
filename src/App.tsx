@@ -51,8 +51,9 @@ import { loadImage, clearImageCache } from './render/imageCache';
 import { detectSpeechFromVideo, measureImportedAudio } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
 import { ScriptLinePrompt, formatSpeechWithPersona } from './services/aiService';
-import { matchCharacter, ParsedScriptLine, ParsedYamlConfig } from './utils/scriptParser';
+import { matchCharacter, ParsedScriptLine, ParsedYamlConfig, DEFAULT_LINE_GAP } from './utils/scriptParser';
 import { soundEffectManager } from './utils/soundEffects';
+import { voiceAudioPlayer } from './services/voicePlayer';
 
 const AUTOSAVE_LOCAL_KEY = 'voix_project_autosave_v2';
 const RECENT_PROJECTS_KEY = 'voix_recent_projects_v1';
@@ -446,28 +447,15 @@ export function App() {
   /* Audio helpers                                                       */
   /* ------------------------------------------------------------------ */
 
-  const playingAudiosRef = useRef<Map<string, HTMLAudioElement>>(new Map());
-
   const stopAllAudio = useCallback(() => {
-    playingAudiosRef.current.forEach((audio) => {
-      audio.pause();
-      audio.currentTime = 0;
-    });
-    playingAudiosRef.current.clear();
+    voiceAudioPlayer.stopAll();
   }, []);
 
   const playVoiceAudio = useCallback(
-    (id: string, url: string, volume = 1) => {
-      stopAllAudio();
-      const audio = new Audio(url);
-      audio.volume = Math.max(0, Math.min(1, volume));
-      audio.onended = () => {
-        playingAudiosRef.current.delete(id);
-      };
-      playingAudiosRef.current.set(id, audio);
-      audio.play().catch((err) => console.warn('[App] voice playback failed:', err));
+    (id: string, source: Blob | string, volume = 1, offset = 0, audioKey?: string) => {
+      void voiceAudioPlayer.playVoice(id, source, volume, offset, audioKey);
     },
-    [stopAllAudio]
+    []
   );
 
   const hydrationAttemptsRef = useRef<Map<string, string>>(new Map());
@@ -690,6 +678,7 @@ export function App() {
 
       const currentProject = projectRef.current;
       const voiceMuted = currentProject.tracks?.find((t) => t.id === 'voice')?.muted === true;
+      voiceAudioPlayer.setMuted(voiceMuted);
 
       for (const item of currentProject.items) {
         if (item.type !== 'voice') continue;
@@ -703,8 +692,10 @@ export function App() {
         }
         if (voiceMuted) continue;
 
-        if (item.audioBlobUrl) {
-          playVoiceAudio(item.id, item.audioBlobUrl, item.volumeScale ?? 1);
+        const offset = Math.max(0, currentTimeRef.current - item.startTime);
+        const source = item.audioBlob || item.audioBlobUrl;
+        if (source) {
+          playVoiceAudio(item.id, source, item.volumeScale ?? 1, offset, item.audioKey);
         } else {
           void ensureVoiceAudio(item.id).then((url) => {
             if (!url) return;
@@ -712,7 +703,8 @@ export function App() {
               currentTimeRef.current >= item.startTime &&
               currentTimeRef.current < item.startTime + item.duration
             ) {
-              playVoiceAudio(item.id, url, item.volumeScale ?? 1);
+              const currentOffset = Math.max(0, currentTimeRef.current - item.startTime);
+              playVoiceAudio(item.id, url, item.volumeScale ?? 1, currentOffset, item.audioKey);
             }
           });
         }
@@ -1180,8 +1172,8 @@ export function App() {
     let scheduledStart = Math.max(0, startTime);
     existingVoices.forEach((item) => {
       const end = item.startTime + item.duration;
-      if (scheduledStart >= item.startTime - 0.05 && scheduledStart < end + 0.15) {
-        scheduledStart = Math.max(scheduledStart, end + 0.15);
+      if (scheduledStart >= item.startTime - 0.05 && scheduledStart < end + DEFAULT_LINE_GAP) {
+        scheduledStart = Math.max(scheduledStart, end + DEFAULT_LINE_GAP);
       }
     });
 
@@ -1249,7 +1241,7 @@ export function App() {
       if (originals.length === 0) return;
       const minStart = Math.min(...originals.map((item) => item.startTime));
       const maxEnd = Math.max(...originals.map((item) => item.startTime + item.duration));
-      const shift = maxEnd - minStart + 0.15;
+      const shift = maxEnd - minStart + DEFAULT_LINE_GAP;
       const clones = originals.map(
         (item) =>
           ({
@@ -1346,7 +1338,7 @@ export function App() {
       // voice setting (speed, pitch, expression, animation, volume).
       const first = projectRef.current.items.find((entry) => entry.id === id);
       const firstEnd = first ? first.startTime + first.duration : splitTime;
-      const secondStart = Number(Math.max(splitTime, firstEnd + 0.15).toFixed(2));
+      const secondStart = Number(Math.max(splitTime, firstEnd + DEFAULT_LINE_GAP).toFixed(2));
       const clone: VoiceItem = {
         ...item,
         id: newId('voice'),
@@ -1574,7 +1566,7 @@ export function App() {
             anim: line.anim,
             terminal: line.terminal,
           });
-          currentStart += duration + 0.15;
+          currentStart += duration + DEFAULT_LINE_GAP;
         } catch (err) {
           console.warn('[App] AI video synthesis failed:', line.text, err);
         }
@@ -1677,7 +1669,7 @@ export function App() {
           flipH: line.flipH !== undefined ? line.flipH : existing.flipH,
           scale: line.scale !== undefined ? line.scale : existing.scale,
         });
-        currentStart = startTime + existing.duration + 0.15;
+        currentStart = startTime + existing.duration + DEFAULT_LINE_GAP;
         continue;
       }
 
@@ -1713,7 +1705,7 @@ export function App() {
           flipH: line.flipH,
           scale: line.scale,
         });
-        currentStart = startTime + duration + 0.15;
+        currentStart = startTime + duration + DEFAULT_LINE_GAP;
       } catch (err) {
         console.warn('[App] YAML sync synthesis failed:', line.text, err);
         newItems.push({
@@ -1735,7 +1727,7 @@ export function App() {
           flipH: line.flipH,
           scale: line.scale,
         });
-        currentStart = startTime + 1.65;
+        currentStart = startTime + 1.5 + DEFAULT_LINE_GAP;
       }
     }
 
