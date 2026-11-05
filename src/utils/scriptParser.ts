@@ -159,6 +159,9 @@ export function itemsToRawText(
 
   let prevEndTime = 0;
   const blocks: string[] = [];
+  // The parser places 0.15s between consecutive lines, so subtract that
+  // baseline when emitting a pause to keep timings stable across round-trips.
+  const DEFAULT_LINE_GAP = 0.15;
 
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -167,10 +170,13 @@ export function itemsToRawText(
     const expr = item.expression && item.expression !== 'default' ? item.expression : '';
     const key = expr ? `${prefix}(${expr})` : prefix;
 
-    // 前のセリフとの間に0.35秒以上の明確な間（ポーズ）がある場合、明示的な pause を挿入
+    // 前のセリフとの間に明確な間（ポーズ）がある場合、明示的な pause を挿入
     const gap = item.startTime - prevEndTime;
-    if (i > 0 && gap >= 0.35) {
-      blocks.push(YAML.stringify([{ pause: Number(gap.toFixed(2)) }], { indent: 2 }).trim());
+    if (i > 0) {
+      const pauseSec = Number((gap - DEFAULT_LINE_GAP).toFixed(2));
+      if (pauseSec >= 0.05) {
+        blocks.push(YAML.stringify([{ pause: pauseSec }], { indent: 2 }).trim());
+      }
     }
     prevEndTime = item.startTime + item.duration;
 

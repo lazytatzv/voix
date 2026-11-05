@@ -11,6 +11,8 @@ import {
   Wand2,
   Tag,
   Check,
+  Plus,
+  ChevronDown,
 } from 'lucide-react';
 import { Character, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
@@ -41,6 +43,46 @@ interface ScriptEditorProps {
   onSyncFromYaml?: (lines: ParsedScriptLine[], config?: ParsedYamlConfig) => Promise<void>;
   onSelectItem?: (id: string | null) => void;
 }
+
+interface YamlSnippetItem {
+  icon: string;
+  label: string;
+  hint: string;
+  snippet: string;
+}
+
+const YAML_SNIPPET_SECTIONS: { title: string; items: YamlSnippetItem[] }[] = [
+  {
+    title: 'Dialogue',
+    items: [
+      { icon: '🥑', label: 'Zundamon line', hint: '- z:', snippet: '\n- z: ' },
+      { icon: '🌸', label: 'Metan line', hint: '- m:', snippet: '\n- m: ' },
+    ],
+  },
+  {
+    title: 'Emotion',
+    items: [
+      { icon: '🙂', label: 'Smile', hint: '(smile)', snippet: '(smile)' },
+      { icon: '😱', label: 'Shock', hint: '(shock)', snippet: '(shock)' },
+    ],
+  },
+  {
+    title: 'Effects',
+    items: [
+      { icon: '⏱️', label: 'Pause', hint: 'pause: 0.8', snippet: '\n- pause: 0.8\n' },
+      { icon: '🔔', label: 'Sound: pop', hint: 'se=pop', snippet: ', se=pop' },
+      { icon: '🔔', label: 'Sound: chime', hint: 'se=chime', snippet: ', se=chime' },
+      { icon: '✨', label: 'Bounce animation', hint: 'anim=bounce', snippet: ', anim=bounce' },
+      {
+        icon: '💻',
+        label: 'Terminal block',
+        hint: 'terminal',
+        snippet:
+          '\n- z:\n    text: コマンドを実行するのだ！\n    cmd: "pnpm dev"\n    output: "Vite ready in 150ms"\n    se: chime\n    anim: bounce\n',
+      },
+    ],
+  },
+];
 
 /**
  * YAMLテキスト内の指定インデックスのアイテムブロックの文字範囲を特定する
@@ -136,7 +178,15 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const [isSyncing, setIsSyncing] = useState(false);
   const debounceTimerRef = useRef<number | null>(null);
   const isEditingYamlRef = useRef(false);
+  const isComposingRef = useRef(false);
   const yamlTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const yamlTextRef = useRef(yamlText);
+  yamlTextRef.current = yamlText;
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const lastSyncedYamlRef = useRef(yamlText);
+  const lastRequestedYamlRef = useRef<string | null>(null);
+  const syncChainRef = useRef<Promise<void>>(Promise.resolve());
 
   const [inputText, setInputText] = useState('');
   const [selectedCharacterId, setSelectedCharacterId] = useState<string>(characters[0]?.id || '');
@@ -145,6 +195,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const aiMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
+  const insertMenuRef = useRef<HTMLDivElement | null>(null);
 
   // 再生中または選択中のアクティブなセリフアイテムを特定
   const activeVoiceItem = items.find(
@@ -157,7 +209,13 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   // 再生中にYAMLの該当セクションを自動追尾スクロール
   const lastHighlightedIndexRef = useRef<number>(-1);
   useEffect(() => {
-    if (tab === 'yaml' && isPlaying && activeLineRange && highlightedItemIndex !== lastHighlightedIndexRef.current) {
+    if (
+      tab === 'yaml' &&
+      isPlaying &&
+      activeLineRange &&
+      highlightedItemIndex !== lastHighlightedIndexRef.current &&
+      document.activeElement !== yamlTextareaRef.current
+    ) {
       lastHighlightedIndexRef.current = highlightedItemIndex;
       if (yamlTextareaRef.current) {
         const targetScroll = Math.max(0, activeLineRange.startLine * 22 - 60);
@@ -175,14 +233,15 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
           el.scrollIntoView({ behavior: 'smooth', block: 'center' });
         }
       } else if (tab === 'yaml') {
-        const itemIdx = items.findIndex((it) => it.id === itemId);
-        if (itemIdx >= 0 && yamlTextareaRef.current) {
-          const textarea = yamlTextareaRef.current;
-          const range = findYamlSectionRange(yamlText, itemIdx);
+        const textarea = yamlTextareaRef.current;
+        if (!textarea || document.activeElement === textarea) return;
+        const itemIdx = itemsRef.current.findIndex((it) => it.id === itemId);
+        if (itemIdx >= 0) {
+          const range = findYamlSectionRange(yamlTextRef.current, itemIdx);
           if (range) {
             textarea.focus();
             textarea.setSelectionRange(range.start, range.end);
-            const textBefore = yamlText.slice(0, range.start);
+            const textBefore = yamlTextRef.current.slice(0, range.start);
             const lineCount = (textBefore.match(/\n/g) || []).length;
             const lineHeight = 19;
             textarea.scrollTop = Math.max(0, lineCount * lineHeight - 60);
@@ -190,7 +249,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         }
       }
     },
-    [tab, items, yamlText]
+    [tab]
   );
 
   // タイムラインの吹き出しタップ時やタブ切替時に該当箇所へスムーズスクロール
@@ -209,25 +268,59 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   // Cards -> YAML 自動同期: Cards編集時、YAMLテキストを自動更新
   useEffect(() => {
     if (tab === 'cards' && !isEditingYamlRef.current) {
-      setYamlText(itemsToRawText(items, characters));
+      const next = itemsToRawText(items, characters);
+      setYamlText(next);
+      lastSyncedYamlRef.current = next;
+      lastRequestedYamlRef.current = null;
     }
   }, [items, characters, tab]);
 
   // YAML -> Cards 自動同期
   const syncYamlToItems = useCallback(
-    async (textToSync: string) => {
-      if (!onSyncFromYaml) return;
-      try {
-        setIsSyncing(true);
-        const { lines, config } = parseScriptWithConfig(textToSync);
-        await onSyncFromYaml(lines, config);
-      } catch (err) {
-        console.warn('Auto-sync YAML error:', err);
-      } finally {
-        setIsSyncing(false);
-      }
+    (textToSync: string, force = false): Promise<void> => {
+      if (!onSyncFromYaml) return Promise.resolve();
+      // Keep the current timeline while the editor is empty mid-rewrite.
+      if (!textToSync.trim() && !force) return Promise.resolve();
+      if (textToSync === lastSyncedYamlRef.current) return Promise.resolve();
+      if (textToSync === lastRequestedYamlRef.current) return syncChainRef.current;
+
+      lastRequestedYamlRef.current = textToSync;
+      const run = async () => {
+        if (textToSync !== lastRequestedYamlRef.current) return;
+        if (textToSync === lastSyncedYamlRef.current) return;
+        try {
+          setIsSyncing(true);
+          const { lines, config } = parseScriptWithConfig(textToSync);
+          await onSyncFromYaml(lines, config);
+          lastSyncedYamlRef.current = textToSync;
+        } catch (err) {
+          console.warn('Auto-sync YAML error:', err);
+          if (lastRequestedYamlRef.current === textToSync) {
+            lastRequestedYamlRef.current = null;
+          }
+        } finally {
+          setIsSyncing(false);
+        }
+      };
+      // Serialize syncs so a slow TTS pass cannot overwrite a newer edit.
+      syncChainRef.current = syncChainRef.current.then(run, run);
+      return syncChainRef.current;
     },
     [onSyncFromYaml]
+  );
+
+  const scheduleYamlAutoSync = useCallback(
+    (text: string) => {
+      if (debounceTimerRef.current) {
+        window.clearTimeout(debounceTimerRef.current);
+      }
+      debounceTimerRef.current = window.setTimeout(async () => {
+        debounceTimerRef.current = null;
+        await syncYamlToItems(text);
+        isEditingYamlRef.current = false;
+      }, 600);
+    },
+    [syncYamlToItems]
   );
 
   // タブ切り替え（手動操作不要で常に自動同期）
@@ -236,7 +329,10 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
     if (newTab === 'yaml') {
       // YAMLタブへ: 最新のCards状態からYAMLを生成
-      setYamlText(itemsToRawText(items, characters));
+      const next = itemsToRawText(items, characters);
+      setYamlText(next);
+      lastSyncedYamlRef.current = next;
+      lastRequestedYamlRef.current = null;
       setTab('yaml');
     } else {
       // Cardsタブへ: 保留中のYAML編集を即座に反映
@@ -245,7 +341,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         debounceTimerRef.current = null;
       }
       isEditingYamlRef.current = false;
-      await syncYamlToItems(yamlText);
+      await syncYamlToItems(yamlTextRef.current, true);
       setTab('cards');
     }
   };
@@ -258,13 +354,17 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
     if (debounceTimerRef.current) {
       window.clearTimeout(debounceTimerRef.current);
+      debounceTimerRef.current = null;
     }
 
-    setIsSyncing(true);
-    debounceTimerRef.current = window.setTimeout(async () => {
-      await syncYamlToItems(val);
-      isEditingYamlRef.current = false;
-    }, 600);
+    // Mid-composition text is not stable enough to re-synthesize.
+    if (isComposingRef.current) return;
+    scheduleYamlAutoSync(val);
+  };
+
+  const handleYamlCompositionEnd = (e: React.CompositionEvent<HTMLTextAreaElement>) => {
+    isComposingRef.current = false;
+    scheduleYamlAutoSync(e.currentTarget.value);
   };
 
   const handleYamlBlur = async () => {
@@ -272,8 +372,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       window.clearTimeout(debounceTimerRef.current);
       debounceTimerRef.current = null;
     }
-    await syncYamlToItems(yamlText);
     isEditingYamlRef.current = false;
+    await syncYamlToItems(yamlTextRef.current, true);
   };
 
   // エンジニア向けキーボード操作: Tabキーインデント、Ctrl/Cmd+Enter即時同期
@@ -285,6 +385,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       const end = textarea.selectionEnd;
       const nextVal = yamlText.substring(0, start) + '  ' + yamlText.substring(end);
       setYamlText(nextVal);
+      scheduleYamlAutoSync(nextVal);
       setTimeout(() => {
         textarea.selectionStart = textarea.selectionEnd = start + 2;
       }, 0);
@@ -297,7 +398,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         window.clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = null;
       }
-      syncYamlToItems(yamlText);
+      void syncYamlToItems(yamlTextRef.current, true);
       isEditingYamlRef.current = false;
       return;
     }
@@ -307,9 +408,11 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const insertYamlSnippet = (snippet: string) => {
     const textarea = yamlTextareaRef.current;
     if (!textarea) {
-      const next = yamlText ? yamlText.trimEnd() + '\n' + snippet : snippet;
+      const prev = yamlTextRef.current;
+      const next = prev ? prev.trimEnd() + '\n' + snippet : snippet;
       setYamlText(next);
-      syncYamlToItems(next);
+      isEditingYamlRef.current = true;
+      scheduleYamlAutoSync(next);
       return;
     }
     const start = textarea.selectionStart;
@@ -322,24 +425,26 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       textarea.selectionStart = textarea.selectionEnd = start + snippet.length;
     }, 0);
     isEditingYamlRef.current = true;
-    if (debounceTimerRef.current) window.clearTimeout(debounceTimerRef.current);
-    debounceTimerRef.current = window.setTimeout(async () => {
-      await syncYamlToItems(nextVal);
-      isEditingYamlRef.current = false;
-    }, 600);
+    scheduleYamlAutoSync(nextVal);
   };
 
   useEffect(() => {
+    if (!isAiMenuOpen && !isInsertMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) {
+      if (isAiMenuOpen && aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) {
         setIsAiMenuOpen(false);
       }
+      if (
+        isInsertMenuOpen &&
+        insertMenuRef.current &&
+        !insertMenuRef.current.contains(e.target as Node)
+      ) {
+        setIsInsertMenuOpen(false);
+      }
     };
-    if (isAiMenuOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
+    document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [isAiMenuOpen]);
+  }, [isAiMenuOpen, isInsertMenuOpen]);
 
   const handleAdd = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -447,96 +552,86 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       {/* Main Content Area: Cards vs YAML */}
       {tab === 'yaml' ? (
         <div className="flex-1 relative flex flex-col bg-[#121314] overflow-hidden">
-          {/* Quick Snippet Chips Toolbar */}
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#141518] border-b border-[#222428] overflow-x-auto text-[11px] select-none flex-shrink-0">
-            <span className="text-[#5f6368] font-mono text-[10px] mr-0.5 uppercase tracking-wider">Insert:</span>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet('\n- z: ')}
-              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#10b981] hover:text-[#34d399] font-mono transition flex items-center gap-1 border border-[#26282c]"
-              title="Insert Zundamon dialogue line"
-            >
-              <span>🥑 - z:</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet('\n- m: ')}
-              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#f472b6] hover:text-[#fbcfe8] font-mono transition flex items-center gap-1 border border-[#26282c]"
-              title="Insert Metan dialogue line"
-            >
-              <span>🌸 - m:</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet('(smile)')}
-              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#8ab4f8] font-mono transition border border-[#26282c]"
-              title="Insert smile emotion"
-            >
-              (smile)
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet('(shock)')}
-              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#8ab4f8] font-mono transition border border-[#26282c]"
-              title="Insert shock emotion"
-            >
-              (shock)
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet('\n- pause: 0.8\n')}
-              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#fbbf24] hover:text-[#fde68a] font-mono transition flex items-center gap-1 border border-[#26282c]"
-              title="Insert natural pause"
-            >
-              <span>⏱️ pause</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet(', se=pop')}
-              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#c084fc] hover:text-[#d8b4fe] font-mono transition border border-[#26282c]"
-              title="Insert SE pop sound"
-            >
-              🔔 se:pop
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet(', se=chime')}
-              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#c084fc] hover:text-[#d8b4fe] font-mono transition border border-[#26282c]"
-              title="Insert SE chime sound"
-            >
-              🔔 se:chime
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet(', anim=bounce')}
-              className="px-1.5 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#f59e0b] hover:text-[#fbbf24] font-mono transition border border-[#26282c]"
-              title="Insert bounce hop animation"
-            >
-              ✨ bounce
-            </button>
-            <button
-              type="button"
-              onClick={() => insertYamlSnippet('\n- z:\n    text: コマンドを実行するのだ！\n    cmd: "pnpm dev"\n    output: "Vite ready in 150ms"\n    se: chime\n    anim: bounce\n')}
-              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#38bdf8] hover:text-[#7dd3fc] font-mono transition flex items-center gap-1 border border-[#26282c]"
-              title="Insert terminal overlay block"
-            >
-              <span>💻 terminal</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const configHeader = generateYamlConfigHeader(characters);
-                if (!yamlText.includes('config:')) {
-                  const nextVal = configHeader + yamlText;
-                  setYamlText(nextVal);
-                  syncYamlToItems(nextVal);
-                }
-              }}
-              className="px-2 py-0.5 rounded-sm bg-[#1a1c20] hover:bg-[#25282e] text-[#a5b4fc] hover:text-white font-mono transition flex items-center gap-1 border border-[#26282c]"
-              title="Insert or prepend YAML config template for character layout, position, and subtitles"
-            >
-              <span>⚙️ config:</span>
-            </button>
+          {/* Quick Insert Menu */}
+          <div
+            className="relative flex items-center gap-2 px-3 py-1.5 bg-[#141518] border-b border-[#222428] text-[11px] select-none flex-shrink-0 z-20"
+            onMouseDown={(e) => {
+              if ((e.target as HTMLElement).closest('button')) e.preventDefault();
+            }}
+          >
+            <div ref={insertMenuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setIsInsertMenuOpen(!isInsertMenuOpen)}
+                className={`px-2 py-0.5 rounded-sm font-mono transition flex items-center gap-1 border ${
+                  isInsertMenuOpen
+                    ? 'bg-[#25282e] text-white border-[#3c4043]'
+                    : 'bg-[#1a1c20] text-[#c4c7c5] hover:bg-[#25282e] hover:text-white border-[#26282c]'
+                }`}
+                title="Insert YAML snippet"
+              >
+                <Plus className="w-3 h-3" />
+                <span>Insert</span>
+                <ChevronDown
+                  className={`w-3 h-3 text-[#8e918f] transition-transform ${
+                    isInsertMenuOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {isInsertMenuOpen && (
+                <div className="absolute left-0 top-full mt-1 w-60 bg-[#141518] border border-[#26282c] rounded-lg shadow-2xl p-1 z-50 animate-in fade-in duration-100">
+                  {YAML_SNIPPET_SECTIONS.map((section, sectionIndex) => (
+                    <div key={section.title}>
+                      {sectionIndex > 0 && <div className="border-t border-[#242628] my-1" />}
+                      <span className="block px-2 pt-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-[#5f6368]">
+                        {section.title}
+                      </span>
+                      {section.items.map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => {
+                            insertYamlSnippet(item.snippet);
+                            setIsInsertMenuOpen(false);
+                          }}
+                          className="w-full flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm text-xs text-left text-[#c4c7c5] hover:bg-[#202124] hover:text-white transition"
+                        >
+                          <span className="flex items-center gap-2 min-w-0">
+                            <span className="w-4 text-center text-sm flex-shrink-0">{item.icon}</span>
+                            <span className="truncate">{item.label}</span>
+                          </span>
+                          <span className="font-mono text-[10px] text-[#5f6368] flex-shrink-0">
+                            {item.hint}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                  <div className="border-t border-[#242628] my-1" />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const configHeader = generateYamlConfigHeader(characters);
+                      if (!yamlText.includes('config:')) {
+                        const nextVal = configHeader + yamlText;
+                        setYamlText(nextVal);
+                        syncYamlToItems(nextVal);
+                      }
+                      setIsInsertMenuOpen(false);
+                    }}
+                    className="w-full flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm text-xs text-left text-[#c4c7c5] hover:bg-[#202124] hover:text-white transition"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="w-4 text-center text-sm">⚙️</span>
+                      <span>Config header</span>
+                    </span>
+                    <span className="font-mono text-[10px] text-[#5f6368]">config:</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => {
@@ -570,6 +665,10 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               value={yamlText}
               onChange={handleYamlChange}
               onKeyDown={handleYamlKeyDown}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
+              onCompositionEnd={handleYamlCompositionEnd}
               onScroll={(e) => setYamlScrollTop((e.target as HTMLTextAreaElement).scrollTop)}
               onBlur={handleYamlBlur}
               placeholder={`# Clean YAML script (Auto-syncs with Timeline)
