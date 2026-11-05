@@ -15,7 +15,7 @@ interface VideoPreviewProps {
   isPlaying: boolean;
   onTogglePlay: () => void;
   onSeek: (time: number) => void;
-  onVideoDurationLoaded?: (duration: number) => void;
+  onVideoDurationLoaded?: (duration: number, videoWidth?: number, videoHeight?: number) => void;
   onVideoDrop?: (file: File) => void;
   activeAudioUrl?: string | null;
   onToggleCharacterFlip?: (characterId: string) => void;
@@ -61,6 +61,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const currentTimeRef = useRef(currentTime);
   const isPlayingRef = useRef(isPlaying);
   const [isMuted, setIsMuted] = useState(false);
+  const [videoError, setVideoError] = useState<string | null>(null);
   const [showAvatar, setShowAvatar] = useState(true);
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [imageVersion, setImageVersion] = useState(0);
@@ -162,11 +163,26 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const video = videoRef.current;
     if (!video || !videoSrc) return;
     if (isPlaying) {
-      video.play().catch(() => {});
+      if (video.readyState >= 1) {
+        try {
+          if (Math.abs(video.currentTime - currentTime) > 0.08) {
+            video.currentTime = Math.max(0.001, currentTime);
+          }
+        } catch {}
+      }
+      video.play().catch((err) => {
+        console.warn('[VideoPreview] play failed:', err);
+      });
     } else {
       video.pause();
     }
   }, [isPlaying, videoSrc]);
+
+  // Reset video error on new source.
+  useEffect(() => {
+    setVideoError(null);
+    pendingSeekTimeRef.current = null;
+  }, [videoSrc]);
 
   // Match the project's background-video level; the dedicated mute button
   // silences all preview audio without discarding the configured volume.
@@ -188,28 +204,41 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       if (video.seeking) pendingSeekTimeRef.current = currentTime;
       else {
         try {
-          video.currentTime = currentTime;
+          video.currentTime = Math.max(0.001, currentTime);
         } catch {}
       }
     }
   }, [currentTime, videoSrc, isPlaying]);
 
-  useEffect(() => {
-    pendingSeekTimeRef.current = null;
-  }, [videoSrc]);
-
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (video) {
+      setVideoError(null);
       if (video.duration && !Number.isNaN(video.duration) && video.duration > 0) {
-        onVideoDurationLoaded?.(video.duration);
+        onVideoDurationLoaded?.(video.duration, video.videoWidth, video.videoHeight);
       }
-      if (currentTime > 0) {
-        try {
-          video.currentTime = currentTime;
-        } catch {}
+      // Force decoding the initial frame so the screen is never left black.
+      try {
+        video.currentTime = Math.max(0.001, currentTime);
+      } catch {}
+    }
+  };
+
+  const handleVideoError = () => {
+    const video = videoRef.current;
+    const err = video?.error;
+    let message = '動画の読み込みに失敗しました';
+    if (err) {
+      if (err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
+        message = '動画フォーマットまたはコーデックがサポートされていないか、ファイルにアクセスできません';
+      } else if (err.code === MediaError.MEDIA_ERR_DECODE) {
+        message = '動画のデコード中にエラーが発生しました';
+      } else if (err.code === MediaError.MEDIA_ERR_NETWORK) {
+        message = '動画データの通信・読み込みエラーが発生しました';
       }
     }
+    console.warn('[VideoPreview] video error:', err, videoSrc);
+    setVideoError(message);
   };
 
   const handleSeeked = () => {
@@ -443,6 +472,16 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const loop = () => {
       renderFrameRef.current();
 
+      // Keep background video in sync with the timeline playhead.
+      const video = videoRef.current;
+      if (video && video.readyState >= 1 && !video.seeking) {
+        if (Math.abs(video.currentTime - currentTimeRef.current) > 0.15) {
+          try {
+            video.currentTime = Math.max(0.001, currentTimeRef.current);
+          } catch {}
+        }
+      }
+
       // Keep BGM / audio items in sync with the playhead.
       const map = bgmAudiosRef.current;
       audioItems.forEach((item) => {
@@ -513,17 +552,28 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         }}
       >
         {videoSrc ? (
-          <video
-            ref={videoRef}
-            src={videoSrc}
-            className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
-            muted={isMuted}
-            playsInline
-            loop
-            preload="metadata"
-            onLoadedMetadata={handleLoadedMetadata}
-            onSeeked={handleSeeked}
-          />
+          <>
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+              muted={isMuted}
+              playsInline
+              loop
+              preload="auto"
+              onLoadedMetadata={handleLoadedMetadata}
+              onSeeked={handleSeeked}
+              onError={handleVideoError}
+            />
+            {videoError && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80 p-6 text-center select-none pointer-events-auto">
+                <p className="text-red-400 font-medium text-sm mb-2">{videoError}</p>
+                <p className="text-xs text-neutral-400 max-w-md">
+                  Tauri上の動画再生にはH.264 / WebMなどの標準フォーマットが推奨されます。
+                </p>
+              </div>
+            )}
+          </>
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 select-none pointer-events-none">
             <p className="text-[#5f6368] font-mono text-xs tracking-wider uppercase mb-1">

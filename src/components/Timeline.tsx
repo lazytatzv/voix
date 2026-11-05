@@ -37,6 +37,8 @@ interface TimelineProps {
   tracks: TrackState[];
   hasVideo?: boolean;
   videoName?: string;
+  onPickVideo?: () => void;
+  onFileDrop?: (fileOrPath: File | string) => void;
   onSeek: (time: number) => void;
   onUpdateItem: (id: string, updates: Partial<TimelineItem>, record?: boolean) => void;
   onBeginTransform?: () => void;
@@ -151,6 +153,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   tracks,
   hasVideo,
   videoName,
+  onPickVideo,
+  onFileDrop,
   onSeek,
   onUpdateItem,
   onBeginTransform,
@@ -600,7 +604,23 @@ export const Timeline: React.FC<TimelineProps> = ({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-auto min-h-0 relative">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-auto min-h-0 relative"
+        onDragOver={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+        }}
+        onDrop={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const file = e.dataTransfer.files?.[0];
+          if (file) {
+            const path = (file as unknown as { path?: string }).path;
+            onFileDrop?.(path || file);
+          }
+        }}
+      >
         <div className="flex" style={{ width: HEADER_WIDTH + timelineWidth }}>
           {/* Left sticky track headers */}
           <div
@@ -624,7 +644,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                 >
                   <Icon className="w-3 h-3 text-[#8e918f] flex-shrink-0" />
                   <span className="truncate flex-1 min-w-0 text-[10px]">{row.label}</span>
-                  {row.addType && (
+                  {row.addType ? (
                     <button
                       type="button"
                       onClick={() => onAddItem(row.addType!)}
@@ -633,7 +653,16 @@ export const Timeline: React.FC<TimelineProps> = ({
                     >
                       <Plus className="w-3 h-3" />
                     </button>
-                  )}
+                  ) : row.kind === 'video' && onPickVideo ? (
+                    <button
+                      type="button"
+                      onClick={onPickVideo}
+                      className="w-5 h-5 flex items-center justify-center rounded hover:bg-[#25272a] text-[#8ab4f8] flex-shrink-0"
+                      title={hasVideo ? 'Change video file' : 'Select video file'}
+                    >
+                      <Plus className="w-3 h-3" />
+                    </button>
+                  ) : null}
                   {track && (
                     <>
                       <button
@@ -726,7 +755,13 @@ export const Timeline: React.FC<TimelineProps> = ({
               >
                 {row.kind === 'video' && (
                   <div
-                    className="absolute top-1 bottom-1 rounded-[2px] flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onPickVideo?.();
+                    }}
+                    className={`absolute top-1 bottom-1 rounded-[2px] flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap cursor-pointer transition-colors ${
+                      hasVideo ? 'hover:brightness-125' : 'hover:bg-[#1a2333]'
+                    }`}
                     style={{
                       left: 0,
                       width: `${Math.min(totalDuration, totalDuration) * pxPerSecond}px`,
@@ -734,10 +769,11 @@ export const Timeline: React.FC<TimelineProps> = ({
                       color: hasVideo ? '#e2e8f0' : '#4b5563',
                       border: '1px solid #334155',
                     }}
+                    title={hasVideo ? `${videoName || 'Video'} (Click to change video)` : 'Click to select video file'}
                   >
                     <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#38bdf8]" />
                     <span className="text-[11px]">
-                      {hasVideo ? videoName || 'Background video' : 'No background video'}
+                      {hasVideo ? videoName || 'Background video' : 'Click to add video'}
                     </span>
                   </div>
                 )}

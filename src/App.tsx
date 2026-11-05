@@ -960,12 +960,16 @@ export function App() {
         }),
         false
       );
+      if (path) {
+        const name = path.split('/').pop() || path;
+        setToast(`Video loaded: ${name}`);
+      }
     },
     [commitProject, syncVideoSource]
   );
 
   const handleVideoSelect = useCallback(
-    (fileOrPath: File | string) => {
+    async (fileOrPath: File | string) => {
       if (typeof fileOrPath === 'string') {
         applyVideoPath(fileOrPath);
         return;
@@ -973,21 +977,81 @@ export function App() {
       const path = (fileOrPath as unknown as { path?: string }).path;
       if (path && typeof path === 'string') {
         applyVideoPath(path);
-      } else {
-        const url = URL.createObjectURL(fileOrPath);
-        setRawVideoPath(null);
-        rawVideoPathRef.current = null;
-        setVideoSrc((previous) => {
-          if (previous?.startsWith('blob:')) {
-            try {
-              URL.revokeObjectURL(previous);
-            } catch {}
-          }
-          return url;
-        });
+        return;
       }
+
+      // WebKitGTK cannot stream blob URLs for video. If running in Tauri,
+      // prompt with native file picker to get a real filesystem path.
+      if (isTauriRuntime()) {
+        try {
+          const picked = await openDialog({
+            title: 'Select background video',
+            multiple: false,
+            filters: [{ name: 'Video Files', extensions: VIDEO_EXTENSIONS }],
+          });
+          if (picked && typeof picked === 'string') {
+            applyVideoPath(picked);
+            return;
+          }
+        } catch (err) {
+          console.warn('[App] native video pick failed:', err);
+        }
+      }
+
+      // Browser fallback (only works for small clips in pure browser mode)
+      const url = URL.createObjectURL(fileOrPath);
+      setRawVideoPath(null);
+      rawVideoPathRef.current = null;
+      setVideoSrc((previous) => {
+        if (previous?.startsWith('blob:')) {
+          try {
+            URL.revokeObjectURL(previous);
+          } catch {}
+        }
+        return url;
+      });
     },
     [applyVideoPath]
+  );
+
+  const handlePickVideoNative = useCallback(async () => {
+    try {
+      const picked = await openDialog({
+        title: 'Select background video',
+        multiple: false,
+        filters: [{ name: 'Video Files', extensions: VIDEO_EXTENSIONS }],
+      });
+      if (picked && typeof picked === 'string') {
+        applyVideoPath(picked);
+      }
+    } catch (err) {
+      console.warn('[App] native video pick failed:', err);
+    }
+  }, [applyVideoPath]);
+
+  const handleVideoMetadataLoaded = useCallback(
+    (loadedDuration: number, width?: number, height?: number) => {
+      setVideoDuration(loadedDuration);
+      videoDurationRef.current = loadedDuration;
+
+      commitProject((prev) => {
+        let changed = false;
+        const nextTimeline = { ...prev.timeline };
+        if (Math.abs((nextTimeline.duration || 0) - loadedDuration) > 0.5) {
+          nextTimeline.duration = Number(loadedDuration.toFixed(2));
+          changed = true;
+        }
+        if (width && height && width >= 320 && height >= 240) {
+          if (nextTimeline.width !== width || nextTimeline.height !== height) {
+            nextTimeline.width = width;
+            nextTimeline.height = height;
+            changed = true;
+          }
+        }
+        return changed ? { ...prev, timeline: nextTimeline } : prev;
+      }, false);
+    },
+    [commitProject]
   );
 
   // Restore the background video referenced by the autosaved project.
@@ -1803,7 +1867,14 @@ export function App() {
   const dropHandlerRef = useRef<(paths: string[]) => void>(() => {});
   dropHandlerRef.current = (paths: string[]) => {
     if (paths.length === 0) return;
-    const filePath = paths[0];
+    let filePath = paths[0].trim();
+    if (filePath.startsWith('file://')) {
+      try {
+        filePath = decodeURIComponent(new URL(filePath).pathname);
+      } catch {
+        filePath = filePath.slice(7);
+      }
+    }
     const ext = fileExtension(filePath);
     if (VIDEO_EXTENSIONS.includes(ext)) {
       applyVideoPath(filePath);
@@ -2125,7 +2196,7 @@ export function App() {
             isPlaying={isPlaying}
             onTogglePlay={handleTogglePlay}
             onSeek={handleSeek}
-            onVideoDurationLoaded={(duration) => setVideoDuration(duration)}
+            onVideoDurationLoaded={handleVideoMetadataLoaded}
             onVideoDrop={handleVideoSelect}
             onToggleCharacterFlip={handleToggleCharacterFlip}
             width={project.timeline.width}
@@ -2226,6 +2297,21 @@ export function App() {
             tracks={tracks}
             hasVideo={Boolean(videoSrc)}
             videoName={rawVideoPath?.split('/').pop()}
+            onPickVideo={handlePickVideoNative}
+            onFileDrop={(fileOrPath) => {
+              if (typeof fileOrPath === 'string') {
+                const ext = fileExtension(fileOrPath);
+                if (VIDEO_EXTENSIONS.includes(ext)) {
+                  applyVideoPath(fileOrPath);
+                } else if (AUDIO_EXTENSIONS.includes(ext)) {
+                  void addAudioFromPath(fileOrPath);
+                } else if (IMAGE_EXTENSIONS.includes(ext)) {
+                  void addImageFromPath(fileOrPath);
+                }
+              } else {
+                void handleVideoSelect(fileOrPath);
+              }
+            }}
             onSeek={handleSeek}
             onUpdateItem={updateItem}
             onBeginTransform={beginTransform}

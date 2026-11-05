@@ -19,9 +19,10 @@ fn media_stream_url(
         .0
         .as_ref()
         .ok_or_else(|| "メディアサーバーが起動していません".to_string())?;
+    let clean_path = expand_tilde(path.trim());
     server
-        .url_for(&path)
-        .map_err(|err| format!("メディアを開けません ({}): {}", path, err))
+        .url_for(&clean_path)
+        .map_err(|err| format!("メディアを開けません ({}): {}", clean_path, err))
 }
 
 #[derive(Serialize, Deserialize, Debug)]

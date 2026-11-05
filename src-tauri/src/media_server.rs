@@ -101,13 +101,24 @@ impl MediaServer {
     /// Registers a file and returns its streaming URL. Registering the same
     /// path again reuses the previous URL.
     pub fn url_for(&self, path: &str) -> io::Result<String> {
-        if path.trim().is_empty() {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
                 "empty media path",
             ));
         }
-        let canonical = std::fs::canonicalize(path)?;
+        let expanded = if trimmed == "~" || trimmed.starts_with("~/") {
+            let home = std::env::var("HOME").unwrap_or_default();
+            if trimmed == "~" {
+                home
+            } else {
+                format!("{}/{}", home.trim_end_matches('/'), &trimmed[2..])
+            }
+        } else {
+            trimmed.to_string()
+        };
+        let canonical = std::fs::canonicalize(&expanded)?;
         if !std::fs::metadata(&canonical)?.is_file() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,

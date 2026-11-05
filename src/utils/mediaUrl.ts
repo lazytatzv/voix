@@ -66,7 +66,10 @@ export function mediaUrlFor(src: string): Promise<string> {
   const cached = cache.get(src);
   if (cached) return cached;
 
-  const promise = resolveMediaUrl(src);
+  const promise = resolveMediaUrl(src).catch((err) => {
+    cache.delete(src);
+    throw err;
+  });
   cache.set(src, promise);
   return promise;
 }
