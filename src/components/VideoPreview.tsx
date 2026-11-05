@@ -390,6 +390,15 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     setCharacterDrag(null);
   };
 
+  const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!onToggleCharacterFlip) return;
+    const hit = hitTestCharacter(event.clientX, event.clientY);
+    if (!hit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onToggleCharacterFlip(hit.character.id);
+  };
+
   const renderFrame = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -539,10 +548,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           onPointerMove={handleCanvasPointerMove}
           onPointerUp={handleCanvasPointerUp}
           onPointerCancel={handleCanvasPointerCancel}
+          onDoubleClick={handleCanvasDoubleClick}
           onPointerLeave={() => {
             if (!characterDragRef.current) setHoveredCharacter(null);
           }}
-          aria-label="Preview: click to play or pause, drag a character to reposition it"
+          aria-label="Preview: click to play or pause, drag a character to reposition it, double-click a character to flip it"
         />
         {hoveredCharacter && (
           <div

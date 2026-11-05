@@ -263,7 +263,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                   ))}
                 </div>
                 <div className="flex items-center justify-between gap-2 text-[10px] text-[#8e918f]">
-                  <span>Tip: drag a tachie in the preview to place it freely.</span>
+                  <span>Tip: drag a tachie in the preview to place it freely, double-click to flip it.</span>
                   {(char.customX !== undefined || char.customY !== undefined) && (
                     <button
                       type="button"
