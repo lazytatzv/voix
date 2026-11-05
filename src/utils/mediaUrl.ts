@@ -1,38 +1,72 @@
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { isTauriRuntime } from '../services/audioCache';
 
-// WebKitGTK's media player cannot stream Tauri's custom `asset:` scheme, so
-// <video>/<audio> elements fail with MEDIA_ERR_SRC_NOT_SUPPORTED. Fetching the
-// asset through the webview and handing the element a blob: URL works. Cache
-// one blob URL per source to avoid re-downloading on every re-render.
+// WebKitGTK cannot stream Tauri's custom `asset:` scheme, so <video>/<audio>
+// elements fail with MEDIA_ERR_SRC_NOT_SUPPORTED. Previously we downloaded the
+// whole file into a Blob, which kept entire videos in memory and made large
+// projects unresponsive. Local files are now served by a loopback HTTP server
+// on the Rust side that supports Range requests, so the media engine streams
+// only what it needs. One URL per source; the Rust side keeps the mapping, so
+// these entries stay tiny for the lifetime of the app.
 const cache = new Map<string, Promise<string>>();
+
+function pathFromLocalUrl(src: string): string | null {
+  if (src.startsWith('file://')) {
+    try {
+      const decoded = decodeURIComponent(new URL(src).pathname);
+      // file:///C:/... becomes /C:/...; Windows paths must lose the slash.
+      return /^\/[A-Za-z]:[\\/]/.test(decoded) ? decoded.slice(1) : decoded;
+    } catch {
+      return src.slice('file://'.length);
+    }
+  }
+
+  if (src.startsWith('asset://') || /^https?:\/\/asset\.localhost\//i.test(src)) {
+    try {
+      const url = new URL(src);
+      const decoded = decodeURIComponent(url.pathname);
+      if (!decoded) return null;
+      if (/^[A-Za-z]:[\\/]/.test(decoded)) return decoded;
+      return `/${decoded.replace(/^\/+/, '')}`;
+    } catch {
+      return null;
+    }
+  }
+
+  if (/^(https?:|blob:|data:)/i.test(src)) return null;
+  return src;
+}
+
+async function resolveMediaUrl(src: string): Promise<string> {
+  if (!isTauriRuntime()) return src;
+  if (/^(blob:|data:)/i.test(src)) return src;
+  if (/^https?:\/\//i.test(src) && !/^https?:\/\/asset\.localhost\//i.test(src)) {
+    return src;
+  }
+
+  const path = pathFromLocalUrl(src);
+  if (path) {
+    try {
+      const url = await invoke<string>('media_stream_url', { path });
+      if (url) return url;
+    } catch (err) {
+      console.warn('[mediaUrl] streaming server unavailable:', err);
+    }
+    // Do not fall back to a whole-file Blob: that defeats streaming and can
+    // pin gigabytes of video in the web process. The asset URL may fail to
+    // play in WebKitGTK, but it cannot exhaust memory.
+    return convertFileSrc(path);
+  }
+
+  return src;
+}
 
 export function mediaUrlFor(src: string): Promise<string> {
   if (!src) return Promise.resolve('');
   const cached = cache.get(src);
   if (cached) return cached;
 
-  const promise = (async () => {
-    if (!isTauriRuntime()) return src;
-    if (src.startsWith('blob:') || src.startsWith('data:')) return src;
-
-    const assetUrl =
-      src.startsWith('asset://') || src.startsWith('http://') || src.startsWith('https://')
-        ? src
-        : convertFileSrc(src);
-
-    try {
-      const response = await fetch(assetUrl);
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      if (blob.size === 0) throw new Error('empty media file');
-      return URL.createObjectURL(blob);
-    } catch (err) {
-      console.warn('[mediaUrl] failed to load media, using asset URL:', err);
-      return assetUrl;
-    }
-  })();
-
+  const promise = resolveMediaUrl(src);
   cache.set(src, promise);
   return promise;
 }

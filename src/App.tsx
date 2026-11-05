@@ -324,7 +324,8 @@ export function App() {
     const token = ++videoLoadTokenRef.current;
     setVideoSrc(null);
     if (!path) return;
-    // WebKitGTK cannot play Tauri's asset: scheme directly; use a blob URL.
+    // WebKitGTK cannot play Tauri's asset: scheme directly; stream it over
+    // the loopback HTTP server so large videos are not held in memory.
     void mediaUrlFor(path)
       .then((url) => {
         if (videoLoadTokenRef.current === token) setVideoSrc(url);

@@ -1,7 +1,28 @@
+mod media_server;
+
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
 use std::io::Write;
 use std::process::Command;
+
+/// Holds the loopback streaming server for the lifetime of the app. `None`
+/// means it could not bind; the frontend then falls back to the asset URL
+/// (which never copies the whole file into memory).
+struct MediaServerState(Option<media_server::MediaServer>);
+
+#[tauri::command]
+fn media_stream_url(
+    state: tauri::State<'_, MediaServerState>,
+    path: String,
+) -> Result<String, String> {
+    let server = state
+        .0
+        .as_ref()
+        .ok_or_else(|| "メディアサーバーが起動していません".to_string())?;
+    server
+        .url_for(&path)
+        .map_err(|err| format!("メディアを開けません ({}): {}", path, err))
+}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SystemStatus {
@@ -1195,8 +1216,17 @@ fn finish_export_job_blocking(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let media_server = match media_server::MediaServer::start() {
+        Ok(server) => Some(server),
+        Err(err) => {
+            eprintln!("[media_server] 起動失敗: {}", err);
+            None
+        }
+    };
+
     tauri::Builder::default()
         .manage(ExportProcessState::default())
+        .manage(MediaServerState(media_server))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -1228,7 +1258,8 @@ pub fn run() {
             begin_export_job,
             write_export_frame,
             cancel_export_job,
-            finish_export_job
+            finish_export_job,
+            media_stream_url
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
