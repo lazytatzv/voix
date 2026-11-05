@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User, FlipHorizontal, Crop } from 'lucide-react';
 import { AudioItem, Character, DuckingSettings, TimelineItem, TrackState } from '../types';
 import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
-import { loadImage, collectCharacterImageSources } from '../render/imageCache';
+import { loadImage, collectCharacterImageSources, clearImageCache } from '../render/imageCache';
 import { mediaUrlFor } from '../utils/mediaUrl';
 import { collectVoiceIntervals, DEFAULT_DUCKING, duckingGainAt } from '../utils/audioDucking';
 
@@ -98,6 +98,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   // Preload every character avatar / expression.
   useEffect(() => {
     let cancelled = false;
+    clearImageCache();
     const sources = collectCharacterImageSources(characters);
     items.forEach((item) => {
       if (item.type === 'image' && item.src) sources.push(item.src);
@@ -391,12 +392,17 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   };
 
   const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!onToggleCharacterFlip) return;
     const hit = hitTestCharacter(event.clientX, event.clientY);
     if (!hit) return;
     event.preventDefault();
     event.stopPropagation();
-    onToggleCharacterFlip(hit.character.id);
+    if ((event.shiftKey || event.altKey) && onCharacterMove) {
+      onCharacterMove(hit.character.id, undefined as unknown as number, undefined as unknown as number);
+      return;
+    }
+    if (onToggleCharacterFlip) {
+      onToggleCharacterFlip(hit.character.id);
+    }
   };
 
   const renderFrame = useCallback(() => {

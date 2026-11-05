@@ -1,4 +1,4 @@
-import { resolveImageToDataUrl } from '../utils/imageUtils';
+import { resolveImageToDataUrl, clearResolvedImageCache } from '../utils/imageUtils';
 
 const cache = new Map<string, HTMLImageElement>();
 const loading = new Map<string, Promise<HTMLImageElement | null>>();
@@ -30,7 +30,9 @@ export async function loadImage(src?: string | null): Promise<HTMLImageElement |
           }
         };
         img.onerror = () => resolve(null);
-        img.src = resolved;
+        // キャッシュバスティング: /characters/ 等のローカルアセットを常に最新取得
+        const sep = resolved.includes('?') ? '&' : '?';
+        img.src = resolved.startsWith('data:') ? resolved : `${resolved}${sep}t=${Date.now()}`;
       });
     } catch {
       return null;
@@ -64,4 +66,5 @@ export function collectCharacterImageSources(characters: {
 export function clearImageCache(): void {
   cache.clear();
   loading.clear();
+  clearResolvedImageCache();
 }

@@ -3,6 +3,10 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 // メモリ内 Data URL キャッシュ (ディスク読み込みを最小限に抑え瞬時描画)
 const resolvedCache = new Map<string, string>();
 
+export function clearResolvedImageCache(): void {
+  resolvedCache.clear();
+}
+
 /**
  * ファイルパスまたはURLを安全なアセットURLまたは Data URL に変換
  */

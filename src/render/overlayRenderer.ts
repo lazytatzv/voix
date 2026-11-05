@@ -531,21 +531,29 @@ function computeCharacterLayout(
   }
 
   const baseScale = (charVoice?.scale ?? char.scale ?? 1) * animScale;
-  const charHeight = height * 0.54 * baseScale;
   const baseRatio =
     idleImg && idleImg.naturalWidth && idleImg.naturalHeight
       ? idleImg.naturalWidth / idleImg.naturalHeight
       : activeImg.naturalWidth / activeImg.naturalHeight;
+  // 全身素材(縦長)なら画面の72%、バストアップ素材なら55%を基準にアスペクト比に応じて最適スケールを自動算出
+  const targetHeightPercent = baseRatio <= 0.65 ? 0.72 : Math.max(0.54, 0.72 - (baseRatio - 0.65) * 0.35);
+  const charHeight = height * targetHeightPercent * baseScale;
   const charWidth = baseRatio * charHeight;
 
-  let charX = 80;
-  if (char.customX !== undefined) charX = char.customX;
-  else if (char.position === 'right') charX = width - charWidth - 80;
-  else if (char.position === 'center') charX = (width - charWidth) / 2;
+  let charX = 60;
+  if (char.customX !== undefined) {
+    charX = Math.max(-charWidth + 60, Math.min(width - 60, char.customX));
+  } else if (char.position === 'right') {
+    charX = width - charWidth - 60;
+  } else if (char.position === 'center') {
+    charX = (width - charWidth) / 2;
+  }
   charX += animOffsetX;
 
   let charY = height - charHeight;
-  if (char.customY !== undefined) charY = char.customY;
+  if (char.customY !== undefined) {
+    charY = Math.max(-charHeight * 0.2, Math.min(height - 80, char.customY));
+  }
   charY += animOffsetY;
 
   const flipped =

@@ -40,6 +40,7 @@ pub struct TachieImportResult {
     pub expressions: Option<std::collections::HashMap<String, String>>,
     pub width: u32,
     pub height: u32,
+    pub body_type: Option<String>,
 }
 
 static PROCESS_TACHIE_SCRIPT: &str = include_str!("../scripts/process_tachie.py");

@@ -9,6 +9,7 @@ export interface TachieImportResult {
   expressions?: Record<string, string>;
   width: number;
   height: number;
+  body_type?: 'full_body' | 'bust_up';
 }
 
 /**

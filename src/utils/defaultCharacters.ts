@@ -8,14 +8,14 @@ export const defaultCharacters: Character[] = [
     speakerId: 3,
     styleId: 3,
     avatar: {
-      idle: '/characters/zundamon.png',
-      speaking: '/characters/zundamon_talking.png',
-      blinking: '/characters/zundamon_blinking.png',
+      idle: '/characters/zundamon.png?v=3',
+      speaking: '/characters/zundamon_talking.png?v=3',
+      blinking: '/characters/zundamon_blinking.png?v=3',
       expressions: {
-        smile: '/characters/zundamon_smile.png',
-        shock: '/characters/zundamon_shock.png',
-        trouble: '/characters/zundamon_trouble.png',
-        angry: '/characters/zundamon_angry.png',
+        smile: '/characters/zundamon_smile.png?v=3',
+        shock: '/characters/zundamon_shock.png?v=3',
+        trouble: '/characters/zundamon_trouble.png?v=3',
+        angry: '/characters/zundamon_angry.png?v=3',
       },
     },
     // YouTube style double stroke
@@ -44,14 +44,14 @@ export const defaultCharacters: Character[] = [
     speakerId: 2,
     styleId: 2,
     avatar: {
-      idle: '/characters/metan.png',
-      speaking: '/characters/metan_talking.png',
-      blinking: '/characters/metan_blinking.png',
+      idle: '/characters/metan.png?v=3',
+      speaking: '/characters/metan_talking.png?v=3',
+      blinking: '/characters/metan_blinking.png?v=3',
       expressions: {
-        smile: '/characters/metan_smile.png',
-        shock: '/characters/metan_shock.png',
-        trouble: '/characters/metan_trouble.png',
-        angry: '/characters/metan_angry.png',
+        smile: '/characters/metan_smile.png?v=3',
+        shock: '/characters/metan_shock.png?v=3',
+        trouble: '/characters/metan_trouble.png?v=3',
+        angry: '/characters/metan_angry.png?v=3',
       },
     },
     // Shikoku Metan double stroke

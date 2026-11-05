@@ -47,7 +47,7 @@ import {
 import { loadCharactersFromConfig, loadSettingsFromConfig, saveCharactersToConfig } from './services/configService';
 import { loadCachedAudio, isTauriRuntime } from './services/audioCache';
 import { mediaUrlFor } from './utils/mediaUrl';
-import { loadImage } from './render/imageCache';
+import { loadImage, clearImageCache } from './render/imageCache';
 import { detectSpeechFromVideo, measureImportedAudio } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
 import { ScriptLinePrompt, formatSpeechWithPersona } from './services/aiService';
@@ -96,21 +96,39 @@ function mergeCharacter(c: Character): Character {
   const def = defaultCharacters.find((d) => d.id === id);
   if (!def) return { ...c, id };
   const idleIsLargeBase64 = c.avatar?.idle?.startsWith('data:') && c.avatar.idle.length > 500;
+  const isDefaultAsset = (p?: string) => !p || p.startsWith('/characters/');
+  const idle = isDefaultAsset(c.avatar?.idle) ? def.avatar.idle : (idleIsLargeBase64 ? def.avatar.idle : c.avatar?.idle || def.avatar.idle);
+  const speaking = isDefaultAsset(c.avatar?.speaking) ? def.avatar.speaking : (c.avatar?.speaking || def.avatar.speaking);
+  const blinking = isDefaultAsset(c.avatar?.blinking) ? def.avatar.blinking : (c.avatar?.blinking || def.avatar.blinking);
+  const expressions = {
+    ...def.avatar.expressions,
+    ...(c.avatar?.expressions || {}),
+  };
+  if (def.avatar.expressions) {
+    Object.keys(def.avatar.expressions).forEach((k) => {
+      if (isDefaultAsset(expressions[k])) {
+        expressions[k] = def.avatar.expressions![k];
+      }
+    });
+  }
+
+  // 古い固定座標（画面外や余白前提のズレた値）があれば安全にリセットして自動配置に任せる
+  const hasOutdatedCoords = (c.customX !== undefined && (c.customX > 1000 || c.customX < 0)) ||
+                            (c.customY !== undefined && c.customY > 350);
+
   return {
     ...def,
     ...c,
     id: def.id,
     name: def.name,
+    customX: hasOutdatedCoords ? undefined : c.customX,
+    customY: hasOutdatedCoords ? undefined : c.customY,
     avatar: {
       ...def.avatar,
-      ...c.avatar,
-      idle: idleIsLargeBase64 ? def.avatar.idle : c.avatar?.idle || def.avatar.idle,
-      speaking: c.avatar?.speaking || def.avatar.speaking,
-      blinking: c.avatar?.blinking || def.avatar.blinking,
-      expressions: {
-        ...def.avatar.expressions,
-        ...c.avatar?.expressions,
-      },
+      idle,
+      speaking,
+      blinking,
+      expressions,
     },
     subtitleStyle: {
       ...def.subtitleStyle,
@@ -132,6 +150,7 @@ function sanitizeCharacterList(list: Character[]): Character[] {
 }
 
 function loadInitialProject(): VoixProject {
+  clearImageCache();
   try {
     const saved = localStorage.getItem(AUTOSAVE_LOCAL_KEY);
     if (saved) {
@@ -1736,6 +1755,7 @@ export function App() {
     mode: 'update' | 'add' = 'add',
     targetCharId?: string
   ) => {
+    clearImageCache();
     if (mode === 'update' && targetCharId) {
       commitProject((previous) => ({
         ...previous,
@@ -1747,7 +1767,7 @@ export function App() {
                 avatar: {
                   idle: result.avatar_data_url,
                   speaking: result.speaking_data_url || result.avatar_data_url,
-                  blinking: result.avatar_data_url,
+                  blinking: result.expressions?.blinking || result.avatar_data_url,
                   expressions: result.expressions || character.avatar.expressions,
                 },
               }
@@ -1768,7 +1788,7 @@ export function App() {
       avatar: {
         idle: result.avatar_data_url,
         speaking: result.speaking_data_url || result.avatar_data_url,
-        blinking: result.avatar_data_url,
+        blinking: result.expressions?.blinking || result.avatar_data_url,
         expressions: result.expressions,
       },
       subtitleStyle: {
@@ -2122,7 +2142,12 @@ export function App() {
             showTerminal={terminalOverlayEnabled}
             videoVolume={project.timeline.videoVolume ?? 1}
             ducking={project.timeline.ducking}
-            onCharacterMove={(id, x, y) => handleUpdateCharacter(id, { customX: x, customY: y })}
+            onCharacterMove={(id, x, y) =>
+              handleUpdateCharacter(id, {
+                customX: typeof x === 'number' && !Number.isNaN(x) ? x : undefined,
+                customY: typeof y === 'number' && !Number.isNaN(y) ? y : undefined,
+              })
+            }
           />
         </div>
 
