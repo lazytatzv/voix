@@ -13,6 +13,7 @@ import {
   Check,
   Plus,
   ChevronDown,
+  Zap,
 } from 'lucide-react';
 import { Character, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
@@ -43,46 +44,6 @@ interface ScriptEditorProps {
   onSyncFromYaml?: (lines: ParsedScriptLine[], config?: ParsedYamlConfig) => Promise<void>;
   onSelectItem?: (id: string | null) => void;
 }
-
-interface YamlSnippetItem {
-  icon: string;
-  label: string;
-  hint: string;
-  snippet: string;
-}
-
-const YAML_SNIPPET_SECTIONS: { title: string; items: YamlSnippetItem[] }[] = [
-  {
-    title: 'Dialogue',
-    items: [
-      { icon: '🥑', label: 'Zundamon line', hint: '- z:', snippet: '\n- z: ' },
-      { icon: '🌸', label: 'Metan line', hint: '- m:', snippet: '\n- m: ' },
-    ],
-  },
-  {
-    title: 'Emotion',
-    items: [
-      { icon: '🙂', label: 'Smile', hint: '(smile)', snippet: '(smile)' },
-      { icon: '😱', label: 'Shock', hint: '(shock)', snippet: '(shock)' },
-    ],
-  },
-  {
-    title: 'Effects',
-    items: [
-      { icon: '⏱️', label: 'Pause', hint: 'pause: 0.8', snippet: '\n- pause: 0.8\n' },
-      { icon: '🔔', label: 'Sound: pop', hint: 'se=pop', snippet: ', se=pop' },
-      { icon: '🔔', label: 'Sound: chime', hint: 'se=chime', snippet: ', se=chime' },
-      { icon: '✨', label: 'Bounce animation', hint: 'anim=bounce', snippet: ', anim=bounce' },
-      {
-        icon: '💻',
-        label: 'Terminal block',
-        hint: 'terminal',
-        snippet:
-          '\n- z:\n    text: コマンドを実行するのだ！\n    cmd: "pnpm dev"\n    output: "Vite ready in 150ms"\n    se: chime\n    anim: bounce\n',
-      },
-    ],
-  },
-];
 
 /**
  * YAMLテキスト内の指定インデックスのアイテムブロックの文字範囲を特定する
@@ -155,6 +116,67 @@ function getYamlItemLineRange(yaml: string, itemIndex: number): { startLine: num
   return { startLine, lineCount: endLine - startLine + 1 };
 }
 
+interface YamlInsertItem {
+  id: string;
+  label: string;
+  icon: string;
+  hint: string;
+  snippet?: string;
+  action?: 'config';
+}
+
+const YAML_INSERT_GROUPS: { label: string; items: YamlInsertItem[] }[] = [
+  {
+    label: 'Dialogue',
+    items: [
+      { id: 'zundamon', label: 'Zundamon', icon: '🥑', hint: '- z:', snippet: '\n- z: ' },
+      { id: 'metan', label: 'Metan', icon: '🌸', hint: '- m:', snippet: '\n- m: ' },
+    ],
+  },
+  {
+    label: 'Expression',
+    items: [
+      { id: 'smile', label: 'Smile', icon: '🙂', hint: '(smile)', snippet: '(smile)' },
+      { id: 'shock', label: 'Shock', icon: '😱', hint: '(shock)', snippet: '(shock)' },
+    ],
+  },
+  {
+    label: 'Motion & SFX',
+    items: [
+      {
+        id: 'pause',
+        label: 'Pause 0.8s',
+        icon: '⏱️',
+        hint: '- pause: 0.8',
+        snippet: '\n- pause: 0.8\n',
+      },
+      { id: 'bounce', label: 'Bounce', icon: '✨', hint: ', anim=bounce', snippet: ', anim=bounce' },
+      { id: 'se-pop', label: 'SE: pop', icon: '🔔', hint: ', se=pop', snippet: ', se=pop' },
+      { id: 'se-chime', label: 'SE: chime', icon: '🔔', hint: ', se=chime', snippet: ', se=chime' },
+    ],
+  },
+  {
+    label: 'Blocks',
+    items: [
+      {
+        id: 'terminal',
+        label: 'Terminal',
+        icon: '💻',
+        hint: 'Terminal overlay block',
+        snippet:
+          '\n- z:\n    text: コマンドを実行するのだ！\n    cmd: "pnpm dev"\n    output: "Vite ready in 150ms"\n    se: chime\n    anim: bounce\n',
+      },
+      {
+        id: 'config',
+        label: 'Config',
+        icon: '⚙️',
+        hint: 'Prepend YAML config header',
+        action: 'config',
+      },
+    ],
+  },
+];
+
 export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   items,
   characters,
@@ -194,8 +216,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
-  const aiMenuRef = useRef<HTMLDivElement | null>(null);
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
+  const aiMenuRef = useRef<HTMLDivElement | null>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
 
   // 再生中または選択中のアクティブなセリフアイテムを特定
@@ -326,6 +348,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   // タブ切り替え（手動操作不要で常に自動同期）
   const handleSwitchTab = async (newTab: 'cards' | 'yaml') => {
     if (newTab === tab) return;
+    setIsInsertMenuOpen(false);
 
     if (newTab === 'yaml') {
       // YAMLタブへ: 最新のCards状態からYAMLを生成
@@ -428,6 +451,29 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     scheduleYamlAutoSync(nextVal);
   };
 
+  const hasYamlConfig = yamlText.includes('config:');
+
+  const handleInsertYamlItem = (item: YamlInsertItem) => {
+    setIsInsertMenuOpen(false);
+    if (item.action === 'config') {
+      if (hasYamlConfig) return;
+      const nextVal = generateYamlConfigHeader(characters) + yamlText;
+      setYamlText(nextVal);
+      syncYamlToItems(nextVal);
+      return;
+    }
+    if (item.snippet !== undefined) {
+      insertYamlSnippet(item.snippet);
+    }
+  };
+
+  const handleFormatYaml = () => {
+    setIsInsertMenuOpen(false);
+    const formatted = itemsToRawText(items, characters, 'smart');
+    setYamlText(formatted);
+    syncYamlToItems(formatted);
+  };
+
   useEffect(() => {
     if (!isAiMenuOpen && !isInsertMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
@@ -442,8 +488,17 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         setIsInsertMenuOpen(false);
       }
     };
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsInsertMenuOpen(false);
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    if (isInsertMenuOpen) {
+      document.addEventListener('keydown', handleEscape);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
   }, [isAiMenuOpen, isInsertMenuOpen]);
 
   const handleAdd = async (e?: React.FormEvent) => {
@@ -552,97 +607,89 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       {/* Main Content Area: Cards vs YAML */}
       {tab === 'yaml' ? (
         <div className="flex-1 relative flex flex-col bg-[#121314] overflow-hidden">
-          {/* Quick Insert Menu */}
-          <div
-            className="relative flex items-center gap-2 px-3 py-1.5 bg-[#141518] border-b border-[#222428] text-[11px] select-none flex-shrink-0 z-20"
-            onMouseDown={(e) => {
-              if ((e.target as HTMLElement).closest('button')) e.preventDefault();
-            }}
-          >
+          {/* Compact insert toolbar */}
+          <div className="flex items-center justify-between gap-2 px-2 py-1 bg-[#141518] border-b border-[#222428] select-none flex-shrink-0">
             <div ref={insertMenuRef} className="relative">
               <button
                 type="button"
-                onClick={() => setIsInsertMenuOpen(!isInsertMenuOpen)}
-                className={`px-2 py-0.5 rounded-sm font-mono transition flex items-center gap-1 border ${
+                onClick={() => setIsInsertMenuOpen((open) => !open)}
+                className={`flex items-center gap-1.5 px-2 py-1 rounded-md border text-[11px] font-medium transition ${
                   isInsertMenuOpen
-                    ? 'bg-[#25282e] text-white border-[#3c4043]'
-                    : 'bg-[#1a1c20] text-[#c4c7c5] hover:bg-[#25282e] hover:text-white border-[#26282c]'
+                    ? 'bg-[#2b2d31] border-[#3c4043] text-white'
+                    : 'bg-[#1a1c20] border-[#26282c] text-[#c4c7c5] hover:bg-[#25282e] hover:text-white'
                 }`}
-                title="Insert YAML snippet"
+                title="Insert YAML snippets"
+                aria-haspopup="menu"
+                aria-expanded={isInsertMenuOpen}
               >
-                <Plus className="w-3 h-3" />
+                <Plus className="w-3.5 h-3.5" />
                 <span>Insert</span>
                 <ChevronDown
-                  className={`w-3 h-3 text-[#8e918f] transition-transform ${
-                    isInsertMenuOpen ? 'rotate-180' : ''
-                  }`}
+                  className={`w-3 h-3 transition-transform ${isInsertMenuOpen ? 'rotate-180' : ''}`}
                 />
               </button>
 
               {isInsertMenuOpen && (
-                <div className="absolute left-0 top-full mt-1 w-60 bg-[#141518] border border-[#26282c] rounded-lg shadow-2xl p-1 z-50 animate-in fade-in duration-100">
-                  {YAML_SNIPPET_SECTIONS.map((section, sectionIndex) => (
-                    <div key={section.title}>
-                      {sectionIndex > 0 && <div className="border-t border-[#242628] my-1" />}
-                      <span className="block px-2 pt-1 pb-1 text-[10px] font-mono uppercase tracking-wider text-[#5f6368]">
-                        {section.title}
-                      </span>
-                      {section.items.map((item) => (
-                        <button
-                          key={item.label}
-                          type="button"
-                          onClick={() => {
-                            insertYamlSnippet(item.snippet);
-                            setIsInsertMenuOpen(false);
-                          }}
-                          className="w-full flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm text-xs text-left text-[#c4c7c5] hover:bg-[#202124] hover:text-white transition"
-                        >
-                          <span className="flex items-center gap-2 min-w-0">
-                            <span className="w-4 text-center text-sm flex-shrink-0">{item.icon}</span>
-                            <span className="truncate">{item.label}</span>
-                          </span>
-                          <span className="font-mono text-[10px] text-[#5f6368] flex-shrink-0">
-                            {item.hint}
-                          </span>
-                        </button>
-                      ))}
+                <div
+                  role="menu"
+                  aria-label="Insert YAML snippets"
+                  className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-lg border border-[#2e3135] bg-[#17181b] p-1.5 shadow-2xl animate-in fade-in duration-100"
+                >
+                  {YAML_INSERT_GROUPS.map((group) => (
+                    <div key={group.label} className="mb-1 last:mb-0">
+                      <div className="px-1.5 pt-1 pb-1 font-mono text-[9px] uppercase tracking-wider text-[#5f6368]">
+                        {group.label}
+                      </div>
+                      <div className="grid grid-cols-2 gap-0.5">
+                        {group.items.map((item) => {
+                          const isConfig = item.action === 'config';
+                          const disabled = isConfig && hasYamlConfig;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              role="menuitem"
+                              disabled={disabled}
+                              onClick={() => handleInsertYamlItem(item)}
+                              title={disabled ? 'Config header already exists' : item.hint}
+                              className={`flex items-center gap-1.5 px-2 py-1.5 rounded-md text-left text-[11px] transition ${
+                                disabled
+                                  ? 'text-[#5f6368] opacity-50 cursor-not-allowed'
+                                  : 'text-[#c4c7c5] hover:bg-[#1f2228] hover:text-white'
+                              }`}
+                            >
+                              <span className="text-[12px] leading-none">{item.icon}</span>
+                              <span className="truncate">{item.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   ))}
-                  <div className="border-t border-[#242628] my-1" />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const configHeader = generateYamlConfigHeader(characters);
-                      if (!yamlText.includes('config:')) {
-                        const nextVal = configHeader + yamlText;
-                        setYamlText(nextVal);
-                        syncYamlToItems(nextVal);
-                      }
-                      setIsInsertMenuOpen(false);
-                    }}
-                    className="w-full flex items-center justify-between gap-3 px-2 py-1.5 rounded-sm text-xs text-left text-[#c4c7c5] hover:bg-[#202124] hover:text-white transition"
-                  >
-                    <span className="flex items-center gap-2">
-                      <span className="w-4 text-center text-sm">⚙️</span>
-                      <span>Config header</span>
-                    </span>
-                    <span className="font-mono text-[10px] text-[#5f6368]">config:</span>
-                  </button>
+                  <div className="mt-1 border-t border-[#26282c] pt-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={handleFormatYaml}
+                      title="Format script to clean 1-liner YAML syntax"
+                      className="flex w-full items-center gap-1.5 px-2 py-1.5 rounded-md text-left text-[11px] text-[#c4c7c5] hover:bg-[#1f2228] hover:text-white transition"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-[#fbbf24]" />
+                      <span>Clean 1-liner</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
 
             <button
               type="button"
-              onClick={() => {
-                const formatted = itemsToRawText(items, characters, 'smart');
-                setYamlText(formatted);
-                syncYamlToItems(formatted);
-              }}
-              className="ml-auto px-2 py-0.5 rounded-sm text-[10px] bg-[#1a1c20] hover:bg-[#25282e] text-[#8e918f] hover:text-[#e3e3e3] border border-[#26282c] font-mono transition"
+              onClick={handleFormatYaml}
+              className="p-1.5 rounded-md text-[#8e918f] hover:bg-[#25282e] hover:text-[#fbbf24] transition"
               title="Format script to clean 1-liner YAML syntax"
+              aria-label="Format YAML"
             >
-              ⚡ Clean 1-Liner
+              <Zap className="w-3.5 h-3.5" />
             </button>
           </div>
 
