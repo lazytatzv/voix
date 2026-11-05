@@ -388,6 +388,33 @@ interface CharacterSprite {
 }
 
 /**
+ * Decide whether the speaking mouth should be drawn open at a given offset.
+ * When VOICEVOX phoneme timings are available we follow the actual vowels;
+ * otherwise fall back to the original rhythmic flap.
+ */
+function isMouthOpenAt(voice: VoiceItem | undefined, localTime: number): boolean {
+  const phonemes = voice?.phonemes;
+  if (!phonemes || phonemes.length === 0) {
+    return Math.floor(localTime * 6.5) % 4 !== 0;
+  }
+  if (localTime < phonemes[0].time - 0.02) return false;
+  let current = phonemes[0];
+  let next = phonemes[1];
+  for (let index = 0; index < phonemes.length; index += 1) {
+    if (phonemes[index].time <= localTime) {
+      current = phonemes[index];
+      next = phonemes[index + 1];
+    } else {
+      next = phonemes[index];
+      break;
+    }
+  }
+  if (current.vowel === 'n' || current.vowel === 'N' || current.vowel === 'pau') return false;
+  if (next && next.time - localTime < 0.05) return false;
+  return true;
+}
+
+/**
  * Resolve which tachie is actually visible in each slot. The renderer shows
  * one character per left/center/right slot: the active speaker, the most
  * recent speaker in that slot, or the first character assigned there.
@@ -452,7 +479,7 @@ function resolveCharacterSprites(
         activeImg = exprImg;
       } else if (speakingImg) {
         if (isPlaying) {
-          const isMouthOpen = Math.floor(time * 6.5) % 4 !== 0;
+          const isMouthOpen = isMouthOpenAt(charVoice, time - charVoice.startTime);
           activeImg = isMouthOpen ? speakingImg : idleImg || speakingImg;
         } else {
           activeImg = speakingImg;

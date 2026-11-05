@@ -19,25 +19,31 @@ import {
   Maximize2,
   Scissors,
   Flag,
+  Copy,
 } from 'lucide-react';
 import { Character, ItemType, Marker, TimelineItem, TrackKind, TrackState } from '../types';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
 import { getWaveformPeaks } from '../services/waveformCache';
-import { snapTimelineTime } from '../utils/timelineSnap';
+import { snapTimelineTime, snapTimelineTimeDetailed } from '../utils/timelineSnap';
 
 interface TimelineProps {
   items: TimelineItem[];
   characters: Character[];
   currentTime: number;
   duration: number;
+  isPlaying?: boolean;
   selectedItemId?: string | null;
+  selectedItemIds?: string[];
   tracks: TrackState[];
   hasVideo?: boolean;
   videoName?: string;
   onSeek: (time: number) => void;
-  onUpdateItem: (id: string, updates: Partial<TimelineItem>) => void;
-  onSelectItem: (id: string | null) => void;
+  onUpdateItem: (id: string, updates: Partial<TimelineItem>, record?: boolean) => void;
+  onBeginTransform?: () => void;
+  onSelectItem: (id: string | null, additive?: boolean) => void;
   onDeleteItem: (id: string) => void;
+  onDeleteItems?: (ids: string[]) => void;
+  onDuplicateSelected?: () => void;
   onAddItem: (type: ItemType) => void;
   onUpdateTrack: (id: TrackKind, updates: Partial<TrackState>) => void;
   onInspectItem: (id: string) => void;
@@ -139,14 +145,19 @@ export const Timeline: React.FC<TimelineProps> = ({
   characters,
   currentTime,
   duration,
+  isPlaying = false,
   selectedItemId,
+  selectedItemIds = [],
   tracks,
   hasVideo,
   videoName,
   onSeek,
   onUpdateItem,
+  onBeginTransform,
   onSelectItem,
   onDeleteItem,
+  onDeleteItems,
+  onDuplicateSelected,
   onAddItem,
   onUpdateTrack,
   onInspectItem,
@@ -159,6 +170,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   const [zoom, setZoom] = useState(1);
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
+  const [snapGuideTime, setSnapGuideTime] = useState<number | null>(null);
 
   const totalDuration = Math.max(duration, 10);
   const pxPerSecond = 50 * zoom;
@@ -190,6 +202,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   const beginScrub = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
+    if (!e.ctrlKey && !e.metaKey && !e.shiftKey) onSelectItem(null);
     seekFromClientX(e.clientX, e.altKey);
     const onMove = (event: MouseEvent) => seekFromClientX(event.clientX, event.altKey);
     const onUp = () => {
@@ -200,42 +213,111 @@ export const Timeline: React.FC<TimelineProps> = ({
     window.addEventListener('mouseup', onUp);
   };
 
+  const selectedItems = items.filter((item) => selectedItemIds.includes(item.id));
+  const selectedAllHidden =
+    selectedItems.length > 0 && selectedItems.every((item) => item.hidden);
+
+  const collectSnapTargets = useCallback(
+    (excludeIds: Set<string>) => {
+      const targets: number[] = [0, currentTime];
+      markers.forEach((marker) => targets.push(marker.time));
+      items.forEach((entry) => {
+        if (excludeIds.has(entry.id)) return;
+        targets.push(entry.startTime);
+        targets.push(entry.startTime + entry.duration);
+      });
+      return targets;
+    },
+    [currentTime, items, markers]
+  );
+
   const beginItemDrag = (e: React.MouseEvent, item: TimelineItem, mode: 'move' | 'resize') => {
     e.stopPropagation();
     e.preventDefault();
     if (e.button !== 0) return;
+    const additive = e.ctrlKey || e.metaKey || e.shiftKey;
+    const wasSelected = selectedItemIds.includes(item.id);
+    if (!wasSelected) onSelectItem(item.id, additive);
+
     const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
-    if (item.locked || tracks.find((track) => track.id === trackKind)?.locked) {
-      onSelectItem(item.id);
-      return;
-    }
+    if (item.locked || tracks.find((track) => track.id === trackKind)?.locked) return;
+
+    const activeIds = new Set(
+      wasSelected
+        ? selectedItemIds
+        : additive
+          ? [...selectedItemIds, item.id]
+          : [item.id]
+    );
+    const movableItems = items.filter((entry) => {
+      if (!activeIds.has(entry.id)) return false;
+      const kind: TrackKind = entry.type === 'voice' ? 'voice' : entry.type;
+      return !entry.locked && !tracks.find((track) => track.id === kind)?.locked;
+    });
+    if (!movableItems.some((entry) => entry.id === item.id)) movableItems.push(item);
+
+    const startTimes = new Map(movableItems.map((entry) => [entry.id, entry.startTime]));
+    const minStart = Math.min(...startTimes.values());
     const startX = e.clientX;
-    const startTime = item.startTime;
+    const primaryStart = item.startTime;
     const startDuration = item.duration;
+    const snapTargets = collectSnapTargets(new Set(movableItems.map((entry) => entry.id)));
     let moved = false;
+    let historyStarted = false;
 
     const onMove = (event: MouseEvent) => {
       const delta = (event.clientX - startX) / pxPerSecond;
-      if (!moved && Math.abs(event.clientX - startX) > 3) {
+      if (!moved && Math.abs(event.clientX - startX) > 2) {
         moved = true;
         setDraggingItemId(item.id);
       }
       if (!moved) return;
+      if (!historyStarted) {
+        historyStarted = true;
+        onBeginTransform?.();
+      }
       if (mode === 'move') {
-        onUpdateItem(item.id, { startTime: snapTime(startTime + delta, !event.altKey, markers) });
-      } else {
-        onUpdateItem(item.id, {
-          duration: Math.max(0.1, snapTime(startDuration + delta, !event.altKey, markers)),
+        const snap = snapTimelineTimeDetailed(
+          primaryStart + delta,
+          !event.altKey,
+          markers,
+          snapTargets,
+          8 / pxPerSecond
+        );
+        const applied = Math.max(snap.time - primaryStart, -minStart);
+        setSnapGuideTime(snap.snappedTo);
+        startTimes.forEach((start, id) => {
+          onUpdateItem(
+            id,
+            { startTime: Number(Math.max(0, start + applied).toFixed(3)) },
+            false
+          );
         });
+      } else {
+        const rawEnd = primaryStart + Math.max(0.1, startDuration + delta);
+        const snap = snapTimelineTimeDetailed(
+          rawEnd,
+          !event.altKey,
+          markers,
+          snapTargets,
+          8 / pxPerSecond
+        );
+        setSnapGuideTime(snap.snappedTo);
+        onUpdateItem(
+          item.id,
+          { duration: Number(Math.max(0.1, snap.time - primaryStart).toFixed(3)) },
+          false
+        );
       }
     };
     const onUp = () => {
       setDraggingItemId(null);
+      setSnapGuideTime(null);
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       if (!moved) {
         onSeek(item.startTime);
-        onSelectItem(item.id);
+        if (wasSelected) onSelectItem(item.id, additive);
       }
     };
     window.addEventListener('mousemove', onMove);
@@ -247,11 +329,49 @@ export const Timeline: React.FC<TimelineProps> = ({
     setZoom(Math.max(0.15, Math.min(8, (width - 180) / Math.max(totalDuration, 1) / 50)));
   };
 
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container || !isPlaying) return;
+    const x = HEADER_WIDTH + timeToX(currentTime);
+    const visibleStart = container.scrollLeft + HEADER_WIDTH;
+    const visibleEnd = container.scrollLeft + container.clientWidth;
+    if (x < visibleStart + 24 || x > visibleEnd - 48) {
+      container.scrollLeft = Math.max(0, x - container.clientWidth * 0.35);
+    }
+  }, [currentTime, isPlaying, pxPerSecond]);
+
+  useEffect(() => {
+    const container = scrollRef.current;
+    if (!container) return;
+    const handleWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const rect = container.getBoundingClientRect();
+      const pointerX = event.clientX - rect.left + container.scrollLeft - HEADER_WIDTH;
+      const timeAtPointer = Math.max(0, pointerX / pxPerSecond);
+      const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
+      setZoom((previous) => {
+        const next = Math.max(0.15, Math.min(8, previous * factor));
+        const nextPx = 50 * next;
+        requestAnimationFrame(() => {
+          container.scrollLeft = Math.max(
+            0,
+            HEADER_WIDTH + timeAtPointer * nextPx - (event.clientX - rect.left)
+          );
+        });
+        return next;
+      });
+    };
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [pxPerSecond]);
+
   const renderItem = (item: TimelineItem, rowKind: TrackKind) => {
     const left = timeToX(item.startTime);
     const width = Math.max(timeToX(item.duration), 18);
     const color = ITEM_COLORS[item.type];
-    const isSelected = selectedItemId === item.id;
+    const isSelected = selectedItemIds.includes(item.id) || selectedItemId === item.id;
+    const isPrimary = selectedItemId === item.id;
     const isDragging = draggingItemId === item.id;
     const locked = item.locked || tracks.find((track) => track.id === rowKind)?.locked;
 
@@ -291,7 +411,13 @@ export const Timeline: React.FC<TimelineProps> = ({
         className={`group absolute top-1 bottom-1 rounded-[2px] flex items-center px-1.5 text-xs select-none overflow-hidden ${
           locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'
         } ${
-          isDragging ? 'ring-2 ring-white z-30 shadow-lg' : isSelected ? 'ring-1 ring-white z-20' : 'z-10'
+          isDragging
+            ? 'ring-2 ring-white z-30 shadow-lg'
+            : isPrimary
+              ? 'ring-2 ring-[#8ab4f8] z-20'
+              : isSelected
+                ? 'ring-1 ring-white/80 z-20'
+                : 'z-10'
         }`}
         style={{
           left,
@@ -300,7 +426,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           color: color.text,
           border: `1px solid ${item.type === 'voice' ? charColor(item.characterId) : color.border}`,
           opacity: item.hidden ? 0.35 : 1,
-          boxShadow: isSelected ? `0 0 0 1px ${color.border}` : undefined,
+          boxShadow: isPrimary ? `0 0 0 1px ${color.border}` : undefined,
         }}
         title={`${label}\n${item.startTime.toFixed(2)}s → ${(item.startTime + item.duration).toFixed(2)}s\n${
           locked
@@ -357,33 +483,53 @@ export const Timeline: React.FC<TimelineProps> = ({
           <span className="text-[#8e918f] font-mono text-[11px]">
             {items.length} items / {totalDuration.toFixed(2)}s
           </span>
-          {selectedItemId && (
+          {selectedItemIds.length > 0 && (
             <div className="flex items-center gap-1">
+              <span className="font-mono text-[10px] text-[#8ab4f8] bg-[#8ab4f8]/10 border border-[#8ab4f8]/30 rounded px-1">
+                {selectedItemIds.length} selected
+              </span>
               <button
                 type="button"
                 onClick={() => {
-                  const item = items.find((it) => it.id === selectedItemId);
-                  if (item) onUpdateItem(item.id, { hidden: !item.hidden });
+                  if (selectedItems.length === 0) return;
+                  const nextHidden = !selectedAllHidden;
+                  onBeginTransform?.();
+                  selectedItems.forEach((item) =>
+                    onUpdateItem(item.id, { hidden: nextHidden }, false)
+                  );
                 }}
                 className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#8e918f] hover:text-[#c4c7c5] border border-[#2e3135] flex items-center gap-1"
-                title="Toggle selected item visibility"
+                title="Toggle visibility for all selected items"
               >
-                {items.find((it) => it.id === selectedItemId)?.hidden ? (
+                {selectedAllHidden ? (
                   <EyeOff className="w-3 h-3" />
                 ) : (
                   <Eye className="w-3 h-3" />
                 )}
-                Item
+                {selectedItemIds.length > 1 ? 'Items' : 'Item'}
               </button>
-              <button
-                type="button"
-                onClick={() => onInspectItem(selectedItemId)}
-                className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#8ab4f8] hover:text-white border border-[#2e3135] flex items-center gap-1"
-              >
-                <SlidersHorizontal className="w-3 h-3" />
-                Inspect
-              </button>
-              {onSplitSelected && (
+              {selectedItemId && (
+                <button
+                  type="button"
+                  onClick={() => onInspectItem(selectedItemId)}
+                  className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#8ab4f8] hover:text-white border border-[#2e3135] flex items-center gap-1"
+                >
+                  <SlidersHorizontal className="w-3 h-3" />
+                  Inspect
+                </button>
+              )}
+              {onDuplicateSelected && (
+                <button
+                  type="button"
+                  onClick={onDuplicateSelected}
+                  className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#c4c7c5] hover:text-white border border-[#2e3135] flex items-center gap-1"
+                  title="Duplicate selected items (Ctrl+D)"
+                >
+                  <Copy className="w-3 h-3" />
+                  Duplicate
+                </button>
+              )}
+              {onSplitSelected && selectedItemIds.length === 1 && (
                 <button
                   type="button"
                   onClick={onSplitSelected}
@@ -396,9 +542,15 @@ export const Timeline: React.FC<TimelineProps> = ({
               )}
               <button
                 type="button"
-                onClick={() => onDeleteItem(selectedItemId)}
+                onClick={() => {
+                  if (onDeleteItems && selectedItemIds.length > 1) {
+                    onDeleteItems(selectedItemIds);
+                  } else {
+                    onDeleteItem(selectedItemId ?? selectedItemIds[0]);
+                  }
+                }}
                 className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-rose-400 hover:text-rose-300 border border-[#2e3135] flex items-center gap-1"
-                title="Delete selected (Delete)"
+                title="Delete selected items (Delete)"
               >
                 <Trash2 className="w-3 h-3" />
               </button>
@@ -609,6 +761,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                 }}
               />
             ))}
+
+            {snapGuideTime !== null && (
+              <div
+                className="absolute top-0 w-px bg-amber-300 z-40 pointer-events-none shadow-[0_0_4px_rgba(252,211,77,0.8)]"
+                style={{ left: timeToX(snapGuideTime), height: RULER_HEIGHT + totalRowsHeight }}
+              />
+            )}
 
             {/* Playhead */}
             <div

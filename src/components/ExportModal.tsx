@@ -10,6 +10,7 @@ import {
   Terminal,
   Gauge,
   Square,
+  FileText,
 } from 'lucide-react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { invoke } from '@tauri-apps/api/core';
@@ -18,6 +19,7 @@ import { ExportSettings, VoixProject } from '../types';
 import { executeExportVideo, ExportProgressEvent, cancelActiveExport } from '../services/exportService';
 import { AppSettings, DEFAULT_APP_SETTINGS, loadSettingsFromConfig } from '../services/configService';
 import { isTauriRuntime } from '../services/audioCache';
+import { buildSrt } from '../utils/srt';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -70,6 +72,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   const [showTerminalOverlay, setShowTerminalOverlay] = useState(true);
   const [rangeStart, setRangeStart] = useState(0);
   const [rangeEnd, setRangeEnd] = useState(0);
+  const [subtitleMessage, setSubtitleMessage] = useState<string | null>(null);
+  const [isExportingSubtitles, setIsExportingSubtitles] = useState(false);
   const exportActiveRef = useRef(false);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -97,6 +101,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     setStatus('');
     setRangeStart(0);
     setRangeEnd(Math.max(project.timeline.duration, videoDuration || 0, 0.5));
+    setSubtitleMessage(null);
   }, [isOpen]);
 
   useEffect(() => {
@@ -248,6 +253,47 @@ export const ExportModal: React.FC<ExportModalProps> = ({
     }
   };
 
+  const handleExportSubtitles = async () => {
+    const content = buildSrt(
+      project.items,
+      Math.max(0, rangeStart),
+      Math.min(duration, Math.max(rangeStart + 0.001, rangeEnd))
+    );
+    if (!content) {
+      setSubtitleMessage('No subtitle lines in the selected range.');
+      return;
+    }
+    const baseName = (outputPath || 'voix_output.mp4').replace(/\.[\/\\]?[^./\\]*$/, '');
+    const suggestedPath = `${baseName || 'voix_output'}.srt`;
+    setIsExportingSubtitles(true);
+    setSubtitleMessage(null);
+    try {
+      if (isTauriRuntime()) {
+        const picked = await saveDialog({
+          title: 'Export subtitles to...',
+          defaultPath: suggestedPath,
+          filters: [{ name: 'SubRip subtitles', extensions: ['srt'] }],
+        });
+        if (!picked) return;
+        await invoke('write_text_file', { path: picked, content });
+        setSubtitleMessage(`Saved subtitles: ${picked}`);
+      } else {
+        const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.download = suggestedPath.split(/[\\/]/).pop() || 'voix_output.srt';
+        anchor.click();
+        URL.revokeObjectURL(url);
+        setSubtitleMessage('SRT file downloaded.');
+      }
+    } catch (err) {
+      setSubtitleMessage(`Subtitle export failed: ${String(err)}`);
+    } finally {
+      setIsExportingSubtitles(false);
+    }
+  };
+
   const handleCancelExport = () => {
     abortRef.current?.abort();
     exportActiveRef.current = false;
@@ -364,6 +410,23 @@ export const ExportModal: React.FC<ExportModalProps> = ({
                 ? rangeError
                 : `${rangeDuration.toFixed(2)}s selected · ${estimatedFrames} overlay frames`}
             </p>
+            <div className="flex items-center gap-2 pt-1">
+              <button
+                type="button"
+                onClick={handleExportSubtitles}
+                disabled={isExporting || isExportingSubtitles}
+                className="px-2.5 py-1.5 text-xs bg-[#181a1d] hover:bg-[#24272b] border border-[#2a2c30] rounded-sm text-[#c4c7c5] flex items-center gap-1.5 disabled:opacity-40"
+                title="Export voice lines in the selected range as SubRip subtitles"
+              >
+                <FileText className="w-3.5 h-3.5" />
+                {isExportingSubtitles ? 'Writing...' : 'Export subtitles (.srt)'}
+              </button>
+              {subtitleMessage && (
+                <span className="text-[10px] font-mono text-[#8e918f] truncate" title={subtitleMessage}>
+                  {subtitleMessage}
+                </span>
+              )}
+            </div>
           </section>
 
           <div className="grid grid-cols-2 gap-3">

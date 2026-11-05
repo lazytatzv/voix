@@ -179,8 +179,10 @@ export function App() {
   const isPlayingRef = useRef<boolean>(false);
 
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const selectedItemIdRef = useRef<string | null>(null);
-  const clipboardRef = useRef<TimelineItem | null>(null);
+  const selectedItemIdsRef = useRef<string[]>([]);
+  const clipboardRef = useRef<TimelineItem[]>([]);
   const [inspectedItemId, setInspectedItemId] = useState<string | null>(null);
 
   // Modals
@@ -224,6 +226,7 @@ export function App() {
   rawVideoPathRef.current = rawVideoPath;
   videoDurationRef.current = videoDuration;
   selectedItemIdRef.current = selectedItemId;
+  selectedItemIdsRef.current = selectedItemIds;
 
   const characters = project.characters;
   const tracks = project.tracks || [];
@@ -288,6 +291,31 @@ export function App() {
     [commitProject]
   );
 
+  const beginTransform = useCallback(() => {
+    undoRef.current.push(projectRef.current);
+    if (undoRef.current.length > 100) undoRef.current.shift();
+    redoRef.current = [];
+  }, []);
+
+  const handleSelectItem = useCallback((id: string | null, additive = false) => {
+    if (!id) {
+      selectedItemIdsRef.current = [];
+      setSelectedItemIds([]);
+      setSelectedItemId(null);
+      return;
+    }
+    const previous = selectedItemIdsRef.current;
+    const next = additive
+      ? previous.includes(id)
+        ? previous.filter((entry) => entry !== id)
+        : [...previous, id]
+      : [id];
+    const primary = next.includes(id) ? id : next[next.length - 1] ?? null;
+    selectedItemIdsRef.current = next;
+    setSelectedItemIds(next);
+    setSelectedItemId(primary);
+  }, []);
+
   const videoLoadTokenRef = useRef(0);
 
   const syncVideoSource = useCallback((path: string | null) => {
@@ -347,6 +375,8 @@ export function App() {
       redoRef.current = [];
       lastItemHistoryRef.current = { id: '', time: 0 };
       setSelectedItemId(null);
+      setSelectedItemIds([]);
+      selectedItemIdsRef.current = [];
       setInspectedItemId(null);
       setIsPlaying(false);
       isPlayingRef.current = false;
@@ -1006,7 +1036,7 @@ export function App() {
         flipH: false,
       };
       commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
-      setSelectedItemId(item.id);
+      handleSelectItem(item.id);
       setInspectedItemId(item.id);
       setToast(`Added image: ${item.name}`);
     },
@@ -1031,7 +1061,7 @@ export function App() {
         fadeOut: 0,
       };
       commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
-      setSelectedItemId(item.id);
+      handleSelectItem(item.id);
       setInspectedItemId(item.id);
       setToast(`Added audio: ${item.name}`);
     },
@@ -1060,7 +1090,7 @@ export function App() {
           isSynthesizing: false,
         };
         commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
-        setSelectedItemId(item.id);
+        handleSelectItem(item.id);
         setInspectedItemId(item.id);
         return;
       }
@@ -1089,7 +1119,7 @@ export function App() {
           opacity: 1,
         };
         commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
-        setSelectedItemId(item.id);
+        handleSelectItem(item.id);
         setInspectedItemId(item.id);
         return;
       }
@@ -1152,7 +1182,7 @@ export function App() {
     };
 
     commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
-    setSelectedItemId(item.id);
+    handleSelectItem(item.id);
     await ensureVoiceAudio(item.id);
   };
 
@@ -1160,66 +1190,104 @@ export function App() {
     await ensureVoiceAudio(id, true);
   };
 
-  const handleDeleteItem = useCallback(
-    (id: string) => {
-      const item = projectRef.current.items.find((it) => it.id === id);
-      if (item) {
+  const handleDeleteItems = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
+      const hasLocked = projectRef.current.items.some((item) => {
+        if (!idSet.has(item.id)) return false;
         const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
-        if (
+        return (
           item.locked ||
           projectRef.current.tracks?.find((track) => track.id === trackKind)?.locked
-        ) {
-          setToast('Track is locked. Unlock it before deleting items.');
-          return;
-        }
+        );
+      });
+      if (hasLocked) {
+        setToast('Track is locked. Unlock it before deleting items.');
+        return;
       }
       commitProject((previous) => ({
         ...previous,
-        items: previous.items.filter((item) => item.id !== id),
+        items: previous.items.filter((item) => !idSet.has(item.id)),
       }));
-      if (selectedItemIdRef.current === id) setSelectedItemId(null);
-      setInspectedItemId((current) => (current === id ? null : current));
+      setSelectedItemId((current) => (current && idSet.has(current) ? null : current));
+      setSelectedItemIds((previous) => previous.filter((id) => !idSet.has(id)));
+      setInspectedItemId((current) => (current && idSet.has(current) ? null : current));
+      if (ids.length > 1) setToast(`Deleted ${ids.length} items`);
+    },
+    [commitProject]
+  );
+
+  const handleDeleteItem = useCallback(
+    (id: string) => handleDeleteItems([id]),
+    [handleDeleteItems]
+  );
+
+  const handleDuplicateItems = useCallback(
+    (ids: string[]) => {
+      const originals = projectRef.current.items.filter((item) => ids.includes(item.id));
+      if (originals.length === 0) return;
+      const minStart = Math.min(...originals.map((item) => item.startTime));
+      const maxEnd = Math.max(...originals.map((item) => item.startTime + item.duration));
+      const shift = maxEnd - minStart + 0.15;
+      const clones = originals.map(
+        (item) =>
+          ({
+            ...item,
+            id: newId(item.type),
+            name: `${item.name} copy`,
+            startTime: Number((item.startTime + shift).toFixed(3)),
+          }) as TimelineItem
+      );
+      commitProject((previous) => ({ ...previous, items: [...previous.items, ...clones] }));
+      const cloneIds = clones.map((clone) => clone.id);
+      selectedItemIdsRef.current = cloneIds;
+      setSelectedItemIds(cloneIds);
+      setSelectedItemId(cloneIds[0] ?? null);
+      if (clones.length > 1) setToast(`Duplicated ${clones.length} items`);
     },
     [commitProject]
   );
 
   const handleDuplicateItem = useCallback(
-    (id: string) => {
-      const current = projectRef.current;
-      const item = current.items.find((it) => it.id === id);
-      if (!item) return;
-      const clone = {
-        ...item,
-        id: newId(item.type),
-        name: `${item.name} copy`,
-        startTime: Number((item.startTime + item.duration + 0.15).toFixed(2)),
-      } as TimelineItem;
-      commitProject((previous) => ({ ...previous, items: [...previous.items, clone] }));
-      setSelectedItemId(clone.id);
-    },
-    [commitProject]
+    (id: string) => handleDuplicateItems([id]),
+    [handleDuplicateItems]
   );
 
-  const handleCopyItem = useCallback((id: string) => {
-    const item = projectRef.current.items.find((entry) => entry.id === id);
-    if (!item) return;
-    clipboardRef.current = { ...item } as TimelineItem;
-    setToast(`Copied ${item.name || item.type}`);
+  const handleCopyItems = useCallback((ids: string[]) => {
+    const items = projectRef.current.items.filter((entry) => ids.includes(entry.id));
+    if (items.length === 0) return;
+    clipboardRef.current = items.map((item) => ({ ...item }) as TimelineItem);
+    setToast(
+      items.length > 1
+        ? `Copied ${items.length} items`
+        : `Copied ${items[0].name || items[0].type}`
+    );
   }, []);
 
-  const handlePasteItem = useCallback(() => {
-    const source = clipboardRef.current;
-    if (!source) return;
-    const clone: TimelineItem = {
-      ...source,
-      id: newId(source.type),
-      name: `${source.name || source.type} copy`,
-      startTime: Number(currentTimeRef.current.toFixed(3)),
-    };
-    commitProject((previous) => ({ ...previous, items: [...previous.items, clone] }));
-    setSelectedItemId(clone.id);
-    setInspectedItemId(clone.id);
-    setToast('Pasted item at playhead');
+  const handlePasteItems = useCallback(() => {
+    const sources = clipboardRef.current;
+    if (sources.length === 0) return;
+    const baseStart = Math.min(...sources.map((source) => source.startTime));
+    const targetStart = currentTimeRef.current;
+    const clones = sources.map(
+      (source) =>
+        ({
+          ...source,
+          id: newId(source.type),
+          name: `${source.name || source.type} copy`,
+          startTime: Number((targetStart + (source.startTime - baseStart)).toFixed(3)),
+        }) as TimelineItem
+    );
+    commitProject((previous) => ({ ...previous, items: [...previous.items, ...clones] }));
+    const cloneIds = clones.map((clone) => clone.id);
+    selectedItemIdsRef.current = cloneIds;
+    setSelectedItemIds(cloneIds);
+    setSelectedItemId(cloneIds[0] ?? null);
+    setInspectedItemId(cloneIds[0] ?? null);
+    setToast(
+      clones.length > 1 ? `Pasted ${clones.length} items at playhead` : 'Pasted item at playhead'
+    );
   }, [commitProject]);
 
   const handleSplitItem = async (id: string, splitTime: number) => {
@@ -1274,7 +1342,7 @@ export function App() {
         isSynthesizing: true,
       };
       commitProject((previous) => ({ ...previous, items: [...previous.items, clone] }));
-      setSelectedItemId(clone.id);
+      handleSelectItem(clone.id);
       await ensureVoiceAudio(clone.id);
       setToast('Split voice item');
       return;
@@ -1823,27 +1891,40 @@ export function App() {
           handleRedo();
           return;
         }
+        if (!editable && key === 'a') {
+          event.preventDefault();
+          const allIds = projectRef.current.items.map((item) => item.id);
+          selectedItemIdsRef.current = allIds;
+          setSelectedItemIds(allIds);
+          setSelectedItemId(allIds[allIds.length - 1] ?? null);
+          return;
+        }
         if (!editable && key === 'd') {
           event.preventDefault();
-          const selected = selectedItemIdRef.current;
-          if (selected) handleDuplicateItem(selected);
+          const selection = selectedItemIdsRef.current;
+          if (selection.length > 0) handleDuplicateItems(selection);
           return;
         }
         if (!editable && key === 'c') {
           event.preventDefault();
-          const selected = selectedItemIdRef.current;
-          if (selected) handleCopyItem(selected);
+          const selection = selectedItemIdsRef.current;
+          if (selection.length > 0) handleCopyItems(selection);
           return;
         }
         if (!editable && key === 'v') {
           event.preventDefault();
-          handlePasteItem();
+          handlePasteItems();
           return;
         }
         return;
       }
 
       if (editable) return;
+
+      if (event.key === 'Escape') {
+        handleSelectItem(null);
+        return;
+      }
 
       if (event.code === 'Space') {
         event.preventDefault();
@@ -1857,8 +1938,9 @@ export function App() {
       }
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
-        const selected = selectedItemIdRef.current;
-        if (selected) handleDeleteItem(selected);
+        const selection = selectedItemIdsRef.current;
+        if (selection.length > 0) handleDeleteItems(selection);
+        else if (selectedItemIdRef.current) handleDeleteItems([selectedItemIdRef.current]);
         return;
       }
       if (event.key.toLowerCase() === 's') {
@@ -1885,16 +1967,17 @@ export function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
-    handleCopyItem,
-    handleDeleteItem,
-    handleDuplicateItem,
+    handleCopyItems,
+    handleDeleteItems,
+    handleDuplicateItems,
     handleAddMarker,
     handleNewProject,
     handleOpenProject,
-    handlePasteItem,
+    handlePasteItems,
     handleRedo,
     handleSaveProject,
     handleSeek,
+    handleSelectItem,
     handleSplitSelected,
     handleTogglePlay,
     handleUndo,
@@ -2073,7 +2156,7 @@ export function App() {
               onPlaySingle={handlePlaySingle}
               onSynthesizeItem={handleSynthesizeItem}
               onSyncFromYaml={handleSyncFromYaml}
-              onSelectItem={setSelectedItemId}
+              onSelectItem={handleSelectItem}
             />
           </div>
         ) : (
@@ -2119,21 +2202,26 @@ export function App() {
             characters={characters}
             currentTime={currentTime}
             duration={totalDuration}
+            isPlaying={isPlaying}
             selectedItemId={selectedItemId}
+            selectedItemIds={selectedItemIds}
             tracks={tracks}
             hasVideo={Boolean(videoSrc)}
             videoName={rawVideoPath?.split('/').pop()}
             onSeek={handleSeek}
             onUpdateItem={updateItem}
-            onSelectItem={(id) => {
-              setSelectedItemId(id);
+            onBeginTransform={beginTransform}
+            onSelectItem={(id, additive) => {
+              handleSelectItem(id, additive);
               if (id && isScriptCollapsed) setIsScriptCollapsed(false);
             }}
             onDeleteItem={handleDeleteItem}
+            onDeleteItems={handleDeleteItems}
+            onDuplicateSelected={() => handleDuplicateItems(selectedItemIdsRef.current)}
             onAddItem={handleAddItem}
             onUpdateTrack={updateTrack}
             onInspectItem={(id) => {
-              setSelectedItemId(id);
+              handleSelectItem(id);
               setInspectedItemId(id);
             }}
             onSplitSelected={handleSplitSelected}

@@ -11,6 +11,8 @@ import {
   Film,
   FolderOpen,
   Wand2,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
@@ -24,6 +26,7 @@ import {
   VoiceItem,
 } from '../types';
 import { toAssetUrl } from '../utils/imageUtils';
+import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
 
 interface ItemInspectorProps {
   isOpen: boolean;
@@ -224,6 +227,32 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
               min={0.05}
               onChange={(value) => patch({ duration: Math.max(0.05, value) })}
             />
+            <Field label="Layer (higher renders in front)" className="col-span-2">
+              <div className="flex items-center gap-1.5">
+                <input
+                  type="number"
+                  value={item.layer}
+                  onChange={(e) => patch({ layer: Number(e.target.value) })}
+                  className={inputClass}
+                />
+                <button
+                  type="button"
+                  title="Move one layer forward"
+                  onClick={() => patch({ layer: item.layer + 1 })}
+                  className="px-2 py-1.5 bg-[#181a1d] border border-[#2a2c30] rounded-sm text-[#c4c7c5] hover:text-white"
+                >
+                  <ChevronUp className="w-3.5 h-3.5" />
+                </button>
+                <button
+                  type="button"
+                  title="Move one layer backward"
+                  onClick={() => patch({ layer: Math.max(0, item.layer - 1) })}
+                  className="px-2 py-1.5 bg-[#181a1d] border border-[#2a2c30] rounded-sm text-[#c4c7c5] hover:text-white"
+                >
+                  <ChevronDown className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </Field>
             <div className="col-span-2 flex flex-wrap items-center gap-3 pt-1">
               <button
                 type="button"
@@ -585,7 +614,24 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                   </p>
                 </section>
 
-                <section className="border-t border-[#242629] pt-4 grid grid-cols-2 gap-3">
+                <section className="border-t border-[#242629] pt-4 space-y-3">
+                  <div className="space-y-1.5">
+                    <span className={labelClass}>Subtitle preset</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {SUBTITLE_PRESETS.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => patch({ style: { ...preset.style } } as Partial<TimelineItem>)}
+                          className="px-2 py-1 text-[10px] font-mono bg-[#181a1d] border border-[#2a2c30] rounded-sm text-[#c4c7c5] hover:text-white hover:border-[#8ab4f8]/60"
+                          title={`Apply ${preset.name} style`}
+                        >
+                          {preset.name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
                   <NumberField
                     label="Font size"
                     value={style.fontSize}
@@ -674,6 +720,7 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     />
                     Drop shadow
                   </label>
+                  </div>
                 </section>
               </>
             );
