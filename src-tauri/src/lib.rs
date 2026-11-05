@@ -11,6 +11,11 @@ use std::process::Command;
 struct MediaServerState(Option<media_server::MediaServer>);
 
 #[tauri::command]
+fn app_log(tag: String, message: String) {
+    eprintln!("[{}] {}", tag, message);
+}
+
+#[tauri::command]
 fn media_stream_url(
     state: tauri::State<'_, MediaServerState>,
     path: String,
@@ -1261,7 +1266,8 @@ pub fn run() {
             write_export_frame,
             cancel_export_job,
             finish_export_job,
-            media_stream_url
+            media_stream_url,
+            app_log
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

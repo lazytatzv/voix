@@ -4,6 +4,7 @@ import { AudioItem, Character, DuckingSettings, TimelineItem, TrackState } from 
 import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
 import { loadImage, collectCharacterImageSources, clearImageCache } from '../render/imageCache';
 import { mediaUrlFor } from '../utils/mediaUrl';
+import { appLog } from '../utils/appLog';
 import { collectVoiceIntervals, DEFAULT_DUCKING, duckingGainAt } from '../utils/audioDucking';
 
 interface VideoPreviewProps {
@@ -88,6 +89,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     startClientY: number;
   } | null>(null);
   const suppressCanvasClickRef = useRef(false);
+  const renderFrameRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
@@ -200,7 +202,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
-    if (!isPlaying && video.readyState >= 1 && Math.abs(video.currentTime - currentTime) > 0.05) {
+    if (!isPlaying && video.readyState >= 2 && Math.abs(video.currentTime - currentTime) > 0.05) {
       if (video.seeking) pendingSeekTimeRef.current = currentTime;
       else {
         try {
@@ -213,14 +215,33 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (video) {
+      appLog('VideoPreview', `loadedmetadata: duration=${video.duration}, size=${video.videoWidth}x${video.videoHeight}`);
       setVideoError(null);
       if (video.duration && !Number.isNaN(video.duration) && video.duration > 0) {
         onVideoDurationLoaded?.(video.duration, video.videoWidth, video.videoHeight);
       }
-      // Force decoding the initial frame so the screen is never left black.
+    }
+  };
+
+  const handleLoadedData = () => {
+    const video = videoRef.current;
+    if (video) {
+      appLog('VideoPreview', `loadeddata: readyState=${video.readyState}`);
+      setVideoError(null);
       try {
-        video.currentTime = Math.max(0.001, currentTime);
+        if (Math.abs(video.currentTime - currentTime) > 0.05) {
+          video.currentTime = Math.max(0.001, currentTime);
+        }
       } catch {}
+      renderFrameRef.current();
+    }
+  };
+
+  const handleCanPlay = () => {
+    const video = videoRef.current;
+    if (video) {
+      appLog('VideoPreview', `canplay: readyState=${video.readyState}`);
+      renderFrameRef.current();
     }
   };
 
@@ -237,6 +258,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         message = '動画データの通信・読み込みエラーが発生しました';
       }
     }
+    appLog('VideoPreview', `error: code=${err?.code}, msg=${err?.message}, src=${videoSrc}`);
     console.warn('[VideoPreview] video error:', err, videoSrc);
     setVideoError(message);
   };
@@ -252,6 +274,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         } catch {}
       }
     }
+    renderFrameRef.current();
   };
 
   useEffect(() => {
@@ -451,10 +474,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       showCharacters: showAvatar,
       showTerminal,
       showSafeArea,
+      backgroundVideo: videoRef.current,
     });
   }, [displayCharacters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height]);
 
-  const renderFrameRef = useRef(renderFrame);
   renderFrameRef.current = renderFrame;
 
   // Paused previews only redraw when the project, playhead or toggles change.
@@ -556,12 +579,16 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             <video
               ref={videoRef}
               src={videoSrc}
+              crossOrigin="anonymous"
               className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
               muted={isMuted}
               playsInline
               loop
               preload="auto"
+              onLoadStart={() => appLog('VideoPreview', `loadstart: src=${videoSrc}`)}
               onLoadedMetadata={handleLoadedMetadata}
+              onLoadedData={handleLoadedData}
+              onCanPlay={handleCanPlay}
               onSeeked={handleSeeked}
               onError={handleVideoError}
             />

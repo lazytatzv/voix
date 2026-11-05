@@ -16,6 +16,8 @@ export interface OverlayRenderOptions {
   showTerminal?: boolean;
   /** Draw a subtle safe-area boundary (preview only). */
   showSafeArea?: boolean;
+  /** Optional background video element for live preview composition. */
+  backgroundVideo?: HTMLVideoElement | null;
 }
 
 const FALLBACK_STYLE: SubtitleStyle = {
@@ -626,6 +628,14 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
+
+  // Draw background video directly onto the canvas so Linux / WebKitGTK
+  // compositing bugs cannot hide the video underneath transparent overlays.
+  if (options.backgroundVideo && options.backgroundVideo.readyState >= 2) {
+    try {
+      ctx.drawImage(options.backgroundVideo, 0, 0, width, height);
+    } catch {}
+  }
 
   const visibleItems = items.filter((item) => !item.hidden);
   const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');

@@ -1,3 +1,4 @@
+// Voix live application
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
@@ -47,6 +48,7 @@ import {
 import { loadCharactersFromConfig, loadSettingsFromConfig, saveCharactersToConfig } from './services/configService';
 import { loadCachedAudio, isTauriRuntime } from './services/audioCache';
 import { mediaUrlFor } from './utils/mediaUrl';
+import { appLog } from './utils/appLog';
 import { loadImage, clearImageCache } from './render/imageCache';
 import { detectSpeechFromVideo, measureImportedAudio } from './services/exportService';
 import { TachieImportResult } from './services/tachieService';
@@ -339,6 +341,7 @@ export function App() {
   const videoLoadTokenRef = useRef(0);
 
   const syncVideoSource = useCallback((path: string | null) => {
+    appLog('App', `syncVideoSource: path=${path}`);
     rawVideoPathRef.current = path;
     setRawVideoPath(path);
     const token = ++videoLoadTokenRef.current;
@@ -348,9 +351,11 @@ export function App() {
     // the loopback HTTP server so large videos are not held in memory.
     void mediaUrlFor(path)
       .then((url) => {
+        appLog('App', `syncVideoSource resolved: ${url} (token=${token}, current=${videoLoadTokenRef.current})`);
         if (videoLoadTokenRef.current === token) setVideoSrc(url);
       })
       .catch((err) => {
+        appLog('App', `syncVideoSource failed: ${err}`);
         console.warn('[App] video load failed:', err);
         if (videoLoadTokenRef.current === token) setVideoSrc(null);
       });

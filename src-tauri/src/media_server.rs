@@ -22,6 +22,11 @@ use std::time::Duration;
 use tiny_http::{Header, Method, Request, Response, Server, StatusCode};
 use uuid::Uuid;
 
+#[allow(dead_code)]
+fn media_log(msg: &str) {
+    eprintln!("[media_server] {}", msg);
+}
+
 const RECV_TICK: Duration = Duration::from_millis(250);
 
 #[derive(Default)]
@@ -132,12 +137,14 @@ impl MediaServer {
             None => {
                 let id = Uuid::new_v4().simple().to_string();
                 registry.by_path.insert(canonical.clone(), id.clone());
-                registry.by_id.insert(id.clone(), canonical);
+                registry.by_id.insert(id.clone(), canonical.clone());
                 id
             }
         };
 
-        Ok(format!("{}/media/{}/{}", self.base_url, self.token, id))
+        let url = format!("{}/media/{}/{}", self.base_url, self.token, id);
+        media_log(&format!("url_for: {} -> {}", canonical.display(), url));
+        Ok(url)
     }
 
     /// The loopback origin, useful for CSP headers or diagnostics.
@@ -241,6 +248,14 @@ fn handle_request(
         .find(|h| h.field.equiv("Range"))
         .map(|h| h.value.as_str());
 
+    media_log(&format!(
+        "{} {} Range: {:?} (file: {} bytes)",
+        method.as_str(),
+        request.url(),
+        range_header,
+        file_len
+    ));
+
     match parse_range(range_header, file_len) {
         RangeSpec::Full => respond_full(request, file, file_len, mime),
         RangeSpec::Partial { start, end } => {
@@ -268,8 +283,13 @@ fn respond_full(request: Request, file: File, file_len: u64, mime: &str) {
         file,
         Some(usize::try_from(file_len).unwrap_or(usize::MAX)),
         None,
-    );
+    )
+    .with_chunked_threshold(usize::MAX);
     add_headers(&mut response, cors_headers());
+    add_headers(
+        &mut response,
+        vec![header("Content-Length", &file_len.to_string())],
+    );
     let _ = request.respond(response);
 }
 
@@ -293,14 +313,18 @@ fn respond_partial(
         file.take(length),
         Some(usize::try_from(length).unwrap_or(usize::MAX)),
         None,
-    );
+    )
+    .with_chunked_threshold(usize::MAX);
     add_headers(&mut response, cors_headers());
     add_headers(
         &mut response,
-        vec![header(
-            "Content-Range",
-            &format!("bytes {start}-{end}/{file_len}"),
-        )],
+        vec![
+            header("Content-Length", &length.to_string()),
+            header(
+                "Content-Range",
+                &format!("bytes {start}-{end}/{file_len}"),
+            ),
+        ],
     );
     let _ = request.respond(response);
 }
