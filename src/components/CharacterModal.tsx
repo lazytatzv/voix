@@ -16,10 +16,13 @@ import {
   Loader2,
   Volume2,
   RefreshCw,
+  Search,
+  ListMusic,
 } from 'lucide-react';
-import { Character, Speaker } from '../types';
+import { Character, Speaker, SpeakerStyle } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
-import { findSpeakerStyle } from '../services/tts/speakerUtils';
+import { filterSpeakers, findSpeakerStyle } from '../services/tts/speakerUtils';
+import { voiceAudioPlayer } from '../services/voicePlayer';
 import { CustomSelect } from './CustomSelect';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
 import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
@@ -31,6 +34,9 @@ interface ProviderVoices {
   providerName: string;
   speakers: Speaker[];
 }
+
+const AUDITION_SAMPLE_TEXT = 'こんにちは。この声のサンプルを再生しています。';
+const AUDITION_VOICE_ID = 'character-modal-audition';
 
 interface CharacterModalProps {
   isOpen: boolean;
@@ -55,29 +61,151 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   const [providers, setProviders] = useState<ProviderVoices[]>([]);
   const [loadingVoices, setLoadingVoices] = useState(false);
   const [voiceError, setVoiceError] = useState<string | null>(null);
-  const [previewing, setPreviewing] = useState(false);
-  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
-  const previewUrlRef = useRef<string | null>(null);
-  const previewTokenRef = useRef(0);
+  const [voiceQuery, setVoiceQuery] = useState('');
+  const [audition, setAudition] = useState<{
+    styleId: number;
+    label: string;
+    phase: 'loading' | 'playing';
+  } | null>(null);
+  const [auditionAll, setAuditionAll] = useState(false);
+  const auditionTokenRef = useRef(0);
+  const auditionTimerRef = useRef<number | null>(null);
+  const auditionWaitResolveRef = useRef<(() => void) | null>(null);
+  const auditionAllRef = useRef(false);
 
   const char = characters.find((c) => c.id === selectedCharId) || characters[0];
 
-  const stopPreview = useCallback(() => {
-    previewTokenRef.current += 1;
-    const audio = previewAudioRef.current;
-    if (audio) {
-      audio.onended = null;
-      audio.onerror = null;
-      audio.pause();
-      audio.currentTime = 0;
+  const activeProvider =
+    providers.find((provider) => provider.providerId === char?.ttsProviderId) ?? providers[0];
+  const speakers = activeProvider?.speakers ?? [];
+
+  const resolvedStyle = char
+    ? findSpeakerStyle(speakers, char.speakerId) ??
+      (char.styleId !== undefined ? findSpeakerStyle(speakers, char.styleId) : undefined)
+    : undefined;
+  const currentSpeaker = resolvedStyle?.speaker;
+  const currentStyle = resolvedStyle?.style;
+
+  const providerOptions =
+    providers.length > 0
+      ? providers.map((provider) => ({
+          value: provider.providerId,
+          label: provider.providerName,
+        }))
+      : [{ value: char?.ttsProviderId ?? 'voicevox', label: 'VOICEVOX (offline)' }];
+
+  const speakerOptions =
+    speakers.length > 0
+      ? speakers.map((speaker) => ({
+          value: speaker.id,
+          label: `${speaker.name} — ${speaker.styles.length} style${speaker.styles.length === 1 ? '' : 's'}`,
+        }))
+      : char
+        ? [{ value: String(char.speakerId), label: `Voice ID ${char.speakerId}` }]
+        : [];
+
+  const styleOptions = currentSpeaker
+    ? currentSpeaker.styles.map((style) => ({
+        value: style.id,
+        label: style.name,
+      }))
+    : char
+      ? [{ value: char.speakerId, label: `Style ${char.speakerId}` }]
+      : [];
+
+  const voiceCount = activeProvider
+    ? activeProvider.speakers.reduce(
+        (total, speaker) => total + speaker.styles.length,
+        0
+      )
+    : 0;
+
+  const filteredSpeakers = filterSpeakers(speakers, voiceQuery);
+  const isPreviewing = Boolean(char && audition?.styleId === char.speakerId);
+
+  const stopAudition = useCallback(() => {
+    auditionTokenRef.current += 1;
+    auditionAllRef.current = false;
+    setAuditionAll(false);
+    setAudition(null);
+
+    if (auditionTimerRef.current !== null) {
+      window.clearTimeout(auditionTimerRef.current);
+      auditionTimerRef.current = null;
     }
-    previewAudioRef.current = null;
-    if (previewUrlRef.current) {
-      URL.revokeObjectURL(previewUrlRef.current);
-      previewUrlRef.current = null;
-    }
-    setPreviewing(false);
+    const resolveWait = auditionWaitResolveRef.current;
+    auditionWaitResolveRef.current = null;
+    resolveWait?.();
+    voiceAudioPlayer.stopVoice(AUDITION_VOICE_ID, false);
   }, []);
+
+  const waitForAudition = useCallback((durationMs: number) => {
+    return new Promise<void>((resolve) => {
+      auditionWaitResolveRef.current = resolve;
+      auditionTimerRef.current = window.setTimeout(() => {
+        auditionTimerRef.current = null;
+        auditionWaitResolveRef.current = null;
+        resolve();
+      }, Math.max(400, durationMs));
+    });
+  }, []);
+
+  const playVoiceSample = useCallback(
+    async (
+      providerId: string,
+      styleId: number,
+      label: string,
+      waitForEnd: boolean
+    ): Promise<number | null> => {
+      const token = auditionTokenRef.current + 1;
+      auditionTokenRef.current = token;
+      if (auditionTimerRef.current !== null) {
+        window.clearTimeout(auditionTimerRef.current);
+        auditionTimerRef.current = null;
+      }
+      setAudition({ styleId, label, phase: 'loading' });
+      setVoiceError(null);
+      try {
+        const result = await ttsManager.synthesize(
+          providerId,
+          styleId,
+          AUDITION_SAMPLE_TEXT,
+          { speedScale: 1, pitchScale: 0 }
+        );
+        if (token !== auditionTokenRef.current) return null;
+
+        const started = await voiceAudioPlayer.playVoice(
+          AUDITION_VOICE_ID,
+          result.audioBlob,
+          1,
+          0,
+          result.audioKey
+        );
+        if (token !== auditionTokenRef.current) return null;
+        if (!started) {
+          throw new Error('The engine returned audio that could not be played.');
+        }
+
+        setAudition({ styleId, label, phase: 'playing' });
+        if (!waitForEnd) {
+          auditionTimerRef.current = window.setTimeout(() => {
+            if (token === auditionTokenRef.current) {
+              auditionTimerRef.current = null;
+              setAudition(null);
+            }
+          }, Math.max(400, result.duration * 1000 + 120));
+        }
+        return Math.max(0.3, result.duration);
+      } catch (err) {
+        if (token === auditionTokenRef.current) {
+          setVoiceError(`Voice preview failed: ${String(err)}`);
+          setAudition(null);
+        }
+        return null;
+      }
+    },
+    []
+  );
 
   const reloadVoices = useCallback(async () => {
     setLoadingVoices(true);
@@ -108,47 +236,21 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   // Stop audition audio when the modal closes or the selected speaker changes.
   useEffect(() => {
     if (!isOpen) return;
-    return () => stopPreview();
-  }, [isOpen, selectedCharId, stopPreview]);
+    return () => stopAudition();
+  }, [isOpen, selectedCharId, stopAudition]);
 
   const handlePreviewVoice = async () => {
     if (!char) return;
-    if (previewing) {
-      stopPreview();
+    if (audition?.styleId === char.speakerId) {
+      stopAudition();
       return;
     }
-    const token = previewTokenRef.current + 1;
-    previewTokenRef.current = token;
-    setPreviewing(true);
-    setVoiceError(null);
-    try {
-      const result = await ttsManager.synthesize(
-        char.ttsProviderId,
-        char.speakerId,
-        'こんにちは。この声のサンプルを再生しています。',
-        { speedScale: 1, pitchScale: 0 }
-      );
-      if (token !== previewTokenRef.current) return;
-      const url = URL.createObjectURL(result.audioBlob);
-      previewUrlRef.current = url;
-      const audio = new Audio(url);
-      previewAudioRef.current = audio;
-      audio.onended = () => {
-        if (token === previewTokenRef.current) stopPreview();
-      };
-      audio.onerror = () => {
-        if (token === previewTokenRef.current) {
-          setVoiceError('The engine returned audio that could not be played.');
-          stopPreview();
-        }
-      };
-      await audio.play();
-    } catch (err) {
-      if (token === previewTokenRef.current) {
-        setVoiceError(`Voice preview failed: ${String(err)}`);
-        stopPreview();
-      }
-    }
+    stopAudition();
+    const label =
+      currentSpeaker && currentStyle
+        ? `${currentSpeaker.name} · ${currentStyle.name}`
+        : `Style ${char.speakerId}`;
+    await playVoiceSample(char.ttsProviderId, char.speakerId, label, false);
   };
 
   if (!isOpen) return null;
@@ -231,53 +333,9 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     { id: 'hidden', label: 'Hidden' },
   ];
 
-  const activeProvider =
-    providers.find((provider) => provider.providerId === char?.ttsProviderId) ?? providers[0];
-  const speakers = activeProvider?.speakers ?? [];
-
-  const resolvedStyle = char
-    ? findSpeakerStyle(speakers, char.speakerId) ??
-      (char.styleId !== undefined ? findSpeakerStyle(speakers, char.styleId) : undefined)
-    : undefined;
-  const currentSpeaker = resolvedStyle?.speaker;
-  const currentStyle = resolvedStyle?.style;
-
-  const providerOptions =
-    providers.length > 0
-      ? providers.map((provider) => ({
-          value: provider.providerId,
-          label: provider.providerName,
-        }))
-      : [{ value: char?.ttsProviderId ?? 'voicevox', label: 'VOICEVOX (offline)' }];
-
-  const speakerOptions =
-    speakers.length > 0
-      ? speakers.map((speaker) => ({
-          value: speaker.id,
-          label: `${speaker.name} — ${speaker.styles.length} style${speaker.styles.length === 1 ? '' : 's'}`,
-        }))
-      : char
-        ? [{ value: String(char.speakerId), label: `Voice ID ${char.speakerId}` }]
-        : [];
-
-  const styleOptions = currentSpeaker
-    ? currentSpeaker.styles.map((style) => ({
-        value: style.id,
-        label: style.name,
-      }))
-    : char
-      ? [{ value: char.speakerId, label: `Style ${char.speakerId}` }]
-      : [];
-
-  const voiceCount = providers.reduce(
-    (total, provider) =>
-      total + provider.speakers.reduce((count, speaker) => count + speaker.styles.length, 0),
-    0
-  );
-
   const handleProviderChange = (providerId: string) => {
     if (!char) return;
-    stopPreview();
+    stopAudition();
     const provider = providers.find((entry) => entry.providerId === providerId);
     const firstStyle = provider?.speakers[0]?.styles[0];
     onUpdateCharacter(char.id, {
@@ -288,7 +346,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
 
   const handleSpeakerChange = (speakerId: string) => {
     if (!char) return;
-    stopPreview();
+    stopAudition();
     const speaker = speakers.find((entry) => entry.id === speakerId);
     const firstStyle = speaker?.styles[0];
     if (!firstStyle) return;
@@ -297,10 +355,72 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
 
   const handleStyleChange = (styleId: string) => {
     if (!char) return;
-    stopPreview();
+    stopAudition();
     const numericId = Number(styleId);
     if (!Number.isInteger(numericId)) return;
     onUpdateCharacter(char.id, { speakerId: numericId, styleId: numericId });
+  };
+
+  const handleUseStyle = (style: SpeakerStyle) => {
+    if (!char || !activeProvider) return;
+    stopAudition();
+    onUpdateCharacter(char.id, {
+      ttsProviderId: activeProvider.providerId,
+      speakerId: style.id,
+      styleId: style.id,
+    });
+  };
+
+  const handleAuditionStyle = (speaker: Speaker, style: SpeakerStyle) => {
+    if (!activeProvider) return;
+    if (audition?.styleId === style.id) {
+      stopAudition();
+      return;
+    }
+    stopAudition();
+    void playVoiceSample(
+      activeProvider.providerId,
+      style.id,
+      `${speaker.name} · ${style.name}`,
+      false
+    );
+  };
+
+  const handleAuditionAll = async () => {
+    if (!activeProvider) return;
+    if (auditionAll) {
+      stopAudition();
+      return;
+    }
+    const queue = filteredSpeakers.flatMap((speaker) =>
+      speaker.styles.map((style) => ({
+        styleId: style.id,
+        label: `${speaker.name} · ${style.name}`,
+      }))
+    );
+    if (queue.length === 0) return;
+
+    stopAudition();
+    auditionAllRef.current = true;
+    setAuditionAll(true);
+
+    for (const entry of queue) {
+      if (!auditionAllRef.current) break;
+      const duration = await playVoiceSample(
+        activeProvider.providerId,
+        entry.styleId,
+        entry.label,
+        true
+      );
+      if (duration === null) break;
+      await waitForAudition(duration * 1000 + 220);
+    }
+
+    if (auditionAllRef.current) {
+      auditionAllRef.current = false;
+      setAuditionAll(false);
+      setAudition(null);
+    }
   };
 
   return (
@@ -425,18 +545,18 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         onClick={() => void handlePreviewVoice()}
                         disabled={loadingVoices}
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition flex items-center gap-1.5 disabled:opacity-40 ${
-                          previewing
+                          isPreviewing
                             ? 'bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25'
                             : 'bg-[#004a77]/40 text-[#c2e7ff] border-[#004a77] hover:bg-[#004a77]/60'
                         }`}
                         title="Synthesize a short sample with the selected voice"
                       >
-                        {previewing ? (
+                        {isPreviewing ? (
                           <Square className="w-3 h-3" />
                         ) : (
                           <Play className="w-3 h-3" />
                         )}
-                        {previewing ? 'Stop' : 'Preview voice'}
+                        {isPreviewing ? 'Stop' : 'Preview voice'}
                       </button>
                     </div>
                   </div>
@@ -480,6 +600,142 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                     <span className="font-mono text-[#6f7377] flex-shrink-0">
                       style ID {char.speakerId}
                     </span>
+                  </div>
+
+                  {/* Audition browser: every character and style can be played directly. */}
+                  <div className="border-t border-[#282a2c] pt-2.5 space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f] flex items-center gap-1.5">
+                        <ListMusic className="w-3 h-3 text-[#8ab4f8]" />
+                        All voices
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void handleAuditionAll()}
+                        disabled={filteredSpeakers.length === 0}
+                        className={`px-2.5 py-1 rounded-md text-[10px] font-medium border transition flex items-center gap-1 disabled:opacity-40 ${
+                          auditionAll
+                            ? 'bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25'
+                            : 'bg-[#1e1f20] text-[#c4c7c5] border-[#3c4043] hover:border-[#5f6368] hover:text-white'
+                        }`}
+                        title="Play every visible character and style in order"
+                      >
+                        {auditionAll ? <Square className="w-2.5 h-2.5" /> : <Play className="w-2.5 h-2.5" />}
+                        {auditionAll ? 'Stop all' : 'Play all'}
+                      </button>
+                    </div>
+
+                    <div className="relative">
+                      <Search className="w-3 h-3 text-[#8e918f] absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={voiceQuery}
+                        onChange={(event) => setVoiceQuery(event.target.value)}
+                        placeholder="Search character or style..."
+                        className="w-full bg-[#0f1012] border border-[#2e3135] focus:border-[#8ab4f8] rounded-lg pl-7 pr-7 py-1.5 text-[11px] text-[#e3e3e3] placeholder:text-[#6f7377] outline-none"
+                      />
+                      {voiceQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setVoiceQuery('')}
+                          className="absolute right-2 top-1/2 -translate-y-1/2 text-[#8e918f] hover:text-white"
+                          title="Clear search"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+
+                    {audition && (
+                      <div className="flex items-center gap-1.5 text-[10px] text-[#c2e7ff] min-w-0">
+                        {audition.phase === 'loading' ? (
+                          <Loader2 className="w-3 h-3 animate-spin flex-shrink-0" />
+                        ) : (
+                          <Volume2 className="w-3 h-3 flex-shrink-0" />
+                        )}
+                        <span className="truncate">
+                          {audition.phase === 'loading' ? 'Synthesizing' : 'Playing'}: {audition.label}
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="max-h-60 overflow-y-auto rounded-xl border border-[#282a2c] bg-[#0f1012]">
+                      {filteredSpeakers.map((speaker) => (
+                        <div
+                          key={speaker.id}
+                          className="px-2.5 py-2 border-b border-[#202226] last:border-b-0"
+                        >
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <span className="text-[11px] font-semibold text-[#e3e3e3] truncate">
+                              {speaker.name}
+                            </span>
+                            <span className="text-[9px] font-mono text-[#6f7377] flex-shrink-0">
+                              {speaker.styles.length}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {speaker.styles.map((style) => {
+                              const isSelected = char.speakerId === style.id;
+                              const isAuditioning = audition?.styleId === style.id;
+                              return (
+                                <span
+                                  key={style.id}
+                                  className={`inline-flex items-center overflow-hidden rounded-md border text-[10px] transition ${
+                                    isSelected
+                                      ? 'border-[#8ab4f8] bg-[#004a77]/40 text-[#c2e7ff]'
+                                      : 'border-[#33363a] bg-[#181a1d] text-[#c4c7c5] hover:border-[#5f6368]'
+                                  }`}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUseStyle(style)}
+                                    className="px-2 py-1 hover:text-white transition"
+                                    title={`Use ${speaker.name} · ${style.name}`}
+                                  >
+                                    {style.name}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAuditionStyle(speaker, style)}
+                                    className={`px-1.5 py-1 border-l transition ${
+                                      isAuditioning
+                                        ? 'border-[#8ab4f8]/50 text-[#8ab4f8] bg-[#004a77]/30'
+                                        : 'border-[#33363a] text-[#8e918f] hover:text-white hover:bg-[#282a2c]'
+                                    }`}
+                                    title={`Play ${speaker.name} · ${style.name}`}
+                                    aria-label={`Play ${speaker.name} ${style.name}`}
+                                  >
+                                    {isAuditioning ? (
+                                      audition?.phase === 'loading' ? (
+                                        <Loader2 className="w-2.5 h-2.5 animate-spin" />
+                                      ) : (
+                                        <Square className="w-2.5 h-2.5" />
+                                      )
+                                    ) : (
+                                      <Play className="w-2.5 h-2.5" />
+                                    )}
+                                  </button>
+                                </span>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                      {filteredSpeakers.length === 0 && (
+                        <div className="px-3 py-3 text-[11px] text-[#8e918f]">
+                          {voiceQuery
+                            ? `No voices match "${voiceQuery}".`
+                            : loadingVoices
+                              ? 'Loading voices from the local engines...'
+                              : 'No TTS voices available.'}
+                        </div>
+                      )}
+                    </div>
+
+                    <p className="text-[10px] text-[#6f7377] leading-relaxed">
+                      Press ▶ to audition any of the {voiceCount} voices. Click a style name to use
+                      it for {char.name}.
+                    </p>
                   </div>
 
                   {loadingVoices && providers.length === 0 && (

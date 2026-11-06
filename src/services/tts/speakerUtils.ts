@@ -82,3 +82,23 @@ export function flattenVoiceOptions(
     }))
   );
 }
+
+/**
+ * Narrow a speaker list with a case-insensitive search.
+ *
+ * A character-name match keeps all of that character's styles; otherwise only
+ * the styles whose own names match are kept. This is what powers the audition
+ * browser, where users search for either "ずんだもん" or "ささやき".
+ */
+export function filterSpeakers(speakers: Speaker[], query: string): Speaker[] {
+  const normalized = query.trim().toLowerCase();
+  if (!normalized) return speakers;
+
+  return speakers.flatMap((speaker) => {
+    if (speaker.name.toLowerCase().includes(normalized)) return [speaker];
+    const styles = speaker.styles.filter((style) =>
+      style.name.toLowerCase().includes(normalized)
+    );
+    return styles.length > 0 ? [{ ...speaker, styles }] : [];
+  });
+}

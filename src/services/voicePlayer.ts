@@ -77,19 +77,19 @@ export class VoiceAudioPlayer {
     volume = 1.0,
     offset = 0,
     cacheKey?: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     const ctx = this.getContext();
     if (ctx.state === 'suspended') {
       await ctx.resume();
     }
 
     const buffer = await this.getAudioBuffer(source, cacheKey);
-    if (!buffer) return;
+    if (!buffer) return false;
 
     const playOffset = Math.max(0, offset);
     if (playOffset >= buffer.duration - 0.03) {
       // Already played through
-      return;
+      return false;
     }
 
     // Stop previous instance of the same voice line if already active
@@ -122,8 +122,10 @@ export class VoiceAudioPlayer {
         offset: playOffset,
         duration: buffer.duration,
       });
+      return true;
     } catch (err) {
       console.warn('[VoiceAudioPlayer] sourceNode.start failed:', err);
+      return false;
     }
   }
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  filterSpeakers,
   findSpeakerStyle,
   flattenVoiceOptions,
   parseSpeakerList,
@@ -88,6 +89,51 @@ describe('findSpeakerStyle', () => {
 
   it('returns undefined for unknown IDs', () => {
     expect(findSpeakerStyle(speakers, 4242)).toBeUndefined();
+  });
+});
+
+describe('filterSpeakers', () => {
+  const speakers = parseSpeakerList([
+    {
+      name: '四国めたん',
+      speaker_uuid: 'metan',
+      styles: [
+        { name: 'ノーマル', id: 2, type: 'talk' },
+        { name: 'ささやき', id: 36, type: 'talk' },
+      ],
+    },
+    {
+      name: 'ずんだもん',
+      speaker_uuid: 'zunda',
+      styles: [
+        { name: 'ノーマル', id: 3, type: 'talk' },
+        { name: 'ヒソヒソ', id: 38, type: 'talk' },
+      ],
+    },
+  ]);
+
+  it('returns every speaker for a blank query', () => {
+    expect(filterSpeakers(speakers, '  ')).toEqual(speakers);
+  });
+
+  it('keeps all styles when a character name matches', () => {
+    const result = filterSpeakers(speakers, 'めたん');
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('四国めたん');
+    expect(result[0].styles.map((style) => style.id)).toEqual([2, 36]);
+  });
+
+  it('keeps only matching styles when a style name matches', () => {
+    const result = filterSpeakers(speakers, 'ささやき');
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('四国めたん');
+    expect(result[0].styles.map((style) => style.id)).toEqual([36]);
+  });
+
+  it('matches case-insensitively and drops non-matches', () => {
+    expect(filterSpeakers(speakers, 'ZUNDA')).toHaveLength(0);
+    expect(filterSpeakers(speakers, 'ヒソ')).toHaveLength(1);
+    expect(filterSpeakers(speakers, '存在しない')).toHaveLength(0);
   });
 });
 

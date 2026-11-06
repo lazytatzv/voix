@@ -371,7 +371,7 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={onOpenCharacterSettings}
           className="p-1.5 rounded-sm bg-[#151619] hover:bg-[#1f2126] text-[#a8aaa8] hover:text-white border border-[#282a2e] transition"
-          title="Characters & voice"
+          title="Characters & voice audition"
         >
           <User className="w-3.5 h-3.5" />
         </button>
