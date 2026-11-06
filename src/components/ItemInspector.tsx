@@ -422,8 +422,8 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="w-full max-w-2xl max-h-[92vh] overflow-hidden bg-[#141517] border border-[#2c2e32] rounded-sm shadow-2xl flex flex-col">
+    <div className="geo-backdrop fixed inset-0 z-50 bg-black/65 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="geo-panel w-full max-w-2xl max-h-[92vh] overflow-hidden bg-[#141517] border border-[#2c2e32] rounded-none shadow-2xl flex flex-col">
         <div className="px-4 py-3 border-b border-[#242629] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2 min-w-0">
             <TypeBadge type={item.type} />

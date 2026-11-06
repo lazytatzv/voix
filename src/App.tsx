@@ -2414,7 +2414,7 @@ export function App() {
   };
 
   return (
-    <div className="h-screen w-screen flex flex-col bg-[#101112] text-[#e3e3e3] overflow-hidden select-none font-sans">
+    <div className="voix-geo h-screen w-screen flex flex-col bg-[#101112] text-[#e3e3e3] overflow-hidden select-none font-sans">
       <Header
         projectName={project.name}
         onProjectNameChange={(name) =>

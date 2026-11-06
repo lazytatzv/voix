@@ -132,14 +132,14 @@ export const Header: React.FC<HeaderProps> = ({
   const tooltipPath = projectPath || 'Autosaved at ~/.config/voix/autosave.voix.yaml';
 
   return (
-    <header className="h-12 bg-[#101112] border-b border-[#222426] px-4 flex items-center justify-between select-none flex-shrink-0">
+    <header className="geo-header relative z-30 h-12 bg-[#101112] border-b border-[#222426] px-4 flex items-center justify-between select-none flex-shrink-0">
       {/* Left: Brand, project title, file actions */}
       <div className="flex items-center gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-6 h-6 rounded bg-[#18191b] border border-[#2c2e31] flex items-center justify-center text-[#8ab4f8]">
+          <div className="w-6 h-6 rounded-none bg-[#8ab4f8]/10 border border-[#8ab4f8]/40 flex items-center justify-center text-[#8ab4f8] shadow-[inset_0_0_0_1px_rgba(138,180,248,0.08)]">
             <PlaySquare className="w-3.5 h-3.5" />
           </div>
-          <span className="font-bold text-xs tracking-tight text-[#e3e3e3]">Voix</span>
+          <span className="font-bold text-xs tracking-[0.14em] uppercase text-[#e3e3e3]">Voix</span>
         </div>
 
         <span className="text-[#3c4043] font-mono text-xs">/</span>
@@ -391,7 +391,7 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={onExportVideo}
           disabled={itemCount === 0}
-          className="ml-1 px-3 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] text-xs font-mono font-semibold rounded-sm border border-[#005a92] shadow-xs transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
+          className="geo-cut ml-1 px-3.5 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] text-xs font-mono font-semibold rounded-none border border-[#005a92] shadow-xs transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
           title="Render and export video (Ctrl+E)"
         >
           <Download className="w-3 h-3" />

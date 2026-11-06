@@ -134,8 +134,8 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in select-none">
-      <div className="bg-[#121315] border border-[#2a2c30] rounded-sm w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="geo-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in select-none">
+      <div className="geo-panel bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-[#202226] flex items-center justify-between bg-[#0e0f11]">
           <div className="flex items-center gap-2.5">

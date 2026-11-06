@@ -497,8 +497,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   return (
-    <div className="flex flex-col bg-[#141517] border border-[#242629] rounded-sm overflow-hidden shadow-lg select-none h-full">
-      <div className="px-3 py-1.5 bg-[#141517] border-b border-[#222426] flex items-center justify-between flex-shrink-0">
+    <div className="geo-panel flex flex-col bg-[#141517] border border-[#242629] rounded-none overflow-hidden shadow-lg select-none h-full">
+      <div className="geo-rail pl-4 pr-3 py-1.5 bg-[#141517] border-b border-[#222426] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3 text-xs text-[#c4c7c5]">
           <span className="font-semibold text-xs font-mono uppercase tracking-wider text-[#e3e3e3]">Timeline</span>
           <span className="text-[#8e918f] font-mono text-[11px]">

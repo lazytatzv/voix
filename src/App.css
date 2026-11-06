@@ -2,6 +2,7 @@
 
 @layer base {
   :root {
+    color-scheme: dark;
     --bg-surface: #131314;
     --bg-surface-container: #1e1f20;
     --bg-surface-high: #282a2c;
@@ -25,17 +26,249 @@
 
   /* Linux Hacker スタイルの角張りスクロールバー */
   ::-webkit-scrollbar {
-    width: 5px;
-    height: 5px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
     background: #2e3135;
-    border-radius: 1px;
+    border: 1px solid #101113;
+    border-radius: 0;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: #474b52;
+    background: #4a4f56;
   }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  /* Firefox / native control scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #2e3135 transparent;
+  }
+}
+
+/* ================================================================== */
+/* Voix geometric theme                                               */
+/* Blueprint grid, sharp corners, corner brackets and cut edges.      */
+/* ================================================================== */
+
+.voix-geo {
+  --geo-accent: #8ab4f8;
+  --geo-bg: #0c0d0f;
+  background-color: var(--geo-bg);
+  background-image:
+    linear-gradient(rgba(138, 180, 248, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 180, 248, 0.028) 1px, transparent 1px);
+  background-size: 48px 48px;
+  background-position: -1px -1px;
+}
+
+/* Collapse the soft, rounded look into 2px machined edges.
+   True circles (status dots, avatars) and explicit rounded-none stay intact. */
+.voix-geo [class*="rounded-"]:not([class*="rounded-full"]):not([class*="rounded-none"]) {
+  border-radius: 2px;
+}
+
+/* Major surfaces get diagonal corner brackets. */
+.voix-geo .geo-panel {
+  position: relative;
+}
+.voix-geo .geo-panel::before,
+.voix-geo .geo-panel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 30;
+  border-color: rgba(138, 180, 248, 0.68);
+  border-style: solid;
+}
+.voix-geo .geo-panel::before {
+  top: 0;
+  left: 0;
+  border-width: 1px 0 0 1px;
+  box-shadow: -1px 1px 0 rgba(138, 180, 248, 0.12);
+}
+.voix-geo .geo-panel::after {
+  right: 0;
+  bottom: 0;
+  border-width: 0 1px 1px 0;
+  box-shadow: 1px -1px 0 rgba(138, 180, 248, 0.12);
+}
+
+/* Primary actions get two clipped corners. */
+.voix-geo .geo-cut {
+  clip-path: polygon(
+    0 0,
+    calc(100% - 8px) 0,
+    100% 8px,
+    100% 100%,
+    8px 100%,
+    0 calc(100% - 8px)
+  );
+}
+
+/* Header chrome: a short segmented accent line below the chrome. */
+.voix-geo .geo-header {
+  background-image: linear-gradient(
+    90deg,
+    rgba(138, 180, 248, 0.07),
+    rgba(138, 180, 248, 0.015) 24%,
+    transparent 52%
+  );
+}
+.voix-geo .geo-header::after {
+  content: "";
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: -1px;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    rgba(138, 180, 248, 0.55),
+    rgba(138, 180, 248, 0.12) 16%,
+    transparent 42%
+  );
+}
+
+/* A thin vertical accent rail for section headers. */
+.voix-geo .geo-rail {
+  position: relative;
+}
+.voix-geo .geo-rail::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  background: linear-gradient(180deg, var(--geo-accent), rgba(138, 180, 248, 0.12));
+  pointer-events: none;
+}
+
+/* Blueprint grid for the preview viewport. */
+.voix-geo .geo-viewport {
+  background-image:
+    linear-gradient(rgba(138, 180, 248, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 180, 248, 0.04) 1px, transparent 1px);
+  background-size: 32px 32px;
+  background-position: center center;
+}
+.voix-geo .geo-viewport::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  box-shadow:
+    inset 0 0 0 1px rgba(138, 180, 248, 0.07),
+    inset 0 0 80px rgba(0, 0, 0, 0.35);
+}
+
+/* Viewfinder corners inside the preview. */
+.voix-geo .geo-frame {
+  position: absolute;
+  inset: 12px;
+  pointer-events: none;
+  z-index: 4;
+}
+.voix-geo .geo-frame i {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border-color: rgba(138, 180, 248, 0.42);
+  border-style: solid;
+}
+.voix-geo .geo-frame i:nth-child(1) {
+  top: 0;
+  left: 0;
+  border-width: 1px 0 0 1px;
+}
+.voix-geo .geo-frame i:nth-child(2) {
+  top: 0;
+  right: 0;
+  border-width: 1px 1px 0 0;
+}
+.voix-geo .geo-frame i:nth-child(3) {
+  bottom: 0;
+  right: 0;
+  border-width: 0 1px 1px 0;
+}
+.voix-geo .geo-frame i:nth-child(4) {
+  bottom: 0;
+  left: 0;
+  border-width: 0 0 1px 1px;
+}
+
+/* Modal overlays pick up the same blueprint language. */
+.voix-geo .geo-backdrop {
+  background-image:
+    linear-gradient(rgba(138, 180, 248, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(138, 180, 248, 0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* Focus: a hard accent tick instead of a soft glow. */
+.voix-geo input[type="text"]:focus,
+.voix-geo input[type="number"]:focus,
+.voix-geo input[type="search"]:focus,
+.voix-geo input[type="password"]:focus,
+.voix-geo textarea:focus,
+.voix-geo select:focus {
+  box-shadow: inset 2px 0 0 0 rgba(138, 180, 248, 0.8);
+}
+
+.voix-geo :focus-visible {
+  outline: 1px solid rgba(138, 180, 248, 0.7);
+  outline-offset: 0;
+}
+
+.voix-geo ::selection {
+  background: rgba(138, 180, 248, 0.3);
+  color: #ffffff;
+}
+
+/* Range sliders become machined bars with a vertical thumb. */
+.voix-geo input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 0;
+  background: linear-gradient(90deg, #2b2f35, #202329);
+  cursor: ew-resize;
+}
+.voix-geo input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 5px;
+  height: 14px;
+  border-radius: 0;
+  background: var(--geo-accent);
+  border: 0;
+  box-shadow: 0 0 0 1px rgba(8, 10, 12, 0.9);
+}
+.voix-geo input[type="range"]::-moz-range-thumb {
+  width: 5px;
+  height: 14px;
+  border-radius: 0;
+  background: var(--geo-accent);
+  border: 0;
+  box-shadow: 0 0 0 1px rgba(8, 10, 12, 0.9);
+}
+.voix-geo input[type="range"]::-moz-range-track {
+  height: 4px;
+  border-radius: 0;
+  background: #202329;
+}
+
+/* Checkboxes and radio controls keep the system accent but square off. */
+.voix-geo input[type="checkbox"] {
+  border-radius: 0;
 }

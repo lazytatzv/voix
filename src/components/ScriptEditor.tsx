@@ -544,12 +544,12 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const selectedChar = characters.find((c) => c.id === activeCharId) || characters[0];
 
   return (
-    <div className="flex flex-col h-full bg-[#18191b] border border-[#2e3135] rounded-2xl overflow-hidden shadow-xl">
+    <div className="geo-panel flex flex-col h-full bg-[#18191b] border border-[#2e3135] rounded-none overflow-hidden shadow-xl">
       {/* Header: Tab Switcher & Auto-Sync Indicator */}
-      <div className="px-4 py-2.5 bg-[#141517] border-b border-[#242628] flex items-center justify-between select-none">
+      <div className="geo-rail pl-5 pr-4 py-2.5 bg-[#141517] border-b border-[#242628] flex items-center justify-between select-none">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-xs text-[#e3e3e3] tracking-tight">
+            <span className="font-mono font-semibold text-[11px] text-[#e3e3e3] uppercase tracking-[0.16em]">
               Dialogue
             </span>
             <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-[#202124] text-[#8e918f] border border-[#2e3135]">
@@ -558,13 +558,13 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
           </div>
 
           {/* Simple Tab Switcher: Cards | YAML */}
-          <div className="flex items-center bg-[#1e2023] p-0.5 rounded-lg border border-[#2e3135]">
+          <div className="flex items-center bg-[#15171a] p-0.5 rounded-none border border-[#2e3135]">
             <button
               type="button"
               onClick={() => handleSwitchTab('cards')}
-              className={`px-2.5 py-1 text-xs rounded-md font-medium transition flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider rounded-none transition flex items-center gap-1.5 ${
                 tab === 'cards'
-                  ? 'bg-[#2b2d31] text-white shadow-xs'
+                  ? 'bg-[#1b2b3d] text-[#c2e7ff] shadow-[inset_0_-1px_0_0_rgba(138,180,248,0.85)]'
                   : 'text-[#8e918f] hover:text-[#c4c7c5]'
               }`}
             >
@@ -573,9 +573,9 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
             <button
               type="button"
               onClick={() => handleSwitchTab('yaml')}
-              className={`px-2.5 py-1 text-xs rounded-md font-medium transition flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider rounded-none transition flex items-center gap-1.5 ${
                 tab === 'yaml'
-                  ? 'bg-[#004a77] text-[#c2e7ff] shadow-xs'
+                  ? 'bg-[#004a77] text-[#c2e7ff] shadow-[inset_0_-1px_0_0_rgba(138,180,248,0.85)]'
                   : 'text-[#8e918f] hover:text-[#c4c7c5]'
               }`}
             >
@@ -978,10 +978,10 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   key={c.id}
                   type="button"
                   onClick={() => setSelectedCharacterId(c.id)}
-                  className={`px-3 py-1 rounded-full text-xs font-medium transition flex-shrink-0 ${
+                  className={`px-2.5 py-1 rounded-none border text-[10px] font-mono tracking-wide transition flex-shrink-0 ${
                     activeCharId === c.id
-                      ? 'bg-[#004a77] text-[#c2e7ff]'
-                      : 'bg-[#202124] text-[#c4c7c5] hover:text-white hover:bg-[#282a2e]'
+                      ? 'bg-[#004a77] text-[#c2e7ff] border-[#8ab4f8]/40 shadow-[inset_2px_0_0_0_rgba(138,180,248,0.9)]'
+                      : 'bg-[#1a1c1f] text-[#c4c7c5] border-[#2e3135] hover:text-white hover:border-[#4a4f56]'
                   }`}
                 >
                   {c.name}
@@ -1083,7 +1083,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               <button
                 type="submit"
                 disabled={!inputText.trim() || isSubmitting}
-                className="absolute right-1 px-2.5 py-1.5 rounded-sm bg-[#2563eb] hover:bg-[#1d4ed8] text-white transition disabled:opacity-30 disabled:bg-[#1f2228] disabled:text-[#8e918f] shadow-xs"
+                className="geo-cut absolute right-1 px-3 py-1.5 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] transition disabled:opacity-30 disabled:bg-[#1f2228] disabled:text-[#8e918f] shadow-xs"
               >
                 {isSubmitting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

@@ -348,8 +348,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
-      <div className="bg-[#121315] border border-[#2a2c30] rounded-sm w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col overflow-hidden font-sans">
+    <div className="geo-backdrop fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
+      <div className="geo-panel bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col overflow-hidden font-sans">
         {/* Header */}
         <div className="px-5 py-3 bg-[#0d0e10] border-b border-[#202226] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -1360,7 +1360,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               type="button"
               onClick={handleSaveAll}
               disabled={isSaving}
-              className="px-5 py-2 rounded-xl text-xs font-semibold text-white bg-[#2563eb] hover:bg-[#1d4ed8] active:scale-95 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              className="geo-cut px-6 py-2 rounded-none text-xs font-semibold text-[#c2e7ff] bg-[#004a77] hover:bg-[#005a92] border border-[#005a92] active:scale-95 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Save All Preferences

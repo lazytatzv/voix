@@ -424,8 +424,8 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="bg-[#121315] border border-[#2a2c30] rounded-sm w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="geo-backdrop fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 select-none">
+      <div className="geo-panel bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-5 py-3 border-b border-[#202226] flex items-center justify-between bg-[#0e0f11]">
           <div className="flex items-center gap-2">
@@ -1112,7 +1112,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
         <div className="px-6 py-3.5 border-t border-[#282a2c] bg-[#18191b] flex justify-end">
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] text-xs font-semibold rounded-full transition"
+            className="geo-cut px-6 py-2 bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] text-xs font-semibold rounded-none tracking-wide transition"
           >
             Done
           </button>
