@@ -1672,11 +1672,93 @@ export function App() {
     if (url) playVoiceAudio(item.id, url, item.volumeScale ?? 1);
   };
 
+  const voiceResynthTimersRef = useRef<Map<string, number>>(new Map());
+
   const handleUpdateCharacter = (id: string, updates: Partial<Character>) => {
+    const existing = projectRef.current.characters.find((c) => c.id === id);
+    const voiceChanged =
+      Boolean(existing) &&
+      ((updates.ttsProviderId !== undefined &&
+        updates.ttsProviderId !== existing!.ttsProviderId) ||
+        (updates.speakerId !== undefined && updates.speakerId !== existing!.speakerId));
+
+    if (!voiceChanged) {
+      commitProject((previous) => ({
+        ...previous,
+        characters: previous.characters.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+      }));
+      return;
+    }
+
+    const nextSpeakerId = updates.speakerId ?? existing!.speakerId;
+    const nextProviderId = updates.ttsProviderId ?? existing!.ttsProviderId;
+    const affected = projectRef.current.items.filter(
+      (item): item is VoiceItem => item.type === 'voice' && item.characterId === id
+    );
+
+    // Cached WAVs belong to the previous voice; drop them so the next play or
+    // export synthesizes with the newly selected character/style.
     commitProject((previous) => ({
       ...previous,
       characters: previous.characters.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+      items: previous.items.map((item) =>
+        item.type === 'voice' && item.characterId === id
+          ? {
+              ...item,
+              audioBlob: undefined,
+              audioBlobUrl: undefined,
+              audioKey: undefined,
+              phonemes: undefined,
+              isSynthesizing: true,
+            }
+          : item
+      ),
     }));
+
+    // Do not let the previous voice keep playing over the new selection.
+    stopAllAudio();
+
+    if (affected.length === 0) return;
+
+    // Debounce while the user auditions styles, then refresh every line that
+    // still belongs to this character so durations stay in sync.
+    const previousTimer = voiceResynthTimersRef.current.get(id);
+    if (previousTimer) window.clearTimeout(previousTimer);
+    const timer = window.setTimeout(() => {
+      voiceResynthTimersRef.current.delete(id);
+      const character = projectRef.current.characters.find((c) => c.id === id);
+      if (
+        !character ||
+        character.speakerId !== nextSpeakerId ||
+        character.ttsProviderId !== nextProviderId
+      ) {
+        return;
+      }
+      const pending = projectRef.current.items
+        .filter(
+          (item): item is VoiceItem => item.type === 'voice' && item.characterId === id
+        )
+        .map((item) => item.id);
+      if (pending.length === 0) return;
+      setToast(
+        `Voice changed — re-synthesizing ${pending.length} line${pending.length === 1 ? '' : 's'}`
+      );
+      void (async () => {
+        for (const itemId of pending) {
+          const current = projectRef.current.characters.find((c) => c.id === id);
+          // A newer voice selection supersedes this re-synthesis pass.
+          if (
+            !current ||
+            current.speakerId !== nextSpeakerId ||
+            current.ttsProviderId !== nextProviderId
+          ) {
+            break;
+          }
+          await ensureVoiceAudio(itemId);
+        }
+      })();
+    }, 500);
+    voiceResynthTimersRef.current.set(id, timer);
   };
 
   const handleToggleCharacterFlip = (id: string) => {

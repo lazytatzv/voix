@@ -50,23 +50,29 @@ export class TTSManager {
   }
 
   async getAllSpeakers(): Promise<{ providerId: string; providerName: string; speakers: Speaker[] }[]> {
-    const results = [];
-    for (const provider of this.providers.values()) {
-      try {
-        const available = await provider.isAvailable();
-        if (available) {
+    // Probe every engine in parallel; offline providers simply drop out.
+    const results = await Promise.all(
+      Array.from(this.providers.values()).map(async (provider) => {
+        try {
+          const available = await provider.isAvailable();
+          if (!available) return null;
           const speakers = await provider.getSpeakers();
-          results.push({
+          if (speakers.length === 0) return null;
+          return {
             providerId: provider.id,
             providerName: provider.name,
             speakers,
-          });
+          };
+        } catch (err) {
+          console.warn(`Provider ${provider.name} unavailable`, err);
+          return null;
         }
-      } catch (err) {
-        console.warn(`Provider ${provider.name} unavailable`, err);
-      }
-    }
-    return results;
+      })
+    );
+    return results.filter(
+      (entry): entry is { providerId: string; providerName: string; speakers: Speaker[] } =>
+        entry !== null
+    );
   }
 
   getCacheKey(

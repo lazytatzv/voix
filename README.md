@@ -9,16 +9,18 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 
 ## 主な機能
 
-- **マルチトラック・タイムライン** — 背景動画 / キャラクター / 音声・字幕 / テキスト / 画像 / BGM・SE の6レーン。ドラッグで移動、右端ドラッグで長さ変更、`S` で再生ヘッド位置に分割、波形表示、Altでスナップ解除。
+- **マルチトラック・タイムライン** — 背景動画 / キャラクター / 音声・字幕 / テキスト / 画像 / BGM・SE の6レーン。ドラッグで移動、右端ドラッグで長さ変更、`S` で再生ヘッド位置に分割、波形表示、Altでスナップ解除。SRTファイルを字幕テキストとして読み込めます。
 - **マーカー** — タイムラインに名前付きの目印を置き、クリックでシーク。近くのアイテムはマーカーへスナップします。位置はYAMLに保存されます。
 - **WYSIWYGプレビュー** — プレビューと書き出しが同じ Canvas コンポジター（`src/render/overlayRenderer.ts`）を使うため、見た目と出力が一致します。立ち絵はプレビュー上で直接ドラッグ配置でき、枠・中央・下端へスナップします。
 - **テロップ・画像モーション** — フェードイン/アウトに加えて、スライド・ズーム・ポップの登場/退場アニメーションをアイテム単位で設定できます。タイミングはプレビューと書き出しで共通です。
+- **キーフレーム** — テロップ・画像の位置、拡大率、回転、不透明度を複数キーで打てます。線形・イーズイン/アウト・ホールドで補間し、`K` キーまたはインスペクターから追加。YAMLにも保存され、プレビューと書き出しで同じ補間を使います。
+- **音声・動画の速度調整** — BGM/SE は 0.25〜4× の再生速度、背景動画も開始オフセット・速度・フィット（contain / cover / stretch）をプロジェクト設定から調整できます。速度はプレビューとFFmpeg書き出しの両方に反映されます。
 - **BGMダッキング** — セリフ中だけBGMを自動で下げ、話し終わると滑らかに戻します。下げ幅・アタック・リリースはプロジェクト設定で調整でき、プレビューと書き出しの両方に同じカーブが適用されます。
 - **YAMLプロジェクト** — `.voix.yaml` が標準形式。手編集でき、コメントやキー順も保持されます。旧JSON（`.voix` / `.json`）も読み込み可能。
 - **最近使ったプロジェクト** — ヘッダーの履歴メニューから直近8件を開けます。存在しなくなったファイルは自動的に一覧から外れます。
 - **自動保存** — `~/.config/voix/autosave.voix.yaml` と localStorage の二重保存。次回起動時に復元します。
 - **音声キャッシュ** — 合成済みWAVを `~/.cache/voix/audio` に保存し、`audioKey` としてプロジェクトに記録。再起動後の再合成を不要にします。
-- **TTSプロバイダー** — VOICEVOX / COEIROINK / AivisSpeech など、VOICEVOX互換APIに対応。カスタムエンドポイントも追加可能。
+- **TTSプロバイダー** — VOICEVOX / COEIROINK / AivisSpeech など、VOICEVOX互換APIに対応。キャラクター設定ではエンジン・キャラクター・スタイルを個別に選べ、VOICEVOXの全話者・全スタイルをそのまま一覧表示します。**Preview voice** で選択中の声を試聴でき、話者を変えると該当セリフの古い音声キャッシュを破棄して自動で再合成します。
 - **インスペクター** — 選択アイテムのセリフ・話速・音高・音量・表情・テロップスタイル・画像座標・BGMフェードなどを数値編集。
 - **書き出し** — 透過オーバーレイPNGをフレーム合成し、Rust側でFFmpegに渡して背景動画・音声と結合。範囲指定・進捗表示・実行中キャンセルに対応します。
 - **Linuxフレンドリー** — XDG準拠の設定/キャッシュ/データディレクトリ、`~` 展開、xdg-open連携。WebKitGTKでも背景動画・BGMを再生できるよう blob URL 経由で読み込みます。
@@ -77,6 +79,9 @@ timeline:
   overlayFps: 15
   videoPath: /home/user/Videos/background.mp4
   videoVolume: 1
+  videoOffset: 0        # タイムライン0秒で使う動画内の開始位置（秒）
+  videoSpeed: 1         # 背景動画の再生速度（0.25-4）
+  videoFit: contain     # contain / cover / stretch
   ducking:
     enabled: true
     level: 0.35        # セリフ中のBGM音量（0-1）
@@ -138,6 +143,7 @@ items:
     startTime: 0
     duration: 42.5
     volume: 0.3
+    speed: 1            # 0.25-4倍速
     isBgm: true
     loop: true
     fadeIn: 1
@@ -175,8 +181,37 @@ markers:
 - **voice**: `characterId`, `text`, `subtitleText`, `expression`, `speedScale`, `pitchScale`, `volumeScale`, `audioKey`, `phonemes`, `terminal: { cmd, output }`, `se`, `anim`, `flipH`, `scale`
 - **text**: `text`, `style`（`fontSize`, `fontFamily`, `textColor`, `strokeColor`, `strokeWidth`, `outerStrokeColor`, `outerStrokeWidth`, `bgStyle`, `bgColor`, `hasShadow`, `rubyDisplay` など）, `xPercent`, `yPercent`, `widthPercent`, `align`, `rotation`, `opacity`
 - **image**: `x`, `y`, `width`, `height`, `rotation`, `opacity`, `flipH`
-- **audio**: `volume`, `offset`（曲の頭出し秒）, `isBgm`, `loop`, `fadeIn`, `fadeOut`
+- **audio**: `volume`, `speed`（0.25-4倍速）, `offset`（曲の頭出し秒）, `isBgm`, `loop`, `fadeIn`, `fadeOut`
 - **video**: `volume`, `offsetTime`
+
+### キーフレーム
+
+テキスト・画像アイテムは `keyframes` 配列を持てます。`time` はアイテム先頭からの相対秒です。
+
+```yaml
+keyframes:
+  - time: 0
+    x: 50
+    y: 80
+    scale: 0.8
+    opacity: 0
+    easing: ease-out
+  - time: 0.6
+    scale: 1
+    opacity: 1
+  - time: 3
+    y: 72
+    easing: hold
+```
+
+| フィールド | 説明 |
+|---|---|
+| `time` | アイテム先頭からの相対秒 |
+| `x` / `y` | テキストは画面％、画像はプロジェクト座標（px） |
+| `scale` / `rotation` / `opacity` | 拡大率・回転角・不透明度 |
+| `easing` | `linear` / `ease-in` / `ease-out` / `ease-in-out` / `hold` |
+
+省略したプロパティは直前のキー（最初のキーならアイテムの基本値）を引き継ぎます。
 
 > 旧形式の `.voix` / `.json` はそのまま開けます。保存するとYAML形式になります。
 
@@ -249,9 +284,9 @@ ttsProviders:
 
 ## 書き出しパイプライン
 
-1. **アセット準備** — 立ち絵・画像を読み込み、音声（VOICEVOX / キャッシュ / 読み込み済みBGM）をWAVとして一時ディレクトリへ書き出し。指定範囲に重なる音声だけを切り出し、`offset` で曲の頭出しを反映します。
+1. **アセット準備** — 立ち絵・画像を読み込み、音声（VOICEVOX / キャッシュ / 読み込み済みBGM）をWAVとして一時ディレクトリへ書き出し。指定範囲に重なる音声だけを切り出し、`offset` の頭出しと `speed` の `atempo` を反映します。
 2. **オーバーレイ描画** — `overlayFps`（既定15fps）で透過PNGフレームをCanvasに描画。プレビューと同じ `drawOverlayFrame()` を使用します。
-3. **FFmpeg合成** — Rustの `finish_export_job` が背景動画を範囲開始位置までシークしてループさせ、透過PNGをオーバーレイ。音声は `adelay` / `atrim` / `afade` / `amix` でミックスし、BGMダッキングはセリフ区間に合わせた `volume` オートメーションとして適用します。
+3. **FFmpeg合成** — Rustの `finish_export_job` が `videoOffset` / `videoSpeed` を反映して背景動画をシーク・ループさせ、`contain` / `cover` / `stretch` でフレームに合わせて透過PNGをオーバーレイ。音声は `adelay` / `atrim` / `atempo` / `afade` / `amix` でミックスし、BGMダッキングはセリフ区間に合わせた `volume` オートメーションとして適用します。
 4. **エンコード** — 拡張子に応じて自動選択:
    - `.mp4` / `.mkv` → H.264 (libx264) + AAC
    - `.webm` → VP9 (libvpx-vp9) + Opus

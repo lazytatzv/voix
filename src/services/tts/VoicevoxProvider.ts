@@ -1,6 +1,7 @@
 import { Speaker, PhonemeTiming } from '../../types';
 import { containsEnglish, convertEnglishToVoicevox } from '../../utils/englishToVoicevox';
 import { getTtsSpokenText } from '../../utils/pronunciation';
+import { parseSpeakerList } from './speakerUtils';
 
 export interface TTSProvider {
   id: string;
@@ -70,14 +71,12 @@ export class VoicevoxProvider implements TTSProvider {
 
   async getSpeakers(): Promise<Speaker[]> {
     try {
-      const res = await fetch(`${this.endpoint}/speakers`);
+      const res = await fetch(`${this.endpoint}/speakers`, {
+        signal: AbortSignal.timeout(4000),
+      });
       if (!res.ok) throw new Error(`HTTP error ${res.status}`);
       const data = await res.json();
-      return data.map((item: { name: string; speaker_uuid: string; styles: { id: number; name: string }[] }) => ({
-        id: item.speaker_uuid || item.name,
-        name: item.name,
-        styles: item.styles.map((s) => ({ id: s.id, name: s.name })),
-      }));
+      return parseSpeakerList(data);
     } catch (e) {
       console.warn('Failed to fetch VOICEVOX speakers:', e);
       return [];

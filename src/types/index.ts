@@ -274,8 +274,11 @@ export interface PhonemeTiming {
 }
 
 export interface SpeakerStyle {
+  /** Style ID used by the engine's synthesis endpoints. */
   id: number;
   name: string;
+  /** VOICEVOX style category. Only `talk` styles can be synthesized. */
+  type?: string;
 }
 
 export interface Speaker {
