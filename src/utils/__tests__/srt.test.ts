@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSrt } from '../srt';
+import { buildSrt, parseSrt } from '../srt';
 import type { TimelineItem, VoiceItem } from '../../types';
 
 function makeVoice(overrides: Partial<VoiceItem>): VoiceItem {
@@ -56,5 +56,43 @@ describe('buildSrt', () => {
 
   it('returns an empty string when no cue survives', () => {
     expect(buildSrt([makeVoice({ hidden: true })])).toBe('');
+  });
+});
+
+describe('parseSrt', () => {
+  it('parses BOM, CRLF and millisecond timestamps', () => {
+    const content =
+      '\uFEFF1\r\n00:00:01,250 --> 00:00:03,500\r\nHello\r\n\r\n' +
+      '2\r\n01:02:03,004 --> 01:02:04,500\r\nSecond line\r\n';
+    const cues = parseSrt(content);
+    expect(cues).toEqual([
+      { start: 1.25, end: 3.5, text: 'Hello' },
+      { start: 3723.004, end: 3724.5, text: 'Second line' },
+    ]);
+  });
+
+  it('tolerates missing indices, coordinates and dotted separators', () => {
+    const content =
+      '00:00:00.000 --> 00:00:01.000 X1:100 X2:200\nFirst\n\n' +
+      '00:00:02,000 --> 00:00:02,500\nSecond\n';
+    const cues = parseSrt(content);
+    expect(cues).toHaveLength(2);
+    expect(cues[1]).toMatchObject({ start: 2, end: 2.5, text: 'Second' });
+  });
+
+  it('strips HTML and ASS-style override tags but keeps line breaks', () => {
+    const content =
+      '1\n00:00:00,000 --> 00:00:02,000\n<i>Hello</i> {\u005Can8}world\nnext line\n';
+    const [cue] = parseSrt(content);
+    expect(cue.text).toBe('Hello world\nnext line');
+  });
+
+  it('drops malformed cues and sorts by start time', () => {
+    const content =
+      '1\n00:00:04,000 --> 00:00:05,000\nLater\n\n' +
+      '2\n00:00:02,000 --> 00:00:01,000\nBackwards\n\n' +
+      '3\n00:00:00,000 --> 00:00:01,000\nEarlier\n';
+    const cues = parseSrt(content);
+    expect(cues.map((cue) => cue.text)).toEqual(['Earlier', 'Later']);
   });
 });

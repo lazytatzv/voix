@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { PanelRightOpen } from 'lucide-react';
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { Header, type RecentProjectEntry } from './components/Header';
 import { VideoPreview } from './components/VideoPreview';
@@ -16,6 +17,7 @@ import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { ItemInspector } from './components/ItemInspector';
 import { addSnapshotKeyframe } from './render/keyframes';
+import { parseSrt } from './utils/srt';
 import {
   AudioItem,
   Character,
@@ -1606,6 +1608,53 @@ export function App() {
     setInspectedItemId(item.id);
   }, [updateItem]);
 
+  /** Import SubRip cues as styled text items on the text lane. */
+  const handleImportSubtitles = useCallback(async () => {
+    try {
+      const picked = await openDialog({
+        title: 'Import subtitles',
+        multiple: false,
+        filters: [{ name: 'SubRip subtitles', extensions: ['srt'] }],
+      });
+      if (!picked || typeof picked !== 'string') return;
+      const content = await invoke<string>('read_text_file', { path: picked });
+      const cues = parseSrt(content);
+      if (cues.length === 0) {
+        setToast('No subtitle cues found in that file.');
+        return;
+      }
+      const items: TextItem[] = cues.map((cue) => ({
+        id: newId('text'),
+        type: 'text',
+        layer: 5,
+        startTime: Number(cue.start.toFixed(2)),
+        duration: Math.max(0.1, Number((cue.end - cue.start).toFixed(2))),
+        name: `Subtitle: ${cue.text.split('\n')[0].slice(0, 28)}`,
+        text: cue.text,
+        style: { ...DEFAULT_SUBTITLE_STYLE },
+        xPercent: 50,
+        yPercent: 88,
+        widthPercent: 90,
+        align: 'center',
+        rotation: 0,
+        opacity: 1,
+      }));
+      const lastEnd = Math.max(...cues.map((cue) => cue.end));
+      commitProject((previous) => {
+        const nextTimeline = { ...previous.timeline };
+        if (nextTimeline.duration < lastEnd) {
+          nextTimeline.duration = Number(lastEnd.toFixed(2));
+        }
+        return { ...previous, timeline: nextTimeline, items: [...previous.items, ...items] };
+      });
+      const fileName = picked.split(/[\\/]/).pop() || picked;
+      setToast(`Imported ${items.length} subtitle cues from ${fileName}`);
+    } catch (err) {
+      console.error('[App] subtitle import failed:', err);
+      setToast(`Subtitle import failed: ${String(err)}`);
+    }
+  }, [commitProject]);
+
   const handleDeleteMarker = useCallback(
     (id: string) => {
       const marker = projectRef.current.markers?.find((entry) => entry.id === id);
@@ -2291,6 +2340,7 @@ export function App() {
         }
         onVideoSelect={handleVideoSelect}
         onAutoTranscribe={handleAutoTranscribe}
+        onImportSubtitles={() => void handleImportSubtitles()}
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
