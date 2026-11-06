@@ -2480,6 +2480,12 @@ export function App() {
                 customY: typeof y === 'number' && !Number.isNaN(y) ? y : undefined,
               })
             }
+            onCharacterScale={(id, scale, customY) =>
+              handleUpdateCharacter(
+                id,
+                customY === undefined ? { scale } : { scale, customY }
+              )
+            }
           />
         </div>
 

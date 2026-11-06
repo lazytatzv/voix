@@ -44,6 +44,8 @@ interface VideoPreviewProps {
   ducking?: DuckingSettings;
   /** Persist a dragged tachie position in project coordinates. */
   onCharacterMove?: (characterId: string, x: number, y: number) => void;
+  /** Persist a tachie size change made with the corner handle. */
+  onCharacterScale?: (characterId: string, scale: number, customY?: number) => void;
   /** Retry loading the current video after a decode/network error. */
   onReloadVideo?: () => void;
   /** Open the native picker to choose a different background video. */
@@ -60,6 +62,39 @@ interface VideoPreviewProps {
   loadError?: string | null;
   /** True while the media URL is being resolved. */
   loading?: boolean;
+}
+
+/**
+ * Which top corner of a tachie should carry the resize grip, and where does the
+ * fixed bottom corner (the anchor while scaling) sit? The renderer anchors
+ * left/right/center horizontally and the bottom vertically, so the grip always
+ * sits on the top edge, mirrored for right-aligned characters.
+ */
+function getScaleHandleGeometry(layout: CharacterLayout) {
+  const character = layout.character;
+  const xAnchor =
+    character.customX !== undefined
+      ? 'left'
+      : character.position === 'right'
+        ? 'right'
+        : character.position === 'center'
+          ? 'center'
+          : 'left';
+  const anchorX =
+    xAnchor === 'left'
+      ? layout.x
+      : xAnchor === 'right'
+        ? layout.x + layout.width
+        : layout.x + layout.width / 2;
+  const anchorY = layout.y + layout.height;
+  const handleX = xAnchor === 'right' ? layout.x : layout.x + layout.width;
+  const handleY = layout.y;
+  const handleOnRight = xAnchor !== 'right';
+  return {
+    anchor: { x: anchorX, y: anchorY },
+    handle: { x: handleX, y: handleY },
+    cursor: handleOnRight ? 'nesw-resize' : 'nwse-resize',
+  };
 }
 
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
@@ -82,6 +117,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoVolume = 1,
   ducking,
   onCharacterMove,
+  onCharacterScale,
   onReloadVideo,
   onPickVideo,
   videoInfo,
@@ -116,7 +152,28 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const [characterDrag, setCharacterDrag] = useState<{ id: string; x: number; y: number } | null>(
     null
   );
-  const [hoveredCharacter, setHoveredCharacter] = useState<CharacterLayout | null>(null);
+  const [hoveredCharacterId, setHoveredCharacterId] = useState<string | null>(null);
+  const [characterScaleDrag, setCharacterScaleDrag] = useState<{
+    id: string;
+    scale: number;
+    customY?: number;
+  } | null>(null);
+  const characterScaleDragRef = useRef<{
+    id: string;
+    startScale: number;
+    startClientX: number;
+    startClientY: number;
+    anchorX: number;
+    anchorY: number;
+    vectorX: number;
+    vectorY: number;
+    lengthSq: number;
+    startRatio: number;
+    startHeight: number;
+    adjustY: boolean;
+    lastScale: number;
+    moved: boolean;
+  } | null>(null);
   const characterDragRef = useRef<{
     id: string;
     grabX: number;
@@ -397,13 +454,53 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   }, [width, height]);
 
   const displayCharacters = useMemo(() => {
-    if (!characterDrag) return characters;
-    return characters.map((character) =>
-      character.id === characterDrag.id
-        ? { ...character, customX: characterDrag.x, customY: characterDrag.y }
-        : character
+    if (!characterDrag && !characterScaleDrag) return characters;
+    return characters.map((character) => {
+      let next = character;
+      if (characterDrag && character.id === characterDrag.id) {
+        next = { ...next, customX: characterDrag.x, customY: characterDrag.y };
+      }
+      if (characterScaleDrag && character.id === characterScaleDrag.id) {
+        next = { ...next, scale: characterScaleDrag.scale };
+        if (characterScaleDrag.customY !== undefined) {
+          next = { ...next, customY: characterScaleDrag.customY };
+        }
+      }
+      return next;
+    });
+  }, [characters, characterDrag, characterScaleDrag]);
+
+  const scalingLayout = useMemo(() => {
+    if (!characterScaleDrag) return null;
+    return (
+      getCharacterLayouts({
+        width,
+        height,
+        time: currentTime,
+        characters: displayCharacters,
+        items,
+        tracks,
+        isPlaying: false,
+        showCharacters: showAvatar,
+      }).find((layout) => layout.character.id === characterScaleDrag.id) ?? null
     );
-  }, [characters, characterDrag]);
+  }, [characterScaleDrag, displayCharacters, currentTime, items, tracks, showAvatar, width, height]);
+
+  const hoveredLayout = useMemo(() => {
+    if (!hoveredCharacterId) return null;
+    return (
+      getCharacterLayouts({
+        width,
+        height,
+        time: currentTime,
+        characters: displayCharacters,
+        items,
+        tracks,
+        isPlaying: false,
+        showCharacters: showAvatar,
+      }).find((layout) => layout.character.id === hoveredCharacterId) ?? null
+    );
+  }, [hoveredCharacterId, displayCharacters, currentTime, items, tracks, showAvatar, width, height]);
 
   const projectPoint = useCallback(
     (clientX: number, clientY: number) => {
@@ -468,7 +565,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       startClientX: event.clientX,
       startClientY: event.clientY,
     };
-    setHoveredCharacter(null);
+    setHoveredCharacterId(null);
     setCharacterDrag({ id: hit.character.id, x: hit.x, y: hit.y });
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
@@ -479,8 +576,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const drag = characterDragRef.current;
     if (!drag) {
       const hit = hitTestCharacter(event.clientX, event.clientY);
-      setHoveredCharacter((previous) =>
-        previous?.character.id === hit?.character.id ? previous : hit
+      setHoveredCharacterId((previous) =>
+        previous === (hit?.character.id ?? null) ? previous : (hit?.character.id ?? null)
       );
       return;
     }
@@ -536,6 +633,107 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       event.currentTarget.releasePointerCapture(event.pointerId);
     } catch {}
     setCharacterDrag(null);
+  };
+
+  const handleScalePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const layout = scalingLayout ?? hoveredLayout;
+    if (!layout || event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const startScale = layout.character.scale ?? 1;
+    const geometry = getScaleHandleGeometry(layout);
+    const start = projectPoint(event.clientX, event.clientY);
+    const vectorX = geometry.handle.x - geometry.anchor.x;
+    const vectorY = geometry.handle.y - geometry.anchor.y;
+    const lengthSq = vectorX * vectorX + vectorY * vectorY;
+    if (lengthSq < 1) return;
+    const startRatio =
+      ((start.x - geometry.anchor.x) * vectorX + (start.y - geometry.anchor.y) * vectorY) /
+      lengthSq;
+    if (!Number.isFinite(startRatio) || Math.abs(startRatio) < 0.001) return;
+    characterScaleDragRef.current = {
+      id: layout.character.id,
+      startScale,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      anchorX: geometry.anchor.x,
+      anchorY: geometry.anchor.y,
+      vectorX,
+      vectorY,
+      lengthSq,
+      startRatio,
+      startHeight: layout.height,
+      adjustY: layout.character.customY !== undefined,
+      lastScale: startScale,
+      moved: false,
+    };
+    setCharacterScaleDrag({ id: layout.character.id, scale: startScale });
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {}
+  };
+
+  const handleScalePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = characterScaleDragRef.current;
+    if (!drag) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const deltaX = event.clientX - drag.startClientX;
+    const deltaY = event.clientY - drag.startClientY;
+    if (Math.abs(deltaX) > 2 || Math.abs(deltaY) > 2) drag.moved = true;
+    const point = projectPoint(event.clientX, event.clientY);
+    const ratio =
+      ((point.x - drag.anchorX) * drag.vectorX + (point.y - drag.anchorY) * drag.vectorY) /
+      drag.lengthSq;
+    const nextScale = Math.min(
+      2,
+      Math.max(0.5, (drag.startScale * ratio) / drag.startRatio)
+    );
+    drag.lastScale = nextScale;
+    if (drag.adjustY) {
+      const nextHeight = drag.startHeight * (nextScale / drag.startScale);
+      setCharacterScaleDrag({
+        id: drag.id,
+        scale: nextScale,
+        customY: drag.anchorY - nextHeight,
+      });
+    } else {
+      setCharacterScaleDrag({ id: drag.id, scale: nextScale });
+    }
+  };
+
+  const handleScalePointerUp = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = characterScaleDragRef.current;
+    if (!drag) return;
+    characterScaleDragRef.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {}
+    setCharacterScaleDrag(null);
+    const container = containerRef.current;
+    const rect = container?.getBoundingClientRect();
+    const inside =
+      Boolean(rect) &&
+      event.clientX >= rect!.left &&
+      event.clientX <= rect!.right &&
+      event.clientY >= rect!.top &&
+      event.clientY <= rect!.bottom;
+    setHoveredCharacterId(inside ? drag.id : null);
+    if (!drag.moved) return;
+    const committedScale = Math.round(drag.lastScale * 100) / 100;
+    const committedCustomY =
+      drag.adjustY && drag.startScale > 0
+        ? Math.round(
+            drag.anchorY - drag.startHeight * (committedScale / drag.startScale)
+          )
+        : undefined;
+    onCharacterScale?.(drag.id, committedScale, committedCustomY);
+  };
+
+  const handleScalePointerCancel = () => {
+    if (!characterScaleDragRef.current) return;
+    characterScaleDragRef.current = null;
+    setCharacterScaleDrag(null);
   };
 
   const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
@@ -670,6 +868,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const characterOutline = scalingLayout ?? hoveredLayout;
+  const scaleHandle = characterOutline ? getScaleHandleGeometry(characterOutline) : null;
+
   return (
     <div className="flex flex-col bg-[#111214] rounded-none overflow-hidden border border-[#26282c]">
       <div
@@ -679,6 +880,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
+        }}
+        onPointerLeave={() => {
+          if (!characterDragRef.current && !characterScaleDragRef.current) {
+            setHoveredCharacterId(null);
+          }
         }}
         onDrop={(e) => {
           e.preventDefault();
@@ -828,7 +1034,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           width={width}
           height={height}
           className={`absolute inset-0 w-full h-full object-contain select-none ${
-            hoveredCharacter ? 'cursor-move' : 'cursor-pointer'
+            hoveredCharacterId ? 'cursor-move' : 'cursor-pointer'
           }`}
           onClick={() => {
             if (suppressCanvasClickRef.current) {
@@ -842,21 +1048,35 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           onPointerUp={handleCanvasPointerUp}
           onPointerCancel={handleCanvasPointerCancel}
           onDoubleClick={handleCanvasDoubleClick}
-          onPointerLeave={() => {
-            if (!characterDragRef.current) setHoveredCharacter(null);
-          }}
-          aria-label="Preview: click to play or pause, drag a character to reposition it, double-click a character to flip it"
+          aria-label="Preview: click to play or pause, drag a character to reposition it, drag its corner handle to resize, double-click a character to flip it"
         />
-        {hoveredCharacter && (
-          <div
-            className="absolute pointer-events-none border border-dashed border-[#c4c7c5] rounded-sm transition-opacity"
-            style={{
-              left: `${(hoveredCharacter.x / Math.max(1, width)) * 100}%`,
-              top: `${(hoveredCharacter.y / Math.max(1, height)) * 100}%`,
-              width: `${(hoveredCharacter.width / Math.max(1, width)) * 100}%`,
-              height: `${(hoveredCharacter.height / Math.max(1, height)) * 100}%`,
-            }}
-          />
+        {characterOutline && scaleHandle && (
+          <>
+            <div
+              className="absolute pointer-events-none border border-dashed border-[#c4c7c5] rounded-sm transition-opacity"
+              style={{
+                left: `${(characterOutline.x / Math.max(1, width)) * 100}%`,
+                top: `${(characterOutline.y / Math.max(1, height)) * 100}%`,
+                width: `${(characterOutline.width / Math.max(1, width)) * 100}%`,
+                height: `${(characterOutline.height / Math.max(1, height)) * 100}%`,
+              }}
+            />
+            <div
+              role="button"
+              tabIndex={-1}
+              title="Drag to resize character"
+              onPointerDown={handleScalePointerDown}
+              onPointerMove={handleScalePointerMove}
+              onPointerUp={handleScalePointerUp}
+              onPointerCancel={handleScalePointerCancel}
+              className="absolute z-20 w-3 h-3 bg-[#c4c7c5] border border-[#101112] pointer-events-auto"
+              style={{
+                left: `calc(${(Math.max(6, Math.min(width - 6, scaleHandle.handle.x)) / Math.max(1, width)) * 100}% - 6px)`,
+                top: `calc(${(Math.max(6, Math.min(height - 6, scaleHandle.handle.y)) / Math.max(1, height)) * 100}% - 6px)`,
+                cursor: scaleHandle.cursor,
+              }}
+            />
+          </>
         )}
       </div>
 
