@@ -671,10 +671,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   };
 
   return (
-    <div className="geo-panel flex flex-col bg-[#111214] rounded-none overflow-hidden border border-[#26282c] shadow-xl">
+    <div className="flex flex-col bg-[#111214] rounded-none overflow-hidden border border-[#26282c]">
       <div
         ref={containerRef}
-        className="geo-viewport relative w-full bg-[#0a0a0c] flex items-center justify-center overflow-hidden"
+        className="relative w-full bg-[#0a0a0c] flex items-center justify-center overflow-hidden"
         style={{ aspectRatio: `${width} / ${height}` }}
         onDragOver={(e) => {
           e.preventDefault();
@@ -847,15 +847,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           }}
           aria-label="Preview: click to play or pause, drag a character to reposition it, double-click a character to flip it"
         />
-        <div className="geo-frame" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-          <i />
-        </div>
         {hoveredCharacter && (
           <div
-            className="absolute pointer-events-none border border-dashed border-[#8ab4f8]/80 rounded-sm transition-opacity"
+            className="absolute pointer-events-none border border-dashed border-[#c4c7c5] rounded-sm transition-opacity"
             style={{
               left: `${(hoveredCharacter.x / Math.max(1, width)) * 100}%`,
               top: `${(hoveredCharacter.y / Math.max(1, height)) * 100}%`,
@@ -870,7 +864,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         <div className="flex items-center gap-1.5">
           <button
             onClick={onTogglePlay}
-            className="geo-cut px-3 py-1.5 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] shadow-xs transition active:scale-95 font-mono text-xs flex items-center gap-1"
+            className="px-3 py-1.5 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] transition active:scale-95 font-mono text-xs flex items-center gap-1"
             title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
           >
             {isPlaying ? <Pause className="w-3.5 h-3.5 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current ml-0.5" />}

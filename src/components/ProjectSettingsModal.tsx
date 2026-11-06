@@ -173,8 +173,8 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   };
 
   return (
-    <div className="geo-backdrop fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="geo-panel w-full max-w-3xl max-h-[92vh] overflow-hidden bg-[#141517] border border-[#2c2e32] rounded-none shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
+      <div className="w-full max-w-3xl max-h-[92vh] overflow-hidden bg-[#141517] border border-[#2c2e32] rounded-none flex flex-col">
         <div className="px-4 py-3 border-b border-[#242629] flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2">
             <Settings2 className="w-4 h-4 text-[#8ab4f8]" />
@@ -558,7 +558,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           <button
             type="button"
             onClick={handleApply}
-            className="geo-cut px-5 py-1.5 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] rounded-none text-xs font-mono font-semibold flex items-center gap-1.5"
+            className="px-5 py-1.5 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] rounded-none text-xs font-mono font-semibold flex items-center gap-1.5"
           >
             <Check className="w-3.5 h-3.5" /> Apply
           </button>

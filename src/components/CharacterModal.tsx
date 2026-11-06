@@ -424,8 +424,8 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   };
 
   return (
-    <div className="geo-backdrop fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 select-none">
-      <div className="geo-panel bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 select-none">
+      <div className="bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-5 py-3 border-b border-[#202226] flex items-center justify-between bg-[#0e0f11]">
           <div className="flex items-center gap-2">
@@ -456,7 +456,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                   onClick={() => setSelectedCharId(c.id)}
                   className={`w-full px-3 py-2 rounded-xl text-left text-xs font-medium flex items-center justify-between transition ${
                     selectedCharId === c.id
-                      ? 'bg-[#004a77] text-[#c2e7ff] shadow-sm'
+                      ? 'bg-[#303236] text-white'
                       : 'text-[#c4c7c5] hover:text-white hover:bg-[#282a2c]'
                   }`}
                 >
@@ -472,7 +472,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
 
             <button
               onClick={handleAddNewCharacter}
-              className="mt-3 w-full py-2 px-3 rounded-xl bg-[#282a2c] hover:bg-[#333538] text-[#8ab4f8] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#3c4043] transition"
+              className="mt-3 w-full py-2 px-3 rounded-xl bg-[#282a2c] hover:bg-[#333538] text-[#c4c7c5] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#3c4043] transition"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Speaker
@@ -482,7 +482,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenTachieImport()}
-                className="mt-2 w-full py-2 px-3 rounded-xl bg-[#004a77]/30 hover:bg-[#004a77]/50 text-[#c2e7ff] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#004a77] transition"
+                className="mt-2 w-full py-2 px-3 rounded-xl bg-[#202326] hover:bg-[#2a2d31] text-[#c4c7c5] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#3a3f46] transition"
                 title="Extract tachie from ZIP or PSD"
               >
                 <FileArchive className="w-3.5 h-3.5 text-[#34d399]" />
@@ -547,7 +547,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition flex items-center gap-1.5 disabled:opacity-40 ${
                           isPreviewing
                             ? 'bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25'
-                            : 'bg-[#004a77]/40 text-[#c2e7ff] border-[#004a77] hover:bg-[#004a77]/60'
+                            : 'bg-[#202326] text-[#c4c7c5] border-[#3a3f46] hover:bg-[#2a2d31]'
                         }`}
                         title="Synthesize a short sample with the selected voice"
                       >
@@ -682,7 +682,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                                   key={style.id}
                                   className={`inline-flex items-center overflow-hidden rounded-md border text-[10px] transition ${
                                     isSelected
-                                      ? 'border-[#8ab4f8] bg-[#004a77]/40 text-[#c2e7ff]'
+                                      ? 'border-[#5f6368] bg-[#303236] text-white'
                                       : 'border-[#33363a] bg-[#181a1d] text-[#c4c7c5] hover:border-[#5f6368]'
                                   }`}
                                 >
@@ -699,7 +699,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                                     onClick={() => handleAuditionStyle(speaker, style)}
                                     className={`px-1.5 py-1 border-l transition ${
                                       isAuditioning
-                                        ? 'border-[#8ab4f8]/50 text-[#8ab4f8] bg-[#004a77]/30'
+                                        ? 'border-[#5f6368] text-white bg-[#303236]'
                                         : 'border-[#33363a] text-[#8e918f] hover:text-white hover:bg-[#282a2c]'
                                     }`}
                                     title={`Play ${speaker.name} · ${style.name}`}
@@ -789,7 +789,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       }
                       className={`py-2 px-3 rounded-xl text-xs font-medium border text-center transition ${
                         char.position === p.id
-                          ? 'bg-[#8ab4f8] text-[#001d35] border-[#8ab4f8] shadow-sm font-semibold'
+                          ? 'bg-[#303236] text-white border-[#5f6368] font-semibold'
                           : 'bg-[#131314] text-[#c4c7c5] border-[#3c4043] hover:border-[#8e918f]'
                       }`}
                     >
@@ -826,7 +826,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                     onClick={() => onUpdateCharacter(char.id, { flipH: !char.flipH })}
                     className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
                       char.flipH
-                        ? 'bg-[#8ab4f8] text-[#001d35] border-[#8ab4f8] font-bold shadow-sm'
+                        ? 'bg-[#303236] text-white border-[#5f6368] font-semibold'
                         : 'bg-[#1e1f20] text-[#c4c7c5] border-[#3c4043] hover:border-[#8e918f]'
                     }`}
                   >
@@ -862,7 +862,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         <button
                           type="button"
                           onClick={() => onOpenTachieImport(char.id)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#004a77]/40 hover:bg-[#004a77]/60 text-[#c2e7ff] text-xs font-medium rounded-full border border-[#004a77] transition"
+                          className="inline-flex items-center gap-1.5 px-3 py-1 bg-[#202326] hover:bg-[#2a2d31] text-[#c4c7c5] text-xs font-medium rounded-full border border-[#3a3f46] transition"
                         >
                           <FileArchive className="w-3 h-3 text-[#34d399]" />
                           From ZIP / PSD
@@ -1089,7 +1089,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                           }
                           className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
                             (char.subtitleStyle.rubyDisplay || 'above') === mode
-                              ? 'bg-[#004a77] text-[#c2e7ff]'
+                              ? 'bg-[#303236] text-white'
                               : 'text-[#8e918f] hover:text-[#e3e3e3]'
                           }`}
                         >
@@ -1112,7 +1112,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
         <div className="px-6 py-3.5 border-t border-[#282a2c] bg-[#18191b] flex justify-end">
           <button
             onClick={onClose}
-            className="geo-cut px-6 py-2 bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] text-xs font-semibold rounded-none tracking-wide transition"
+            className="px-6 py-2 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] text-xs font-semibold rounded-none tracking-wide transition"
           >
             Done
           </button>

@@ -134,8 +134,8 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   };
 
   return (
-    <div className="geo-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-xs animate-in fade-in select-none">
-      <div className="geo-panel bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 animate-in fade-in select-none">
+      <div className="bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-[#202226] flex items-center justify-between bg-[#0e0f11]">
           <div className="flex items-center gap-2.5">
@@ -182,7 +182,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                   onClick={() => setProvider(p.id as any)}
                   className={`p-2 rounded-sm border text-left transition ${
                     provider === p.id
-                      ? 'bg-[#1e2430] border-[#3b82f6] text-white'
+                      ? 'bg-[#303236] border-[#5f6368] text-white'
                       : 'bg-[#151619] border-[#24262a] text-[#8e918f] hover:text-[#e3e3e3]'
                   }`}
                 >
@@ -272,7 +272,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                 onClick={() => setUseVideoVision(!useVideoVision)}
                 className={`px-3 py-1 rounded-lg text-xs font-medium border transition ${
                   useVideoVision
-                    ? 'bg-[#3b82f6] text-white border-[#3b82f6]'
+                    ? 'bg-[#004a77] text-[#c2e7ff] border-[#005a92]'
                     : 'bg-[#18191b] text-[#8e918f] border-[#333538]'
                 }`}
               >
@@ -368,7 +368,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                     onClick={() => setStyle(s.id as any)}
                     className={`px-2 py-1.5 rounded-sm text-xs font-mono border text-left transition ${
                       style === s.id
-                        ? 'bg-[#1e2430] border-[#3b82f6] text-white'
+                        ? 'bg-[#303236] border-[#5f6368] text-white'
                         : 'bg-[#151619] border-[#24262a] text-[#8e918f] hover:text-[#e3e3e3]'
                     }`}
                   >
@@ -398,8 +398,8 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
 
           {/* Status / Progress */}
           {statusMessage && (
-            <div className="p-3 rounded-lg bg-[#1e293b]/50 border border-[#3b82f6]/40 text-xs text-[#93c5fd] flex items-center gap-2">
-              <Loader2 className="w-4 h-4 animate-spin text-[#60a5fa] flex-shrink-0" />
+            <div className="p-3 rounded-lg bg-[#1e2023] border border-[#333538] text-xs text-[#c4c7c5] flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-[#8e918f] flex-shrink-0" />
               <span>{statusMessage}</span>
             </div>
           )}
@@ -418,7 +418,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           <button
             onClick={handleStartGeneration}
             disabled={(!topic.trim() && !useVideoVision) || isGenerating}
-            className="px-5 py-2 rounded-lg bg-[#3b82f6] hover:bg-[#2563eb] text-white text-xs font-semibold shadow-sm transition active:scale-95 flex items-center gap-2 disabled:opacity-40"
+            className="px-5 py-2 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] text-xs font-semibold transition flex items-center gap-2 disabled:opacity-40"
           >
             {isGenerating ? (
               <>

@@ -348,8 +348,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="geo-backdrop fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in select-none">
-      <div className="geo-panel bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-4xl h-[85vh] shadow-2xl flex flex-col overflow-hidden font-sans">
+    <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 animate-in fade-in select-none">
+      <div className="bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-4xl h-[85vh] flex flex-col overflow-hidden font-sans">
         {/* Header */}
         <div className="px-5 py-3 bg-[#0d0e10] border-b border-[#202226] flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -405,12 +405,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={() => setActiveTab(tab.id)}
                     className={`w-full px-3 py-2.5 rounded-xl text-xs font-medium flex items-center justify-between transition ${
                       isActive
-                        ? 'bg-[#1e232a] text-[#8ab4f8] border border-[#3b82f6]/30 shadow-xs'
+                        ? 'bg-[#24272b] text-white border border-[#3a3f46]'
                         : 'text-[#a8aaa8] hover:text-white hover:bg-[#18191c]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-[#8ab4f8]' : 'text-[#8e918f]'}`} />
+                      <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-[#8e918f]'}`} />
                       <span>{tab.label}</span>
                     </div>
                     <span className="text-[9px] font-mono opacity-60">{tab.badge}</span>
@@ -467,7 +467,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => setSettings((s) => ({ ...s, aiProvider: p.id }))}
                         className={`p-3 rounded-xl border text-left transition flex flex-col gap-1 ${
                           settings.aiProvider === p.id
-                            ? 'bg-[#1a2333] border-[#3b82f6] text-white shadow-sm ring-1 ring-[#3b82f6]/40'
+                            ? 'bg-[#303236] border-[#5f6368] text-white'
                             : 'bg-[#191a1d] border-[#2e3135] text-[#a8aaa8] hover:border-[#44474c]'
                         }`}
                       >
@@ -599,7 +599,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="bg-[#18191b] p-3 rounded-xl border border-[#282a2c] flex items-center justify-between"
                     >
                       <div className="flex items-center gap-3">
-                        <div className={`w-2.5 h-2.5 rounded-full ${p.available ? 'bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.6)]' : 'bg-red-400'}`} />
+                        <div className={`w-2.5 h-2.5 rounded-full ${p.available ? 'bg-emerald-400' : 'bg-red-400'}`} />
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-xs text-[#e3e3e3]">{p.name}</span>
@@ -743,7 +743,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         }}
                         className={`px-3 py-1 rounded-lg text-xs font-mono font-medium transition ${
                           rawTab === tab.id
-                            ? 'bg-[#004a77] text-[#c2e7ff]'
+                            ? 'bg-[#303236] text-white'
                             : 'text-[#8e918f] hover:text-white'
                         }`}
                       >
@@ -764,7 +764,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <button
                       type="button"
                       onClick={handleSaveRawJson}
-                      className="px-3 py-1 bg-[#2563eb] hover:bg-[#1d4ed8] text-white text-xs font-medium rounded-lg flex items-center gap-1.5 transition shadow-sm"
+                      className="px-3 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] text-xs font-medium rounded-none flex items-center gap-1.5 transition"
                     >
                       <Save className="w-3 h-3" />
                       Save File
@@ -916,7 +916,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onClick={() => setSettings((s) => ({ ...s, hardwareAcceleration: hw.id }))}
                             className={`py-2 px-1 rounded-xl text-[11px] font-medium border text-center transition ${
                               settings.hardwareAcceleration === hw.id
-                                ? 'bg-[#004a77] text-[#c2e7ff] border-[#005c94] font-semibold'
+                                ? 'bg-[#303236] text-white border-[#5f6368] font-semibold'
                                 : 'bg-[#18191b] text-[#8e918f] border-[#2e3135] hover:text-white'
                             }`}
                           >
@@ -941,7 +941,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             onClick={() => setSettings((s) => ({ ...s, exportFps: fps }))}
                             className={`py-2 px-2 rounded-xl text-xs font-medium border text-center transition ${
                               settings.exportFps === fps
-                                ? 'bg-[#004a77] text-[#c2e7ff] border-[#005c94] font-semibold'
+                                ? 'bg-[#303236] text-white border-[#5f6368] font-semibold'
                                 : 'bg-[#18191b] text-[#8e918f] border-[#2e3135] hover:text-white'
                             }`}
                           >
@@ -1084,7 +1084,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             }
                             className={`py-1.5 rounded-lg text-[11px] font-mono border transition ${
                               settings[option.key] === value
-                                ? 'bg-[#004a77] text-[#c2e7ff] border-[#005c94] font-semibold'
+                                ? 'bg-[#303236] text-white border-[#5f6368] font-semibold'
                                 : 'bg-[#18191b] text-[#8e918f] border-[#2e3135] hover:text-white'
                             }`}
                           >
@@ -1360,7 +1360,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               type="button"
               onClick={handleSaveAll}
               disabled={isSaving}
-              className="geo-cut px-6 py-2 rounded-none text-xs font-semibold text-[#c2e7ff] bg-[#004a77] hover:bg-[#005a92] border border-[#005a92] active:scale-95 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
+              className="px-6 py-2 rounded-none text-xs font-semibold text-[#c2e7ff] bg-[#004a77] hover:bg-[#005a92] border border-[#005a92] active:scale-95 transition flex items-center gap-1.5 shadow-sm disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
               Save All Preferences

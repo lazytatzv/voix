@@ -544,9 +544,9 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const selectedChar = characters.find((c) => c.id === activeCharId) || characters[0];
 
   return (
-    <div className="geo-panel flex flex-col h-full bg-[#18191b] border border-[#2e3135] rounded-none overflow-hidden shadow-xl">
+    <div className="flex flex-col h-full bg-[#18191b] border border-[#2e3135] rounded-none overflow-hidden">
       {/* Header: Tab Switcher & Auto-Sync Indicator */}
-      <div className="geo-rail pl-5 pr-4 py-2.5 bg-[#141517] border-b border-[#242628] flex items-center justify-between select-none">
+      <div className="px-4 py-2.5 bg-[#141517] border-b border-[#242628] flex items-center justify-between select-none">
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5">
             <span className="font-mono font-semibold text-[11px] text-[#e3e3e3] uppercase tracking-[0.16em]">
@@ -564,7 +564,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               onClick={() => handleSwitchTab('cards')}
               className={`px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider rounded-none transition flex items-center gap-1.5 ${
                 tab === 'cards'
-                  ? 'bg-[#1b2b3d] text-[#c2e7ff] shadow-[inset_0_-1px_0_0_rgba(138,180,248,0.85)]'
+                  ? 'bg-[#2a2c30] text-[#e3e3e3]'
                   : 'text-[#8e918f] hover:text-[#c4c7c5]'
               }`}
             >
@@ -575,7 +575,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               onClick={() => handleSwitchTab('yaml')}
               className={`px-2.5 py-1 text-[11px] font-mono uppercase tracking-wider rounded-none transition flex items-center gap-1.5 ${
                 tab === 'yaml'
-                  ? 'bg-[#004a77] text-[#c2e7ff] shadow-[inset_0_-1px_0_0_rgba(138,180,248,0.85)]'
+                  ? 'bg-[#2a2c30] text-[#e3e3e3]'
                   : 'text-[#8e918f] hover:text-[#c4c7c5]'
               }`}
             >
@@ -633,7 +633,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                 <div
                   role="menu"
                   aria-label="Insert YAML snippets"
-                  className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-lg border border-[#2e3135] bg-[#17181b] p-1.5 shadow-2xl animate-in fade-in duration-100"
+                  className="absolute left-0 top-full z-50 mt-1.5 w-64 rounded-lg border border-[#2e3135] bg-[#17181b] p-1.5 animate-in fade-in duration-100"
                 >
                   {YAML_INSERT_GROUPS.map((group) => (
                     <div key={group.label} className="mb-1 last:mb-0">
@@ -703,7 +703,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   left: '8px',
                   right: '8px',
                 }}
-                className="absolute rounded-lg bg-[#1e2d40]/90 border-l-4 border-[#8ab4f8] shadow-md pointer-events-none transition-all duration-150 z-0 ring-1 ring-[#8ab4f8]/30"
+                className="absolute rounded-none bg-[#1b232c]/80 border-l-2 border-[#5f7fa3] pointer-events-none transition-all duration-150 z-0"
               />
             )}
 
@@ -762,15 +762,15 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                     onClick={() => onSelectItem?.(item.id)}
                     className={`p-3 rounded-sm border transition-all duration-150 flex flex-col gap-2 relative cursor-pointer ${
                       isSelected
-                        ? 'bg-[#1e232a] border-[#3b82f6] shadow-md ring-1 ring-[#3b82f6]'
+                        ? 'bg-[#1f2124] border-[#4a4f56]'
                         : isActive
-                        ? 'bg-[#1a1f26] border-[#3b82f6]/70 shadow-sm'
+                        ? 'bg-[#1b1d20] border-[#3a3f46]'
                         : 'bg-[#151619] border-[#26282c] hover:border-[#383b40]'
                     }`}
                   >
                     {/* Selected Indicator Bar */}
                     {isSelected && (
-                      <div className="absolute left-0 top-2 bottom-2 w-1 bg-[#3b82f6] rounded-none" />
+                      <div className="absolute left-0 top-2 bottom-2 w-1 bg-[#c4c7c5] rounded-none" />
                     )}
 
                     {/* Row Header */}
@@ -827,8 +827,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                           }}
                           className={`font-mono text-[11px] transition flex items-center gap-1 px-1.5 py-0.5 rounded-sm ${
                             isSelected
-                              ? 'text-[#8ab4f8] bg-[#8ab4f8]/10'
-                              : 'text-[#8e918f] hover:text-[#8ab4f8]'
+                              ? 'text-white bg-[#303236]'
+                              : 'text-[#8e918f] hover:text-white'
                           }`}
                           title="Seek to timestamp"
                         >
@@ -857,7 +857,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                         <button
                           onClick={() => setExpandedItemId(isExpanded ? null : item.id)}
                           className={`p-1.5 rounded-sm transition ${
-                            isExpanded ? 'bg-[#1e3a5f] text-[#c2e7ff]' : 'hover:bg-[#222428] text-[#8e918f]'
+                            isExpanded ? 'bg-[#303236] text-white' : 'hover:bg-[#222428] text-[#8e918f]'
                           }`}
                           title="Voice Tuning (Speed / Pitch)"
                         >
@@ -980,7 +980,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   onClick={() => setSelectedCharacterId(c.id)}
                   className={`px-2.5 py-1 rounded-none border text-[10px] font-mono tracking-wide transition flex-shrink-0 ${
                     activeCharId === c.id
-                      ? 'bg-[#004a77] text-[#c2e7ff] border-[#8ab4f8]/40 shadow-[inset_2px_0_0_0_rgba(138,180,248,0.9)]'
+                      ? 'bg-[#2a2c30] text-[#e3e3e3] border-[#4a4f56]'
                       : 'bg-[#1a1c1f] text-[#c4c7c5] border-[#2e3135] hover:text-white hover:border-[#4a4f56]'
                   }`}
                 >
@@ -1008,7 +1008,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
                 {/* Script tools menu */}
                 {isAiMenuOpen && (
-                  <div className="absolute bottom-10 left-0 w-64 bg-[#141518] border border-[#26282c] rounded-sm shadow-2xl p-1.5 space-y-1 backdrop-blur-xl animate-in fade-in duration-100 z-50 select-none">
+                  <div className="absolute bottom-10 left-0 w-64 bg-[#141518] border border-[#26282c] rounded-sm p-1.5 space-y-1 animate-in fade-in duration-100 z-50 select-none">
                     <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2.5 py-1 block tracking-wider">
                       Script tools
                     </span>
@@ -1083,7 +1083,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               <button
                 type="submit"
                 disabled={!inputText.trim() || isSubmitting}
-                className="geo-cut absolute right-1 px-3 py-1.5 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] transition disabled:opacity-30 disabled:bg-[#1f2228] disabled:text-[#8e918f] shadow-xs"
+                className="absolute right-1 px-3 py-1.5 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] transition disabled:opacity-30 disabled:bg-[#1f2228] disabled:text-[#8e918f]"
               >
                 {isSubmitting ? (
                   <Loader2 className="w-4 h-4 animate-spin" />

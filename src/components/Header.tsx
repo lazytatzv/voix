@@ -132,11 +132,11 @@ export const Header: React.FC<HeaderProps> = ({
   const tooltipPath = projectPath || 'Autosaved at ~/.config/voix/autosave.voix.yaml';
 
   return (
-    <header className="geo-header relative z-30 h-12 bg-[#101112] border-b border-[#222426] px-4 flex items-center justify-between select-none flex-shrink-0">
+    <header className="relative z-30 h-12 bg-[#101112] border-b border-[#222426] px-4 flex items-center justify-between select-none flex-shrink-0">
       {/* Left: Brand, project title, file actions */}
       <div className="flex items-center gap-2 min-w-0">
         <div className="flex items-center gap-2 flex-shrink-0">
-          <div className="w-6 h-6 rounded-none bg-[#8ab4f8]/10 border border-[#8ab4f8]/40 flex items-center justify-center text-[#8ab4f8] shadow-[inset_0_0_0_1px_rgba(138,180,248,0.08)]">
+          <div className="w-6 h-6 rounded-none bg-[#18191b] border border-[#2c2e31] flex items-center justify-center text-[#8ab4f8]">
             <PlaySquare className="w-3.5 h-3.5" />
           </div>
           <span className="font-bold text-xs tracking-[0.14em] uppercase text-[#e3e3e3]">Voix</span>
@@ -204,7 +204,7 @@ export const Header: React.FC<HeaderProps> = ({
               {isRecentOpen && (
                 <div
                   role="menu"
-                  className="absolute left-0 top-full mt-2 z-[70] w-80 bg-[#16181b] border border-[#2c2e32] rounded-sm shadow-2xl overflow-hidden"
+                  className="absolute left-0 top-full mt-2 z-[70] w-80 bg-[#16181b] border border-[#2c2e32] rounded-sm overflow-hidden"
                 >
                   <div className="px-3 py-1.5 border-b border-[#242629] flex items-center justify-between">
                     <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
@@ -391,7 +391,7 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={onExportVideo}
           disabled={itemCount === 0}
-          className="geo-cut ml-1 px-3.5 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] text-xs font-mono font-semibold rounded-none border border-[#005a92] shadow-xs transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
+          className="ml-1 px-3.5 py-1 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] text-xs font-mono font-semibold rounded-none border border-[#005a92] transition active:scale-95 flex items-center gap-1.5 disabled:opacity-30"
           title="Render and export video (Ctrl+E)"
         >
           <Download className="w-3 h-3" />

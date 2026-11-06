@@ -52,8 +52,8 @@ export const TtsModal: React.FC<TtsModalProps> = ({ isOpen, onClose }) => {
   };
 
   return (
-    <div className="geo-backdrop fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="geo-panel bg-[#1e1f20] border border-[#282a2c] rounded-none w-full max-w-lg overflow-hidden shadow-2xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+      <div className="bg-[#1e1f20] border border-[#282a2c] rounded-none w-full max-w-lg overflow-hidden flex flex-col">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#282a2c] flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -148,7 +148,7 @@ export const TtsModal: React.FC<TtsModalProps> = ({ isOpen, onClose }) => {
               <button
                 onClick={handleAddCustomProvider}
                 disabled={!newId.trim() || !newEndpoint.trim()}
-                className="geo-cut px-4 py-1.5 bg-[#8ab4f8] hover:bg-[#a8c7fa] text-[#001d35] text-xs font-semibold rounded-none disabled:opacity-40 transition flex-shrink-0"
+                className="px-4 py-1.5 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] text-xs font-semibold rounded-none disabled:opacity-40 transition flex-shrink-0"
               >
                 Add
               </button>

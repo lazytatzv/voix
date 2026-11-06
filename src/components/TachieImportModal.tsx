@@ -101,8 +101,8 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
   };
 
   return (
-    <div className="geo-backdrop fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-      <div className="geo-panel bg-[#18191b] border border-[#3c4043] rounded-none w-full max-w-lg shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 animate-in fade-in">
+      <div className="bg-[#18191b] border border-[#3c4043] rounded-none w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-4 border-b border-[#282a2c] flex items-center justify-between bg-[#131415]">
           <div className="flex items-center gap-2.5">
@@ -157,7 +157,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                 type="button"
                 onClick={() => handleProcess(filePath)}
                 disabled={!filePath.trim() || isLoading}
-                className="px-4 py-2 bg-[#3b82f6] hover:bg-[#2563eb] text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-40"
+                className="px-4 py-2 bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] rounded-none text-xs font-semibold flex items-center gap-1.5 transition disabled:opacity-40"
               >
                 {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Load'}
               </button>
@@ -259,7 +259,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                         onClick={() => setImportMode('update')}
                         className={`p-2 rounded-lg text-left text-xs transition border flex flex-col gap-0.5 cursor-pointer ${
                           importMode === 'update'
-                            ? 'bg-[#004a77] border-[#8ab4f8] text-white shadow-xs font-semibold'
+                            ? 'bg-[#303236] border-[#5f6368] text-white font-semibold'
                             : 'bg-[#18191b] border-[#3c4043] text-[#8e918f] hover:text-[#e3e3e3]'
                         }`}
                       >
@@ -267,7 +267,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                           <Check className="w-3.5 h-3.5 text-[#10b981]" />
                           Update "{matchingChar.name}"
                         </span>
-                        <span className="text-[10px] text-[#8ab4f8] opacity-80">Recommended: update existing avatar</span>
+                        <span className="text-[10px] text-[#8e918f]">Recommended: update existing avatar</span>
                       </button>
 
                       <button
@@ -275,7 +275,7 @@ export const TachieImportModal: React.FC<TachieImportModalProps> = ({
                         onClick={() => setImportMode('add')}
                         className={`p-2 rounded-lg text-left text-xs transition border flex flex-col gap-0.5 cursor-pointer ${
                           importMode === 'add'
-                            ? 'bg-[#004a77] border-[#8ab4f8] text-white shadow-xs font-semibold'
+                            ? 'bg-[#303236] border-[#5f6368] text-white font-semibold'
                             : 'bg-[#18191b] border-[#3c4043] text-[#8e918f] hover:text-[#e3e3e3]'
                         }`}
                       >

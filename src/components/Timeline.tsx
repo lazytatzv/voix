@@ -76,11 +76,11 @@ const RULER_HEIGHT = 24;
 const HEADER_WIDTH = 184;
 
 const ITEM_COLORS: Record<string, { bg: string; border: string; text: string }> = {
-  voice: { bg: '#075985', border: '#0ea5e9', text: '#e0f2fe' },
-  text: { bg: '#4c1d95', border: '#8b5cf6', text: '#f5f3ff' },
-  image: { bg: '#134e4a', border: '#14b8a6', text: '#ccfbf1' },
-  audio: { bg: '#78350f', border: '#f59e0b', text: '#fef3c7' },
-  video: { bg: '#1f2937', border: '#64748b', text: '#e2e8f0' },
+  voice: { bg: '#1e3341', border: '#4f7386', text: '#e3e3e3' },
+  text: { bg: '#2c2438', border: '#6b5a80', text: '#eeeeee' },
+  image: { bg: '#1f3532', border: '#5b7f79', text: '#eeeeee' },
+  audio: { bg: '#3a2c1c', border: '#7a6548', text: '#f0e6d2' },
+  video: { bg: '#24272b', border: '#5f6368', text: '#e3e3e3' },
 };
 
 function snapTime(time: number, enabled: boolean, markers: Marker[] = []): number {
@@ -416,9 +416,9 @@ export const Timeline: React.FC<TimelineProps> = ({
           locked ? 'cursor-not-allowed' : 'cursor-grab active:cursor-grabbing'
         } ${
           isDragging
-            ? 'ring-2 ring-white z-30 shadow-lg'
+            ? 'ring-2 ring-white z-30'
             : isPrimary
-              ? 'ring-2 ring-[#8ab4f8] z-20'
+              ? 'ring-2 ring-[#c4c7c5] z-20'
               : isSelected
                 ? 'ring-1 ring-white/80 z-20'
                 : 'z-10'
@@ -430,7 +430,6 @@ export const Timeline: React.FC<TimelineProps> = ({
           color: color.text,
           border: `1px solid ${item.type === 'voice' ? charColor(item.characterId) : color.border}`,
           opacity: item.hidden ? 0.35 : 1,
-          boxShadow: isPrimary ? `0 0 0 1px ${color.border}` : undefined,
         }}
         title={`${label}\n${item.startTime.toFixed(2)}s → ${(item.startTime + item.duration).toFixed(2)}s\n${
           locked
@@ -497,8 +496,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   return (
-    <div className="geo-panel flex flex-col bg-[#141517] border border-[#242629] rounded-none overflow-hidden shadow-lg select-none h-full">
-      <div className="geo-rail pl-4 pr-3 py-1.5 bg-[#141517] border-b border-[#222426] flex items-center justify-between flex-shrink-0">
+    <div className="flex flex-col bg-[#141517] border border-[#242629] rounded-none overflow-hidden select-none h-full">
+      <div className="px-3 py-1.5 bg-[#141517] border-b border-[#222426] flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3 text-xs text-[#c4c7c5]">
           <span className="font-semibold text-xs font-mono uppercase tracking-wider text-[#e3e3e3]">Timeline</span>
           <span className="text-[#8e918f] font-mono text-[11px]">
@@ -506,7 +505,7 @@ export const Timeline: React.FC<TimelineProps> = ({
           </span>
           {selectedItemIds.length > 0 && (
             <div className="flex items-center gap-1">
-              <span className="font-mono text-[10px] text-[#8ab4f8] bg-[#8ab4f8]/10 border border-[#8ab4f8]/30 rounded px-1">
+              <span className="font-mono text-[10px] text-[#c4c7c5] bg-[#222528] border border-[#3a3f46] rounded px-1">
                 {selectedItemIds.length} selected
               </span>
               <button
@@ -777,18 +776,18 @@ export const Timeline: React.FC<TimelineProps> = ({
                       onPickVideo?.();
                     }}
                     className={`absolute top-1 bottom-1 rounded-[2px] flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap cursor-pointer transition-colors ${
-                      hasVideo ? 'hover:brightness-125' : 'hover:bg-[#1a2333]'
+                      hasVideo ? 'hover:brightness-125' : 'hover:bg-[#26282c]'
                     }`}
                     style={{
                       left: 0,
                       width: `${Math.min(totalDuration, totalDuration) * pxPerSecond}px`,
-                      backgroundColor: '#111827',
-                      color: hasVideo ? '#e2e8f0' : '#4b5563',
-                      border: '1px solid #334155',
+                      backgroundColor: '#1b1d20',
+                      color: hasVideo ? '#e3e3e3' : '#8e918f',
+                      border: '1px solid #33363a',
                     }}
                     title={hasVideo ? `${videoName || 'Video'} (Click to change video)` : 'Click to select video file'}
                   >
-                    <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#38bdf8]" />
+                    <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#8e918f]" />
                     <span className="text-[11px]">
                       {hasVideo ? videoName || 'Background video' : 'Click to add video'}
                     </span>
@@ -817,17 +816,17 @@ export const Timeline: React.FC<TimelineProps> = ({
 
             {snapGuideTime !== null && (
               <div
-                className="absolute top-0 w-px bg-amber-300 z-40 pointer-events-none shadow-[0_0_4px_rgba(252,211,77,0.8)]"
+                className="absolute top-0 w-px bg-amber-300 z-40 pointer-events-none"
                 style={{ left: timeToX(snapGuideTime), height: RULER_HEIGHT + totalRowsHeight }}
               />
             )}
 
             {/* Playhead */}
             <div
-              className="absolute top-0 w-[2px] bg-[#38bdf8] z-30 pointer-events-none"
+              className="absolute top-0 w-[2px] bg-[#c4c7c5] z-30 pointer-events-none"
               style={{ left: timeToX(currentTime), height: RULER_HEIGHT + totalRowsHeight }}
             >
-              <div className="w-2.5 h-3 bg-[#38bdf8] -translate-x-[4px]" />
+              <div className="w-2.5 h-3 bg-[#c4c7c5] -translate-x-[4px]" />
             </div>
           </div>
         </div>

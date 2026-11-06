@@ -98,7 +98,7 @@ export const CustomSelect: React.FC<CustomSelectProps> = ({
       {/* Dropdown Menu */}
       {isOpen && (
         <div
-          className={`absolute left-0 mt-1 ${menuWidthClass} bg-[#18191b] border border-[#2e3135] rounded-xl shadow-2xl py-1 z-50 animate-in fade-in duration-100 max-h-72 overflow-y-auto`}
+          className={`absolute left-0 mt-1 ${menuWidthClass} bg-[#18191b] border border-[#2e3135] rounded-xl py-1 z-50 animate-in fade-in duration-100 max-h-72 overflow-y-auto`}
         >
           {searchable && (
             <div className="sticky top-0 z-10 px-2 pb-1.5 pt-1 bg-[#18191b]">

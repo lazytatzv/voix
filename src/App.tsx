@@ -2486,11 +2486,11 @@ export function App() {
         {!isScriptCollapsed && (
           <div
             onMouseDown={handleStartHorizontalResize}
-            className="w-3 flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-0.5 flex-shrink-0 hover:bg-[#8ab4f8]/10 rounded-xs transition-colors"
+            className="w-3 flex items-center justify-center cursor-col-resize group select-none relative z-10 mx-0.5 flex-shrink-0 hover:bg-[#8e918f]/10 rounded-xs transition-colors"
             title="Drag to resize Script panel (double-click to reset)"
             onDoubleClick={() => setScriptWidth(460)}
           >
-            <div className="w-1 h-12 rounded-xs bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+            <div className="w-1 h-12 rounded-xs bg-[#2e3135] group-hover:bg-[#8e918f] transition-colors" />
           </div>
         )}
 
@@ -2521,7 +2521,7 @@ export function App() {
           <button
             type="button"
             onClick={handleToggleScriptCollapsed}
-            className="w-5 h-16 self-center rounded-l-xs bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition shadow-lg flex-shrink-0 ml-1"
+            className="w-5 h-16 self-center rounded-l-xs bg-[#1e2023] hover:bg-[#282a2e] border-l border-y border-[#3c4043] text-[#8e918f] hover:text-[#8ab4f8] flex items-center justify-center transition flex-shrink-0 ml-1"
             title="Expand Script & Captions panel"
           >
             <PanelRightOpen className="w-3.5 h-3.5" />
@@ -2532,11 +2532,11 @@ export function App() {
       {!isTimelineCollapsed && (
         <div
           onMouseDown={handleStartVerticalResize}
-          className="h-3 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0 hover:bg-[#8ab4f8]/10 rounded transition-colors"
+          className="h-3 flex items-center justify-center cursor-row-resize group select-none relative z-10 mx-4 flex-shrink-0 hover:bg-[#8e918f]/10 rounded transition-colors"
           title="Drag to resize Timeline height (double-click to reset)"
           onDoubleClick={() => setTimelineHeight(250)}
         >
-          <div className="h-1 w-16 rounded-full bg-[#2e3135] group-hover:bg-[#8ab4f8] transition-colors" />
+          <div className="h-1 w-16 rounded-full bg-[#2e3135] group-hover:bg-[#8e918f] transition-colors" />
         </div>
       )}
 
@@ -2702,7 +2702,7 @@ export function App() {
       />
 
       {toast && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] px-3 py-1.5 bg-[#1a1c1f] border border-[#2e3135] rounded-sm shadow-xl text-xs font-mono text-[#c4c7c5] max-w-[80vw] truncate">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[60] px-3 py-1.5 bg-[#1a1c1f] border border-[#2e3135] rounded-sm text-xs font-mono text-[#c4c7c5] max-w-[80vw] truncate">
           {toast}
         </div>
       )}
