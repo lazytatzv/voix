@@ -1,6 +1,7 @@
 import { Character, ImageItem, SubtitleStyle, TextItem, TimelineItem, TrackState, VoiceItem } from '../types';
 import { getCachedImage } from './imageCache';
 import { computeItemMotion } from './itemMotion';
+import { resolveItemTransform } from './keyframes';
 import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } from '../utils/pronunciation';
 
 export interface OverlayRenderOptions {
@@ -652,15 +653,19 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       const img = getCachedImage(item.src);
       if (!img) return;
       const motion = computeItemMotion(item, time);
-      if (motion.alpha <= 0.001) return;
+      const transform = resolveItemTransform(item, time);
+      if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
       ctx.save();
-      ctx.globalAlpha = (item.opacity ?? 1) * motion.alpha;
+      ctx.globalAlpha = transform.opacity * motion.alpha;
       ctx.translate(
-        item.x + item.width / 2 + motion.offsetX,
-        item.y + item.height / 2 + motion.offsetY
+        transform.x + item.width / 2 + motion.offsetX,
+        transform.y + item.height / 2 + motion.offsetY
       );
-      if (item.rotation) ctx.rotate((item.rotation * Math.PI) / 180);
-      ctx.scale(motion.scale * (item.flipH ? -1 : 1), motion.scale);
+      if (transform.rotation) ctx.rotate((transform.rotation * Math.PI) / 180);
+      ctx.scale(
+        motion.scale * transform.scale * (item.flipH ? -1 : 1),
+        motion.scale * transform.scale
+      );
       ctx.drawImage(img, -item.width / 2, -item.height / 2, item.width, item.height);
       ctx.restore();
     });
@@ -679,19 +684,20 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       .sort((a, b) => a.layer - b.layer);
     texts.forEach((item) => {
       const motion = computeItemMotion(item, time);
-      if (motion.alpha <= 0.001) return;
+      const transform = resolveItemTransform(item, time);
+      if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
       drawStyledText(ctx, {
         text: item.text,
         style: item.style,
-        centerX: (width * (item.xPercent ?? 50)) / 100,
-        centerY: (height * (item.yPercent ?? 50)) / 100,
+        centerX: (width * transform.x) / 100,
+        centerY: (height * transform.y) / 100,
         maxWidth: (width * (item.widthPercent ?? 80)) / 100,
         align: item.align || item.style.align || 'center',
-        opacity: (item.opacity ?? 1) * motion.alpha,
-        rotation: item.rotation,
+        opacity: transform.opacity * motion.alpha,
+        rotation: transform.rotation,
         offsetX: motion.offsetX,
         offsetY: motion.offsetY,
-        scale: motion.scale,
+        scale: motion.scale * transform.scale,
       });
     });
   }

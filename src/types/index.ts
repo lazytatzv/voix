@@ -33,6 +33,29 @@ export interface BaseTimelineItem {
   animIn?: ItemAnimation;
   /** Motion used while fading out. */
   animOut?: ItemAnimation;
+  /** Optional timeline animation, sampled relative to the item start. */
+  keyframes?: TransformKeyframe[];
+}
+
+export type KeyframeEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold';
+
+/**
+ * A YMM4-style animation key. `time` is relative to the item start. Text
+ * items use x/y as canvas percentages; image items use project pixels.
+ * Omitted properties inherit the item's base value.
+ */
+export interface TransformKeyframe {
+  id: string;
+  time: number;
+  x?: number;
+  y?: number;
+  /** Multiplier over the item's base size. */
+  scale?: number;
+  /** Absolute rotation in degrees. */
+  rotation?: number;
+  /** Absolute opacity from 0 to 1. */
+  opacity?: number;
+  easing?: KeyframeEasing;
 }
 
 // 充実した字幕スタイル定義（二重縁取り・シャドウ・背景プレート対応）

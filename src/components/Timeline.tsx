@@ -439,6 +439,23 @@ export const Timeline: React.FC<TimelineProps> = ({
         }`}
       >
         {waveform}
+        {(item.type === 'text' || item.type === 'image') &&
+          (item.keyframes?.length ?? 0) > 0 && (
+            <div className="absolute inset-x-0 bottom-0.5 z-20 h-2 pointer-events-none">
+              {item.keyframes!.map((key) => (
+                <span
+                  key={key.id}
+                  className="absolute bottom-0 w-1.5 h-1.5 rotate-45 bg-[#f8d66d] border border-black/50"
+                  style={{
+                    left: `${(Math.min(item.duration, Math.max(0, key.time)) /
+                      Math.max(0.01, item.duration)) *
+                      100}%`,
+                  }}
+                  title={`Keyframe +${key.time.toFixed(2)}s`}
+                />
+              ))}
+            </div>
+          )}
         {item.type === 'voice' && (
           <span
             className="relative z-10 w-1 self-stretch mr-1 flex-shrink-0"

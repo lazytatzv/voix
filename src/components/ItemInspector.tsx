@@ -13,6 +13,8 @@ import {
   Wand2,
   ChevronUp,
   ChevronDown,
+  Diamond,
+  Plus,
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
@@ -20,18 +22,27 @@ import {
   Character,
   ImageItem,
   ItemAnimation,
+  KeyframeEasing,
   SubtitleStyle,
   TextItem,
   TimelineItem,
+  TransformKeyframe,
   VoiceItem,
 } from '../types';
 import { toAssetUrl } from '../utils/imageUtils';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
+import {
+  addSnapshotKeyframe,
+  getItemBaseTransform,
+  sampleKeyframes,
+} from '../render/keyframes';
 
 interface ItemInspectorProps {
   isOpen: boolean;
   item: TimelineItem | null;
   characters: Character[];
+  /** Playhead position in seconds, used by the keyframe editor. */
+  currentTime: number;
   onClose: () => void;
   onUpdate: (id: string, updates: Partial<TimelineItem>) => void;
   onDelete: (id: string) => void;
@@ -126,6 +137,228 @@ const ColorField: React.FC<{
   </Field>
 );
 
+const EASING_OPTIONS: Array<{ value: KeyframeEasing; label: string }> = [
+  { value: 'linear', label: 'Linear' },
+  { value: 'ease-in', label: 'Ease in' },
+  { value: 'ease-out', label: 'Ease out' },
+  { value: 'ease-in-out', label: 'Ease in-out' },
+  { value: 'hold', label: 'Hold' },
+];
+
+/**
+ * YMM4-style transform keyframes. Keys store only the values the user edits;
+ * the sampler fills the rest from the previous key or the item's base values.
+ */
+const KeyframeSection: React.FC<{
+  item: TextItem | ImageItem;
+  currentTime: number;
+  onUpdate: (id: string, updates: Partial<TimelineItem>) => void;
+  onSeek: (time: number) => void;
+}> = ({ item, currentTime, onUpdate, onSeek }) => {
+  const [selectedKeyId, setSelectedKeyId] = useState<string | null>(null);
+  const keys = [...(item.keyframes ?? [])].sort((a, b) => a.time - b.time);
+  const localTime = Math.max(0, Math.min(item.duration, currentTime - item.startTime));
+  const base = getItemBaseTransform(item);
+  const selected = keys.find((key) => key.id === selectedKeyId) ?? null;
+  const resolved = selected ? sampleKeyframes(keys, selected.time, base) : base;
+  const unit = item.type === 'text' ? '%' : 'px';
+  const duration = Math.max(0.05, item.duration);
+
+  const commit = (next: TransformKeyframe[]) => {
+    const sorted = [...next].sort((a, b) => a.time - b.time);
+    onUpdate(item.id, {
+      keyframes: sorted.length > 0 ? sorted : undefined,
+    } as Partial<TimelineItem>);
+  };
+
+  const addKeyframe = () => {
+    const result = addSnapshotKeyframe(item, currentTime);
+    if (!result.existed) commit(result.keyframes);
+    setSelectedKeyId(result.keyframe.id);
+  };
+
+  const updateSelected = (updates: Partial<TransformKeyframe>) => {
+    if (!selected) return;
+    commit(keys.map((key) => (key.id === selected.id ? { ...key, ...updates } : key)));
+  };
+
+  return (
+    <section className="border-t border-[#242629] pt-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <span className={labelClass}>Keyframes</span>
+          <p className="text-[10px] font-mono text-[#6f7276] mt-0.5">
+            Transform units: {item.type === 'text' ? 'canvas percent' : 'project pixels'}
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={addKeyframe}
+          title="Add a keyframe at the playhead (K)"
+          className="px-2 py-1 text-[11px] font-mono bg-[#10202c] border border-[#2a3b4d] rounded-sm text-[#8ab4f8] hover:bg-[#163042] flex items-center gap-1 flex-shrink-0"
+        >
+          <Plus className="w-3 h-3" /> Key at {localTime.toFixed(2)}s
+        </button>
+      </div>
+
+      {keys.length === 0 ? (
+        <p className="text-[10px] font-mono text-[#6f7276] leading-relaxed">
+          No keyframes. Place the playhead inside this item, click “Key at …”, then edit X/Y,
+          scale, rotation or opacity. Values between keys are interpolated in preview and export.
+        </p>
+      ) : (
+        <>
+          <div className="relative h-7 bg-[#0b0c0e] border border-[#242629] rounded-sm overflow-hidden">
+            <div
+              className="absolute top-0 bottom-0 w-px bg-[#8ab4f8]/60 pointer-events-none"
+              style={{ left: `${(localTime / duration) * 100}%` }}
+            />
+            {keys.map((key) => (
+              <button
+                key={key.id}
+                type="button"
+                title={`Seek to ${key.time.toFixed(2)}s`}
+                onClick={() => {
+                  setSelectedKeyId(key.id);
+                  onSeek(item.startTime + key.time);
+                }}
+                className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 p-0.5 text-[#f8d66d] hover:text-white"
+                style={{ left: `${(Math.min(duration, Math.max(0, key.time)) / duration) * 100}%` }}
+              >
+                <Diamond
+                  className="w-3 h-3"
+                  fill={key.id === selectedKeyId ? 'currentColor' : 'none'}
+                />
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-1">
+            {keys.map((key) => {
+              const active = key.id === selectedKeyId;
+              return (
+                <div
+                  key={key.id}
+                  className={`flex items-center gap-1.5 rounded-sm border px-1.5 py-1 ${
+                    active
+                      ? 'border-[#8ab4f8]/60 bg-[#10202c]'
+                      : 'border-[#2a2c30] bg-[#101113]'
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedKeyId(key.id);
+                      onSeek(item.startTime + key.time);
+                    }}
+                    className="p-0.5 text-[#f8d66d] hover:text-white"
+                    title="Select and seek to this keyframe"
+                  >
+                    <Diamond className="w-3 h-3" fill={active ? 'currentColor' : 'none'} />
+                  </button>
+                  <input
+                    type="number"
+                    value={key.time}
+                    step={0.01}
+                    min={0}
+                    max={duration}
+                    onChange={(e) => {
+                      const nextTime = Math.max(
+                        0,
+                        Math.min(duration, Number(e.target.value) || 0)
+                      );
+                      commit(
+                        keys.map((entry) =>
+                          entry.id === key.id ? { ...entry, time: nextTime } : entry
+                        )
+                      );
+                    }}
+                    className="w-16 bg-[#0d0e10] border border-[#2a2c30] rounded-sm px-1.5 py-0.5 text-[11px] text-[#e3e3e3] focus:outline-none focus:border-[#8ab4f8] font-mono"
+                  />
+                  <span className="text-[10px] font-mono text-[#6f7276]">s</span>
+                  <select
+                    value={key.easing || 'linear'}
+                    onChange={(e) =>
+                      commit(
+                        keys.map((entry) =>
+                          entry.id === key.id
+                            ? { ...entry, easing: e.target.value as KeyframeEasing }
+                            : entry
+                        )
+                      )
+                    }
+                    className="ml-auto bg-[#0d0e10] border border-[#2a2c30] rounded-sm px-1 py-0.5 text-[10px] text-[#c4c7c5] focus:outline-none focus:border-[#8ab4f8]"
+                    title="Easing used from this key to the next one"
+                  >
+                    {EASING_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      commit(keys.filter((entry) => entry.id !== key.id));
+                      if (selectedKeyId === key.id) setSelectedKeyId(null);
+                    }}
+                    className="p-0.5 text-[#8e918f] hover:text-rose-300"
+                    title="Delete keyframe"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+
+          {selected && (
+            <div className="grid grid-cols-2 gap-3 border-t border-[#242629] pt-3">
+              <NumberField
+                label={`X (${unit})`}
+                value={resolved.x}
+                step={1}
+                onChange={(value) => updateSelected({ x: value })}
+              />
+              <NumberField
+                label={`Y (${unit})`}
+                value={resolved.y}
+                step={1}
+                onChange={(value) => updateSelected({ y: value })}
+              />
+              <NumberField
+                label="Scale"
+                value={resolved.scale}
+                step={0.05}
+                min={0.01}
+                onChange={(value) => updateSelected({ scale: Math.max(0.01, value) })}
+              />
+              <NumberField
+                label="Rotation (°)"
+                value={resolved.rotation}
+                step={1}
+                onChange={(value) => updateSelected({ rotation: value })}
+              />
+              <SliderField
+                label="Opacity"
+                value={resolved.opacity}
+                min={0}
+                max={1}
+                step={0.01}
+                onChange={(value) => updateSelected({ opacity: value })}
+              />
+              <p className="col-span-2 text-[10px] text-[#6f7276] font-mono leading-relaxed">
+                Editing a field writes it to the selected key. Untouched fields keep inheriting
+                the previous key, so you only animate what you need.
+              </p>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+};
+
 const TypeBadge: React.FC<{ type: TimelineItem['type'] }> = ({ type }) => {
   const map: Record<string, { icon: React.ComponentType<{ className?: string }>; label: string }> = {
     voice: { icon: MessageSquare, label: 'Voice / Subtitle' },
@@ -148,6 +381,7 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
   isOpen,
   item,
   characters,
+  currentTime,
   onClose,
   onUpdate,
   onDelete,
@@ -866,6 +1100,15 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
               </section>
             );
           })()}
+
+          {(item.type === 'text' || item.type === 'image') && (
+            <KeyframeSection
+              item={item as TextItem | ImageItem}
+              currentTime={currentTime}
+              onUpdate={onUpdate}
+              onSeek={onSeek}
+            />
+          )}
 
           {item.type === 'audio' && (() => {
             const audio = item as AudioItem;

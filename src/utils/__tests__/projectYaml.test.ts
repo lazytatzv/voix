@@ -67,6 +67,10 @@ function makeProject(): VoixProject {
       align: 'left',
       rotation: 3,
       opacity: 0.9,
+      keyframes: [
+        { id: 'kf_text_a', time: 0, x: 42, y: 30, opacity: 0, easing: 'ease-out' },
+        { id: 'kf_text_b', time: 2.5, x: 60, y: 20, scale: 1.2 },
+      ],
     },
     {
       id: 'audio_1',
@@ -146,6 +150,10 @@ describe('project YAML roundtrip', () => {
     const text = restored.items.find((item) => item.id === 'text_1');
     expect(text?.type === 'text' && text.style.fontSize).toBe(64);
     expect(text?.type === 'text' && text.align).toBe('left');
+    expect(text?.keyframes).toEqual([
+      { id: 'kf_text_a', time: 0, x: 42, y: 30, opacity: 0, easing: 'ease-out' },
+      { id: 'kf_text_b', time: 2.5, x: 60, y: 20, scale: 1.2 },
+    ]);
 
     const audio = restored.items.find((item) => item.id === 'audio_1') as AudioItem;
     expect(audio).toMatchObject({ loop: true, isBgm: true, volume: 0.3, offset: 1.25, audioKey: 'bgm-key' });

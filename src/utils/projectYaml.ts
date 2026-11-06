@@ -11,6 +11,7 @@ import {
   VoiceItem,
 } from '../types';
 import { DEFAULT_DUCKING, normalizeDucking } from './audioDucking';
+import { normalizeKeyframes } from '../render/keyframes';
 
 export const PROJECT_FORMAT = 'voix-project';
 export const PROJECT_VERSION = '1.1.0';
@@ -218,6 +219,7 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
     fadeOut: rec.fadeOut !== undefined ? Math.max(0, Number(rec.fadeOut)) : undefined,
     animIn: normalizeAnimation(rec.animIn),
     animOut: normalizeAnimation(rec.animOut),
+    keyframes: normalizeKeyframes(rec.keyframes, index),
   };
 
   if (type === 'voice') {

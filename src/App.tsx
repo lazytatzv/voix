@@ -15,6 +15,7 @@ import { TachieImportModal } from './components/TachieImportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { ItemInspector } from './components/ItemInspector';
+import { addSnapshotKeyframe } from './render/keyframes';
 import {
   AudioItem,
   Character,
@@ -1576,6 +1577,35 @@ export function App() {
     setToast(`Marker added at ${time.toFixed(2)}s`);
   }, [commitProject]);
 
+  /** Add a transform keyframe at the playhead for the selected text/image item. */
+  const handleAddKeyframeAtPlayhead = useCallback(() => {
+    const selection = selectedItemIdsRef.current;
+    const id = selection.length === 1 ? selection[0] : selectedItemIdRef.current;
+    if (!id) {
+      setToast('Select a text or image item to add a keyframe.');
+      return;
+    }
+    const item = projectRef.current.items.find((entry) => entry.id === id);
+    if (!item || (item.type !== 'text' && item.type !== 'image')) {
+      setToast('Keyframes are available for text and image items.');
+      return;
+    }
+    const local = currentTimeRef.current - item.startTime;
+    if (local < 0 || local > item.duration) {
+      setToast('Move the playhead inside the item to add a keyframe.');
+      return;
+    }
+    const result = addSnapshotKeyframe(item, currentTimeRef.current);
+    if (result.existed) {
+      setToast(`Keyframe already exists at +${result.keyframe.time.toFixed(2)}s`);
+      setInspectedItemId(item.id);
+      return;
+    }
+    updateItem(item.id, { keyframes: result.keyframes } as Partial<TimelineItem>);
+    setToast(`Keyframe added at +${result.keyframe.time.toFixed(2)}s`);
+    setInspectedItemId(item.id);
+  }, [updateItem]);
+
   const handleDeleteMarker = useCallback(
     (id: string) => {
       const marker = projectRef.current.markers?.find((entry) => entry.id === id);
@@ -2130,6 +2160,11 @@ export function App() {
         handleAddMarker();
         return;
       }
+      if (event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        handleAddKeyframeAtPlayhead();
+        return;
+      }
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
         handleSeek(currentTimeRef.current - (event.shiftKey ? 1 : 1 / 30));
@@ -2147,6 +2182,7 @@ export function App() {
     handleCopyItems,
     handleDeleteItems,
     handleDuplicateItems,
+    handleAddKeyframeAtPlayhead,
     handleAddMarker,
     handleNewProject,
     handleOpenProject,
@@ -2513,6 +2549,7 @@ export function App() {
         isOpen={Boolean(inspectedItem)}
         item={inspectedItem}
         characters={characters}
+        currentTime={currentTime}
         onClose={() => setInspectedItemId(null)}
         onUpdate={handleInspectorUpdate}
         onDelete={handleDeleteItem}
