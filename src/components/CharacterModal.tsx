@@ -18,6 +18,7 @@ import {
   RefreshCw,
   Search,
   ListMusic,
+  Scaling,
 } from 'lucide-react';
 import { Character, Speaker, SpeakerStyle } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
@@ -810,6 +811,57 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       Reset custom position
                     </button>
                   )}
+                </div>
+
+                {/* Character Size */}
+                <div className="mt-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-medium text-[#8e918f] flex items-center gap-1.5">
+                      <Scaling className="w-3.5 h-3.5 text-[#8ab4f8]" /> Character Size
+                    </label>
+                    <span className="font-mono text-[11px] text-[#c4c7c5]">
+                      {Math.round((char.scale ?? 1) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={0.5}
+                    max={2}
+                    step={0.05}
+                    value={char.scale ?? 1}
+                    onChange={(e) =>
+                      onUpdateCharacter(char.id, { scale: parseFloat(e.target.value) })
+                    }
+                    className="w-full accent-[#8ab4f8] cursor-ew-resize"
+                    aria-label="Character size"
+                  />
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5">
+                      {[0.75, 1, 1.25, 1.5].map((size) => (
+                        <button
+                          key={size}
+                          type="button"
+                          onClick={() => onUpdateCharacter(char.id, { scale: size })}
+                          className={`px-2 py-1 rounded border text-[10px] font-mono transition ${
+                            Math.abs((char.scale ?? 1) - size) < 0.001
+                              ? 'bg-[#303236] text-white border-[#5f6368]'
+                              : 'bg-[#131314] text-[#8e918f] border-[#3c4043] hover:border-[#8e918f] hover:text-[#c4c7c5]'
+                          }`}
+                        >
+                          {Math.round(size * 100)}%
+                        </button>
+                      ))}
+                    </div>
+                    {Math.abs((char.scale ?? 1) - 1) > 0.001 && (
+                      <button
+                        type="button"
+                        onClick={() => onUpdateCharacter(char.id, { scale: undefined })}
+                        className="text-[10px] text-[#8e918f] hover:text-white transition whitespace-nowrap"
+                      >
+                        Reset size
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {/* Flip Horizontally */}
