@@ -22,7 +22,7 @@ import {
 import { Character, Speaker, SpeakerStyle } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
 import { filterSpeakers, findSpeakerStyle } from '../services/tts/speakerUtils';
-import { voiceAudioPlayer } from '../services/voicePlayer';
+import { voiceAuditionPlayer } from '../services/voicePlayer';
 import { CustomSelect } from './CustomSelect';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
 import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
@@ -136,7 +136,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     const resolveWait = auditionWaitResolveRef.current;
     auditionWaitResolveRef.current = null;
     resolveWait?.();
-    voiceAudioPlayer.stopVoice(AUDITION_VOICE_ID, false);
+    voiceAuditionPlayer.stopVoice(AUDITION_VOICE_ID, false);
   }, []);
 
   const waitForAudition = useCallback((durationMs: number) => {
@@ -174,7 +174,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
         );
         if (token !== auditionTokenRef.current) return null;
 
-        const started = await voiceAudioPlayer.playVoice(
+        const started = await voiceAuditionPlayer.playVoice(
           AUDITION_VOICE_ID,
           result.audioBlob,
           1,

@@ -206,3 +206,9 @@ export class VoiceAudioPlayer {
 }
 
 export const voiceAudioPlayer = new VoiceAudioPlayer();
+
+/**
+ * Independent player for UI auditions. It deliberately ignores the timeline's
+ * voice-track mute so that "Preview voice" / "Play all" is always audible.
+ */
+export const voiceAuditionPlayer = new VoiceAudioPlayer();
