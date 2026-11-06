@@ -729,7 +729,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               style={{
                 lineHeight: '22px',
                 fontSize: '12px',
-                fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+                fontFamily: "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
                 padding: '12px',
               }}
               className="w-full h-full bg-transparent text-[#e3e3e3] resize-none outline-none border-0 selection:bg-[#004a77] selection:text-white placeholder:text-[#5e6266] relative z-10"
