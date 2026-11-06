@@ -73,3 +73,8 @@ export function mediaUrlFor(src: string): Promise<string> {
   cache.set(src, promise);
   return promise;
 }
+
+/** Drop a cached URL, e.g. after a decode error or a reload request. */
+export function forgetMediaUrl(src: string): void {
+  cache.delete(src);
+}

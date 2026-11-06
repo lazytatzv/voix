@@ -47,7 +47,8 @@ import {
 } from './utils/projectYaml';
 import { loadCharactersFromConfig, loadSettingsFromConfig, saveCharactersToConfig } from './services/configService';
 import { loadCachedAudio, isTauriRuntime } from './services/audioCache';
-import { mediaUrlFor } from './utils/mediaUrl';
+import { mediaUrlFor, forgetMediaUrl } from './utils/mediaUrl';
+import { probeMedia, forgetMediaProbe, MediaInfo } from './services/mediaProbe';
 import { appLog } from './utils/appLog';
 import { loadImage, clearImageCache } from './render/imageCache';
 import { detectSpeechFromVideo, measureImportedAudio } from './services/exportService';
@@ -194,6 +195,10 @@ export function App() {
   const rawVideoPathRef = useRef<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number>(15);
   const videoDurationRef = useRef<number>(15);
+  const [videoLoading, setVideoLoading] = useState(false);
+  const [videoInfo, setVideoInfo] = useState<MediaInfo | null>(null);
+  const videoInfoRef = useRef<MediaInfo | null>(null);
+  const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
 
   const [currentTime, setCurrentTime] = useState<number>(0);
   const currentTimeRef = useRef<number>(0);
@@ -340,26 +345,97 @@ export function App() {
 
   const videoLoadTokenRef = useRef(0);
 
-  const syncVideoSource = useCallback((path: string | null) => {
-    appLog('App', `syncVideoSource: path=${path}`);
-    rawVideoPathRef.current = path;
-    setRawVideoPath(path);
-    const token = ++videoLoadTokenRef.current;
-    setVideoSrc(null);
-    if (!path) return;
-    // WebKitGTK cannot play Tauri's asset: scheme directly; stream it over
-    // the loopback HTTP server so large videos are not held in memory.
-    void mediaUrlFor(path)
-      .then((url) => {
-        appLog('App', `syncVideoSource resolved: ${url} (token=${token}, current=${videoLoadTokenRef.current})`);
-        if (videoLoadTokenRef.current === token) setVideoSrc(url);
-      })
-      .catch((err) => {
-        appLog('App', `syncVideoSource failed: ${err}`);
-        console.warn('[App] video load failed:', err);
-        if (videoLoadTokenRef.current === token) setVideoSrc(null);
+  const syncVideoSource = useCallback(
+    (path: string | null, force = false) => {
+      appLog('App', `syncVideoSource: path=${path} force=${force}`);
+      rawVideoPathRef.current = path;
+      setRawVideoPath(path);
+      const token = ++videoLoadTokenRef.current;
+      setVideoSrc(null);
+      setVideoLoadError(null);
+      setVideoInfo(null);
+      videoInfoRef.current = null;
+      if (!path) {
+        setVideoLoading(false);
+        return;
+      }
+      if (force) {
+        forgetMediaUrl(path);
+        forgetMediaProbe(path);
+      }
+      setVideoLoading(true);
+
+      // Resolve the streaming URL and probe metadata in parallel. The probe
+      // gives the real duration for long/fragmented files where WebKitGTK
+      // reports Infinity, while the URL lets playback start immediately.
+      void mediaUrlFor(path)
+        .then((url) => {
+          appLog(
+            'App',
+            `syncVideoSource resolved: ${url} (token=${token}, current=${videoLoadTokenRef.current})`
+          );
+          if (videoLoadTokenRef.current === token) setVideoSrc(url);
+        })
+        .catch((err) => {
+          appLog('App', `syncVideoSource failed: ${err}`);
+          console.warn('[App] video load failed:', err);
+          if (videoLoadTokenRef.current === token) {
+            setVideoSrc(null);
+            setVideoLoadError(String(err));
+          }
+        })
+        .finally(() => {
+          if (videoLoadTokenRef.current === token) setVideoLoading(false);
+        });
+
+      void probeMedia(path).then((info) => {
+        if (!info || videoLoadTokenRef.current !== token) return;
+        appLog(
+          'App',
+          `probe_media: duration=${info.duration} size=${info.width}x${info.height} fps=${info.fps} codecs=${info.videoCodec}/${info.audioCodec}`
+        );
+        videoInfoRef.current = info;
+        setVideoInfo(info);
+        if (info.duration > 0.01 && Number.isFinite(info.duration)) {
+          setVideoDuration(info.duration);
+          videoDurationRef.current = info.duration;
+        }
+        commitProject((previous) => {
+          if (rawVideoPathRef.current !== path) return previous;
+          const nextTimeline = { ...previous.timeline };
+          let changed = false;
+          // Never shrink a hand-edited timeline; only extend it so the video
+          // is reachable end-to-end.
+          if (
+            info.duration > 0.01 &&
+            (nextTimeline.duration || 0) < info.duration - 0.05
+          ) {
+            nextTimeline.duration = Number(
+              Math.max(nextTimeline.duration || 0, info.duration).toFixed(2)
+            );
+            changed = true;
+          }
+          // Adopt the source resolution only for a pristine 16:9 project.
+          const pristine =
+            previous.items.length === 0 &&
+            nextTimeline.width === 1920 &&
+            nextTimeline.height === 1080;
+          if (pristine && info.width >= 320 && info.height >= 200) {
+            nextTimeline.width = info.width;
+            nextTimeline.height = info.height;
+            changed = true;
+          }
+          return changed ? { ...previous, timeline: nextTimeline } : previous;
+        }, false);
       });
-  }, []);
+    },
+    [commitProject]
+  );
+
+  const handleReloadVideo = useCallback(() => {
+    const path = rawVideoPathRef.current;
+    if (path) syncVideoSource(path, true);
+  }, [syncVideoSource]);
 
   const recordRecentProject = useCallback((name: string, path: string | null) => {
     if (!path) return;
@@ -1033,20 +1109,35 @@ export function App() {
 
   const handleVideoMetadataLoaded = useCallback(
     (loadedDuration: number, width?: number, height?: number) => {
-      setVideoDuration(loadedDuration);
-      videoDurationRef.current = loadedDuration;
+      const probed = videoInfoRef.current;
+      const usableDuration =
+        Number.isFinite(loadedDuration) && loadedDuration > 0
+          ? loadedDuration
+          : probed?.duration ?? 0;
+      if (usableDuration > 0.01) {
+        setVideoDuration(usableDuration);
+        videoDurationRef.current = usableDuration;
+      }
 
       commitProject((prev) => {
         let changed = false;
         const nextTimeline = { ...prev.timeline };
-        if (Math.abs((nextTimeline.duration || 0) - loadedDuration) > 0.5) {
-          nextTimeline.duration = Number(loadedDuration.toFixed(2));
+        if (usableDuration > 0.01 && nextTimeline.duration < usableDuration - 0.05) {
+          nextTimeline.duration = Number(
+            Math.max(nextTimeline.duration || 0, usableDuration).toFixed(2)
+          );
           changed = true;
         }
-        if (width && height && width >= 320 && height >= 240) {
-          if (nextTimeline.width !== width || nextTimeline.height !== height) {
-            nextTimeline.width = width;
-            nextTimeline.height = height;
+        const usableWidth = width && width >= 320 ? width : probed?.width;
+        const usableHeight = height && height >= 200 ? height : probed?.height;
+        const pristine =
+          prev.items.length === 0 &&
+          nextTimeline.width === 1920 &&
+          nextTimeline.height === 1080;
+        if (pristine && usableWidth && usableHeight) {
+          if (nextTimeline.width !== usableWidth || nextTimeline.height !== usableHeight) {
+            nextTimeline.width = usableWidth;
+            nextTimeline.height = usableHeight;
             changed = true;
           }
         }
@@ -2207,6 +2298,11 @@ export function App() {
             showTerminal={terminalOverlayEnabled}
             videoVolume={project.timeline.videoVolume ?? 1}
             ducking={project.timeline.ducking}
+            onReloadVideo={handleReloadVideo}
+            onPickVideo={() => void handlePickVideoNative()}
+            videoInfo={videoInfo}
+            loadError={videoLoadError}
+            loading={videoLoading}
             onCharacterMove={(id, x, y) =>
               handleUpdateCharacter(id, {
                 customX: typeof x === 'number' && !Number.isNaN(x) ? x : undefined,

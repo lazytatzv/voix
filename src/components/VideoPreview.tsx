@@ -1,10 +1,24 @@
 import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import { Play, Pause, RotateCcw, Volume2, VolumeX, Maximize2, User, FlipHorizontal, Crop } from 'lucide-react';
+import {
+  Play,
+  Pause,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  Maximize2,
+  User,
+  FlipHorizontal,
+  Crop,
+  Loader2,
+  RefreshCw,
+  AlertTriangle,
+} from 'lucide-react';
 import { AudioItem, Character, DuckingSettings, TimelineItem, TrackState } from '../types';
 import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
 import { loadImage, collectCharacterImageSources, clearImageCache } from '../render/imageCache';
 import { mediaUrlFor } from '../utils/mediaUrl';
 import { appLog } from '../utils/appLog';
+import { MediaInfo } from '../services/mediaProbe';
 import { collectVoiceIntervals, DEFAULT_DUCKING, duckingGainAt } from '../utils/audioDucking';
 
 interface VideoPreviewProps {
@@ -30,6 +44,16 @@ interface VideoPreviewProps {
   ducking?: DuckingSettings;
   /** Persist a dragged tachie position in project coordinates. */
   onCharacterMove?: (characterId: string, x: number, y: number) => void;
+  /** Retry loading the current video after a decode/network error. */
+  onReloadVideo?: () => void;
+  /** Open the native picker to choose a different background video. */
+  onPickVideo?: () => void;
+  /** ffprobe metadata resolved before playback starts. */
+  videoInfo?: MediaInfo | null;
+  /** Error from URL resolution (media server / missing file). */
+  loadError?: string | null;
+  /** True while the media URL is being resolved. */
+  loading?: boolean;
 }
 
 export const VideoPreview: React.FC<VideoPreviewProps> = ({
@@ -52,6 +76,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoVolume = 1,
   ducking,
   onCharacterMove,
+  onReloadVideo,
+  onPickVideo,
+  videoInfo,
+  loadError,
+  loading = false,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -63,6 +92,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const isPlayingRef = useRef(isPlaying);
   const [isMuted, setIsMuted] = useState(false);
   const [videoError, setVideoError] = useState<string | null>(null);
+  const [isMetadataReady, setIsMetadataReady] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const [showAvatar, setShowAvatar] = useState(true);
   const [showSafeArea, setShowSafeArea] = useState(false);
   const [imageVersion, setImageVersion] = useState(0);
@@ -183,8 +215,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   // Reset video error on new source.
   useEffect(() => {
     setVideoError(null);
+    setIsMetadataReady(false);
+    setIsBuffering(false);
     pendingSeekTimeRef.current = null;
-  }, [videoSrc]);
+  }, [videoSrc, reloadKey]);
 
   // Match the project's background-video level; the dedicated mute button
   // silences all preview audio without discarding the configured volume.
@@ -215,10 +249,21 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
     if (video) {
-      appLog('VideoPreview', `loadedmetadata: duration=${video.duration}, size=${video.videoWidth}x${video.videoHeight}`);
+      const reported = video.duration;
+      const duration =
+        Number.isFinite(reported) && reported > 0
+          ? reported
+          : videoInfo?.duration && videoInfo.duration > 0
+            ? videoInfo.duration
+            : 0;
+      appLog(
+        'VideoPreview',
+        `loadedmetadata: duration=${reported} (using ${duration}), size=${video.videoWidth}x${video.videoHeight}`
+      );
       setVideoError(null);
-      if (video.duration && !Number.isNaN(video.duration) && video.duration > 0) {
-        onVideoDurationLoaded?.(video.duration, video.videoWidth, video.videoHeight);
+      setIsMetadataReady(true);
+      if (duration > 0) {
+        onVideoDurationLoaded?.(duration, video.videoWidth, video.videoHeight);
       }
     }
   };
@@ -228,6 +273,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     if (video) {
       appLog('VideoPreview', `loadeddata: readyState=${video.readyState}`);
       setVideoError(null);
+      setIsMetadataReady(true);
       try {
         if (Math.abs(video.currentTime - currentTime) > 0.05) {
           video.currentTime = Math.max(0.001, currentTime);
@@ -241,6 +287,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const video = videoRef.current;
     if (video) {
       appLog('VideoPreview', `canplay: readyState=${video.readyState}`);
+      setIsBuffering(false);
       renderFrameRef.current();
     }
   };
@@ -260,7 +307,22 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
     appLog('VideoPreview', `error: code=${err?.code}, msg=${err?.message}, src=${videoSrc}`);
     console.warn('[VideoPreview] video error:', err, videoSrc);
+    setIsBuffering(false);
     setVideoError(message);
+  };
+
+  const handleRetryVideo = () => {
+    setVideoError(null);
+    setIsMetadataReady(false);
+    setIsBuffering(false);
+    setReloadKey((value) => value + 1);
+    const video = videoRef.current;
+    if (video) {
+      try {
+        video.load();
+      } catch {}
+    }
+    onReloadVideo?.();
   };
 
   const handleSeeked = () => {
@@ -495,14 +557,19 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const loop = () => {
       renderFrameRef.current();
 
-      // Keep background video in sync with the timeline playhead.
+      // Keep background video in sync with the timeline playhead. Seeking
+      // too aggressively makes long recordings stutter; only correct real
+      // drift and never interrupt an in-flight seek.
       const video = videoRef.current;
-      if (video && video.readyState >= 1 && !video.seeking) {
-        if (Math.abs(video.currentTime - currentTimeRef.current) > 0.15) {
-          try {
-            video.currentTime = Math.max(0.001, currentTimeRef.current);
-          } catch {}
-        }
+      if (
+        video &&
+        video.readyState >= 2 &&
+        !video.seeking &&
+        Math.abs(video.currentTime - currentTimeRef.current) > 0.45
+      ) {
+        try {
+          video.currentTime = Math.max(0.001, currentTimeRef.current);
+        } catch {}
       }
 
       // Keep BGM / audio items in sync with the playhead.
@@ -552,8 +619,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   }, [isPlaying, audioItems, tracks, duckingIntervals, duckingSettings]);
 
   const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
+    const safe = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
+    const hours = Math.floor(safe / 3600);
+    const mins = Math.floor((safe % 3600) / 60);
+    const secs = Math.floor(safe % 60);
+    if (hours > 0) {
+      return `${hours}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
@@ -577,6 +649,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
         {videoSrc ? (
           <>
             <video
+              key={`${videoSrc}_${reloadKey}`}
               ref={videoRef}
               src={videoSrc}
               crossOrigin="anonymous"
@@ -584,31 +657,126 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               muted={isMuted}
               playsInline
               loop
-              preload="auto"
-              onLoadStart={() => appLog('VideoPreview', `loadstart: src=${videoSrc}`)}
+              preload="metadata"
+              onLoadStart={() => {
+                appLog('VideoPreview', `loadstart: src=${videoSrc}`);
+                setIsMetadataReady(false);
+                setIsBuffering(false);
+              }}
               onLoadedMetadata={handleLoadedMetadata}
               onLoadedData={handleLoadedData}
               onCanPlay={handleCanPlay}
               onSeeked={handleSeeked}
+              onPlaying={() => {
+                setIsMetadataReady(true);
+                setIsBuffering(false);
+              }}
+              onWaiting={() => {
+                if (isPlayingRef.current) setIsBuffering(true);
+              }}
+              onStalled={() => {
+                if (isPlayingRef.current) setIsBuffering(true);
+              }}
               onError={handleVideoError}
             />
-            {videoError && (
-              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/80 p-6 text-center select-none pointer-events-auto">
-                <p className="text-red-400 font-medium text-sm mb-2">{videoError}</p>
-                <p className="text-xs text-neutral-400 max-w-md">
-                  Tauri上の動画再生にはH.264 / WebMなどの標準フォーマットが推奨されます。
+            {!videoError && !loadError && (!isMetadataReady || loading) && (
+              <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 p-6 text-center select-none pointer-events-none">
+                <Loader2 className="w-5 h-5 text-[#8ab4f8] animate-spin mb-2" />
+                <p className="text-xs font-mono text-[#c4c7c5]">Loading video…</p>
+                {videoInfo && (
+                  <p className="mt-1 text-[10px] font-mono text-[#6f7276]">
+                    {formatTime(videoInfo.duration)} · {videoInfo.width}×{videoInfo.height}
+                    {videoInfo.videoCodec ? ` · ${videoInfo.videoCodec}` : ''}
+                  </p>
+                )}
+                <p className="mt-2 text-[10px] font-mono text-[#5f6368]">
+                  Streaming from disk (no full-file copy)
                 </p>
+              </div>
+            )}
+            {isMetadataReady && isBuffering && isPlaying && !videoError && (
+              <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 rounded-sm border border-[#2e3135] bg-black/70 px-2 py-1 pointer-events-none">
+                <Loader2 className="w-3 h-3 animate-spin text-[#8ab4f8]" />
+                <span className="text-[10px] font-mono text-[#c4c7c5]">Buffering…</span>
+              </div>
+            )}
+            {(videoError || loadError) && (
+              <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 p-6 text-center select-none pointer-events-auto">
+                <AlertTriangle className="w-6 h-6 text-amber-400 mb-2" />
+                <p className="text-red-400 font-medium text-sm mb-2">{videoError || '動画を開けません'}</p>
+                {loadError && (
+                  <p className="text-[11px] font-mono text-neutral-400 max-w-md break-words">
+                    {loadError}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-neutral-400 max-w-md">
+                  Tauri上の動画再生にはH.264 / VP9 / AV1などの標準フォーマットが推奨されます。
+                  MKVはコーデックによって再生できない場合があります。
+                </p>
+                <div className="mt-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRetryVideo}
+                    className="px-3 py-1.5 rounded-sm border border-[#2e3135] bg-[#1a1b1e] text-xs font-mono text-[#c4c7c5] hover:text-white flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Retry
+                  </button>
+                  {onPickVideo && (
+                    <button
+                      type="button"
+                      onClick={onPickVideo}
+                      className="px-3 py-1.5 rounded-sm border border-[#005a92] bg-[#004a77] text-xs font-mono text-[#c2e7ff] hover:bg-[#005a92]"
+                    >
+                      Choose another video
+                    </button>
+                  )}
+                </div>
               </div>
             )}
           </>
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 select-none pointer-events-none">
-            <p className="text-[#5f6368] font-mono text-xs tracking-wider uppercase mb-1">
-              [ Drop video file here or select from toolbar ]
-            </p>
-            <p className="text-[#3c4043] font-mono text-[11px]">
-              MP4 / MKV / WebM / MOV — transparent overlay compositing
-            </p>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 select-none">
+            {loading ? (
+              <>
+                <Loader2 className="w-5 h-5 text-[#8ab4f8] animate-spin mb-2" />
+                <p className="text-xs font-mono text-[#c4c7c5]">Opening video…</p>
+              </>
+            ) : loadError ? (
+              <>
+                <AlertTriangle className="w-6 h-6 text-amber-400 mb-2" />
+                <p className="text-red-400 text-sm mb-2">動画を開けません</p>
+                <p className="max-w-md break-words text-[11px] font-mono text-neutral-400">
+                  {loadError}
+                </p>
+                <div className="mt-4 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleRetryVideo}
+                    className="pointer-events-auto px-3 py-1.5 rounded-sm border border-[#2e3135] bg-[#1a1b1e] text-xs font-mono text-[#c4c7c5] hover:text-white flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Retry
+                  </button>
+                  {onPickVideo && (
+                    <button
+                      type="button"
+                      onClick={onPickVideo}
+                      className="pointer-events-auto px-3 py-1.5 rounded-sm border border-[#005a92] bg-[#004a77] text-xs font-mono text-[#c2e7ff] hover:bg-[#005a92]"
+                    >
+                      Choose video
+                    </button>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-[#5f6368] font-mono text-xs tracking-wider uppercase mb-1">
+                  [ Drop video file here or select from toolbar ]
+                </p>
+                <p className="text-[#3c4043] font-mono text-[11px]">
+                  MP4 / MKV / WebM / MOV — transparent overlay compositing
+                </p>
+              </>
+            )}
           </div>
         )}
         <audio ref={previewAudioRef} className="hidden" />

@@ -146,6 +146,160 @@ fn check_system_environment() -> SystemStatus {
     }
 }
 
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct MediaInfo {
+    pub duration: f64,
+    pub width: u32,
+    pub height: u32,
+    pub fps: f64,
+    pub has_audio: bool,
+    pub video_codec: String,
+    pub audio_codec: String,
+    pub size_bytes: u64,
+    pub format_name: String,
+}
+
+fn parse_rate(value: &str) -> f64 {
+    let value = value.trim();
+    if value.is_empty() || value == "0/0" {
+        return 0.0;
+    }
+    if let Some((num, den)) = value.split_once('/') {
+        let num = num.parse::<f64>().unwrap_or(0.0);
+        let den = den.parse::<f64>().unwrap_or(0.0);
+        if den.abs() > f64::EPSILON {
+            return num / den;
+        }
+        return 0.0;
+    }
+    value.parse::<f64>().unwrap_or(0.0)
+}
+
+/// Parse the subset of ffprobe's JSON that Voix needs. Kept separate from the
+/// command so it can be unit-tested without invoking FFmpeg.
+fn parse_media_info(json: &str, size_bytes: u64) -> Result<MediaInfo, String> {
+    let root: serde_json::Value =
+        serde_json::from_str(json).map_err(|err| format!("ffprobe JSON parse failed: {err}"))?;
+    let streams = root
+        .get("streams")
+        .and_then(|value| value.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let video = streams.iter().find(|stream| {
+        stream.get("codec_type").and_then(|v| v.as_str()) == Some("video")
+            && stream
+                .get("disposition")
+                .and_then(|d| d.get("attached_pic"))
+                .and_then(|v| v.as_i64())
+                .unwrap_or(0)
+                == 0
+    });
+    let Some(video) = video else {
+        return Err("ファイルに映像ストリームがありません".to_string());
+    };
+
+    let audio = streams
+        .iter()
+        .find(|stream| stream.get("codec_type").and_then(|v| v.as_str()) == Some("audio"));
+
+    let format = root.get("format");
+    let mut duration = format
+        .and_then(|value| value.get("duration"))
+        .and_then(|value| value.as_str())
+        .and_then(|value| value.parse::<f64>().ok())
+        .unwrap_or(0.0);
+    if !duration.is_finite() || duration <= 0.0 {
+        duration = video
+            .get("duration")
+            .and_then(|value| value.as_str())
+            .and_then(|value| value.parse::<f64>().ok())
+            .unwrap_or(0.0);
+    }
+
+    let fps = {
+        let avg = video
+            .get("avg_frame_rate")
+            .and_then(|value| value.as_str())
+            .map(parse_rate)
+            .unwrap_or(0.0);
+        if avg > 0.0 {
+            avg
+        } else {
+            video
+                .get("r_frame_rate")
+                .and_then(|value| value.as_str())
+                .map(parse_rate)
+                .unwrap_or(0.0)
+        }
+    };
+
+    Ok(MediaInfo {
+        duration: if duration.is_finite() { duration.max(0.0) } else { 0.0 },
+        width: video
+            .get("width")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0) as u32,
+        height: video
+            .get("height")
+            .and_then(|value| value.as_u64())
+            .unwrap_or(0) as u32,
+        fps,
+        has_audio: audio.is_some(),
+        video_codec: video
+            .get("codec_name")
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        audio_codec: audio
+            .and_then(|stream| stream.get("codec_name"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+        size_bytes,
+        format_name: format
+            .and_then(|value| value.get("format_name"))
+            .and_then(|value| value.as_str())
+            .unwrap_or("")
+            .to_string(),
+    })
+}
+
+/// Probe a local media file with ffprobe before the webview tries to decode it.
+/// Long recordings sometimes report `Infinity` or a bogus duration through
+/// WebKitGTK; having the real duration up front keeps the timeline, seeking
+/// and export range correct.
+#[tauri::command]
+fn probe_media(path: String) -> Result<MediaInfo, String> {
+    let clean = expand_tilde(path.trim());
+    if clean.trim().is_empty() {
+        return Err("メディアパスが空です".to_string());
+    }
+    let metadata = fs::metadata(&clean).map_err(|err| format!("ファイルを開けません: {err}"))?;
+    if !metadata.is_file() {
+        return Err("メディアパスがファイルではありません".to_string());
+    }
+    let output = Command::new("ffprobe")
+        .args([
+            "-v",
+            "error",
+            "-print_format",
+            "json",
+            "-show_format",
+            "-show_streams",
+            &clean,
+        ])
+        .output()
+        .map_err(|err| format!("ffprobeを起動できません: {err}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ffprobe失敗: {}", stderr.trim()));
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    parse_media_info(&stdout, metadata.len())
+}
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SpeechSegment {
     pub start: f64,
@@ -1326,6 +1480,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             check_system_environment,
+            probe_media,
             detect_speech_segments,
             export_full_video,
             import_tachie_archive,
@@ -1360,4 +1515,50 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod media_probe_tests {
+    use super::parse_media_info;
+
+    #[test]
+    fn parses_ffprobe_video_metadata() {
+        let json = r#"{
+          "streams": [
+            {"codec_type":"video","codec_name":"h264","width":1920,"height":1080,
+             "avg_frame_rate":"30000/1001","r_frame_rate":"30/1","disposition":{"attached_pic":0}},
+            {"codec_type":"audio","codec_name":"aac"}
+          ],
+          "format": {"duration":"3723.456","format_name":"mov,mp4,m4a,3gp,3g2,mj2"}
+        }"#;
+        let info = parse_media_info(json, 1024).expect("parse");
+        assert_eq!(info.width, 1920);
+        assert_eq!(info.height, 1080);
+        assert!((info.duration - 3723.456).abs() < 0.001);
+        assert!((info.fps - 29.97002997).abs() < 0.001);
+        assert!(info.has_audio);
+        assert_eq!(info.video_codec, "h264");
+        assert_eq!(info.audio_codec, "aac");
+        assert_eq!(info.size_bytes, 1024);
+    }
+
+    #[test]
+    fn rejects_audio_only_files() {
+        let json = r#"{"streams":[{"codec_type":"audio","codec_name":"mp3"}],
+                       "format":{"duration":"12.5","format_name":"mp3"}}"#;
+        assert!(parse_media_info(json, 10).is_err());
+    }
+
+    #[test]
+    fn falls_back_to_stream_duration() {
+        let json = r#"{"streams":[
+            {"codec_type":"video","codec_name":"vp9","width":1280,"height":720,
+             "avg_frame_rate":"0/0","r_frame_rate":"60/1","duration":"42.25",
+             "disposition":{"attached_pic":0}}
+          ],"format":{"format_name":"matroska,webm"}}"#;
+        let info = parse_media_info(json, 10).expect("parse");
+        assert!((info.duration - 42.25).abs() < 0.001);
+        assert!((info.fps - 60.0).abs() < 0.001);
+        assert!(!info.has_audio);
+    }
 }
