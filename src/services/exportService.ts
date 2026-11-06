@@ -69,6 +69,38 @@ interface AudioClipPayload {
   ducking?: DuckingPayload;
 }
 
+interface StreamExportPayload {
+  job_dir: string;
+  output_path: string;
+  background_path: string | null;
+  background_color: string;
+  width: number;
+  height: number;
+  fps: number;
+  overlay_fps: number;
+  duration: number;
+  start_time: number;
+  crf: number;
+  preset: string;
+  background_volume: number;
+  audio_clips: AudioClipPayload[];
+}
+
+function canvasToPngBytes(canvas: HTMLCanvasElement): Promise<Uint8Array> {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        reject(new Error('Could not encode overlay frame as PNG.'));
+        return;
+      }
+      blob
+        .arrayBuffer()
+        .then((buffer) => resolve(new Uint8Array(buffer)))
+        .catch(reject);
+    }, 'image/png');
+  });
+}
+
 /** Rust-side temporary directory for the export currently in flight. */
 let activeJobDir: string | null = null;
 let activeOutputPath: string | null = null;
@@ -312,7 +344,29 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
       }
     }
 
-    // 3. Render transparent overlay frames with the shared compositor.
+    // 3. Start FFmpeg first, then stream transparent overlay frames into its
+    // stdin. This avoids keeping thousands of PNG files in the temp directory
+    // and lets long exports start encoding immediately.
+    const payload: StreamExportPayload = {
+      job_dir: jobDir,
+      output_path: outputPath,
+      background_path: options.backgroundPath || null,
+      background_color: project.timeline.backgroundColor || '#0f0f11',
+      width,
+      height,
+      fps,
+      overlay_fps: overlayFps,
+      duration,
+      start_time: exportStart,
+      crf: settings.crf,
+      preset: settings.preset,
+      background_volume: videoMuted
+        ? 0
+        : options.backgroundVolume ?? project.timeline.videoVolume ?? 1,
+      audio_clips: audioClips,
+    };
+    await invoke('begin_stream_export', { payload });
+
     const canvas = document.createElement('canvas');
     canvas.width = width;
     canvas.height = height;
@@ -334,12 +388,8 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         showTerminal: options.showTerminal !== false,
         showSafeArea: false,
       });
-      const pngBase64 = canvas.toDataURL('image/png');
-      await invoke('write_export_frame', {
-        jobDir,
-        index: frame + 1,
-        pngBase64,
-      });
+      const png = await canvasToPngBytes(canvas);
+      await invoke('write_export_frame_raw', png);
       if (frame % 4 === 0 || frame === totalFrames - 1) {
         report({
           phase: 'rendering',
@@ -349,26 +399,12 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
       }
     }
 
-    report({ phase: 'encoding', percent: 65, message: 'Encoding with FFmpeg...' });
+    report({ phase: 'encoding', percent: 65, message: 'Finalizing FFmpeg encode...' });
     throwIfAborted();
 
-    const result = await invoke<string>('finish_export_job', {
-      payload: {
-        job_dir: jobDir,
-        output_path: outputPath,
-        background_path: options.backgroundPath || null,
-        background_color: project.timeline.backgroundColor || '#0f0f11',
-        width,
-        height,
-        fps,
-        overlay_fps: overlayFps,
-        duration,
-        start_time: exportStart,
-        crf: settings.crf,
-        preset: settings.preset,
-        background_volume: videoMuted ? 0 : options.backgroundVolume ?? project.timeline.videoVolume ?? 1,
-        audio_clips: audioClips,
-      },
+    const result = await invoke<string>('finish_stream_export', {
+      jobDir,
+      outputPath,
     });
     activeJobDir = null;
     activeOutputPath = null;
