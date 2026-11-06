@@ -1,5 +1,5 @@
 import { Character, ImageItem, SubtitleStyle, TextItem, TimelineItem, TrackState, VoiceItem } from '../types';
-import { getCachedImage } from './imageCache';
+import { getCachedImage, getImageContentBounds } from './imageCache';
 import { computeItemMotion } from './itemMotion';
 import { resolveItemTransform } from './keyframes';
 import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } from '../utils/pronunciation';
@@ -536,10 +536,15 @@ function computeCharacterLayout(
   }
 
   const baseScale = (charVoice?.scale ?? char.scale ?? 1) * animScale;
+  const contentSource = idleImg && idleImg.naturalWidth ? idleImg : activeImg;
+  const contentBounds = getImageContentBounds(contentSource);
+  const contentWidthRatio = Math.max(0.001, contentBounds.right - contentBounds.left);
+  const contentHeightRatio = Math.max(0.001, contentBounds.bottom - contentBounds.top);
   const baseRatio =
-    idleImg && idleImg.naturalWidth && idleImg.naturalHeight
-      ? idleImg.naturalWidth / idleImg.naturalHeight
-      : activeImg.naturalWidth / activeImg.naturalHeight;
+    contentSource.naturalWidth && contentSource.naturalHeight
+      ? (contentSource.naturalWidth * contentWidthRatio) /
+        (contentSource.naturalHeight * contentHeightRatio)
+      : 1;
   // 全身素材(縦長)なら画面の72%、バストアップ素材なら55%を基準にアスペクト比に応じて最適スケールを自動算出
   const targetHeightPercent = baseRatio <= 0.65 ? 0.72 : Math.max(0.54, 0.72 - (baseRatio - 0.65) * 0.35);
   const charHeight = height * targetHeightPercent * baseScale;
@@ -607,7 +612,16 @@ function drawCharacters(
   const sprites = resolveCharacterSprites(options, activeVoice, voices);
   sprites.forEach((sprite) => {
     const layout = computeCharacterLayout(sprite, options, true);
-    const { activeImg, isSpeaking } = sprite;
+    const { activeImg, idleImg, isSpeaking } = sprite;
+    const bounds = getImageContentBounds(idleImg && idleImg.naturalWidth ? idleImg : activeImg);
+    const contentWidth = Math.max(0.001, bounds.right - bounds.left);
+    const contentHeight = Math.max(0.001, bounds.bottom - bounds.top);
+    // The layout rect describes only the visible pixels. Expand the draw rect
+    // so the transparent margins around them fall outside the layout box.
+    const drawWidth = layout.width / contentWidth;
+    const drawHeight = layout.height / contentHeight;
+    const drawX = layout.x - bounds.left * drawWidth;
+    const drawY = layout.y - bounds.top * drawHeight;
 
     ctx.save();
     ctx.filter = isSpeaking ? 'none' : 'brightness(0.88)';
@@ -615,9 +629,9 @@ function drawCharacters(
     if (layout.flipped) {
       ctx.translate(layout.x + layout.width, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(activeImg, 0, layout.y, layout.width, layout.height);
+      ctx.drawImage(activeImg, drawX - layout.x, drawY, drawWidth, drawHeight);
     } else {
-      ctx.drawImage(activeImg, layout.x, layout.y, layout.width, layout.height);
+      ctx.drawImage(activeImg, drawX, drawY, drawWidth, drawHeight);
     }
     ctx.restore();
   });
