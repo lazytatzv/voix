@@ -366,7 +366,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </span>
               </div>
               <p className="text-[10px] text-[#8e918f]">
-                Centralized settings for AI offloading, TTS speech, dotfiles, and video rendering
+                Centralized settings for script generation, TTS speech, dotfiles, and video rendering
               </p>
             </div>
           </div>
@@ -389,7 +389,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </span>
 
               {[
-                { id: 'ai' as const, label: 'AI & Script Engine', icon: Bot, badge: 'LLM' },
+                { id: 'ai' as const, label: 'Script Engine', icon: Bot, badge: 'Optional' },
                 { id: 'tts' as const, label: 'TTS Audio Providers', icon: Volume2, badge: 'VOICEVOX' },
                 { id: 'export' as const, label: 'Video & Rendering', icon: Film, badge: 'FFmpeg' },
                 { id: 'runtime' as const, label: 'Runtime & Safety', icon: Shield, badge: 'WebKit / IME' },
@@ -445,9 +445,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {activeTab === 'ai' && (
               <div className="space-y-6 max-w-2xl">
                 <div>
-                  <h4 className="text-sm font-semibold text-[#e3e3e3] mb-1">AI Dialogue & Script Engine</h4>
+                  <h4 className="text-sm font-semibold text-[#e3e3e3] mb-1">Script Generation Engine</h4>
                   <p className="text-xs text-[#8e918f]">
-                    Configure local, LAN remote server, or Google Gemini AI for persona-driven script generation.
+                    Optional. Configure an offline persona, a LAN server, or Google Gemini for script drafts.
                   </p>
                 </div>
 

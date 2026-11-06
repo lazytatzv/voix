@@ -4,7 +4,6 @@ import {
   Download,
   PlaySquare,
   Video,
-  Bot,
   Layers,
   Settings,
   Settings2,
@@ -308,7 +307,7 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Center: Core video & AI actions */}
+      {/* Center: Core video actions */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <input
           ref={videoInputRef}
@@ -358,10 +357,10 @@ export const Header: React.FC<HeaderProps> = ({
           type="button"
           onClick={onOpenAiVideoGenerator}
           className="px-2.5 py-1 bg-[#151619] hover:bg-[#1f2126] text-[#c4c7c5] hover:text-white text-xs font-mono rounded-sm border border-[#282a2e] flex items-center gap-1.5 transition active:scale-95"
-          title="Generate a Japanese dialogue script with AI"
+          title="Draft a Japanese commentary script from the video"
         >
-          <Bot className="w-3.5 h-3.5 text-[#34d399]" />
-          <span>AI Script</span>
+          <FileText className="w-3.5 h-3.5 text-[#a8aaa8]" />
+          <span>Script Draft</span>
         </button>
       </div>
 

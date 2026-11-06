@@ -77,7 +77,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   const handleStartGeneration = async () => {
     if (!topic.trim() && !useVideoVision) return;
 
-    setStatusMessage('Preparing AI script generation...');
+    setStatusMessage('Preparing script draft...');
     try {
       await saveSettingsToConfig({
         ...(await loadSettingsFromConfig()),
@@ -107,7 +107,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           ? `Sending prompt to remote OpenAI server...`
           : apiKey.trim()
           ? 'Generating Japanese script with Gemini 2.0 Flash...'
-          : 'Generating Japanese script with local AI engine...'
+          : 'Generating Japanese script with the offline persona engine...'
       );
 
       const activeChars = characters.filter((c) => selectedCharIds.includes(c.id));
@@ -144,13 +144,13 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             </div>
             <div>
               <h3 className="font-semibold text-xs text-[#e3e3e3] flex items-center gap-2 uppercase tracking-wide">
-                AI Script & Commentary Studio
+                Script & Commentary Draft
                 <span className="text-[9px] px-1.5 py-0.2 rounded-xs bg-[#1a1c20] border border-[#2c2f34] text-[#8e918f] font-mono">
-                  Cloud / Remote
+                  Optional
                 </span>
               </h3>
               <p className="text-[10px] text-[#8e918f]">
-                Auto-generate Japanese dialogue, sound effects, and character animations for video
+                Draft Japanese dialogue, sound cues, and character motions for the loaded video
               </p>
             </div>
           </div>
@@ -165,16 +165,16 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
 
         {/* Body */}
         <div className="p-5 space-y-4 overflow-y-auto">
-          {/* AI Backend Provider Selection */}
+          {/* Generation backend selection */}
           <div>
             <label className="text-[11px] font-mono text-[#c4c7c5] block mb-1.5 uppercase">
-              AI Generation Engine & Server
+              Generation Engine
             </label>
             <div className="grid grid-cols-3 gap-1.5">
               {[
-                { id: 'gemini', label: 'Cloud Gemini 2.0', desc: 'Free Cloud AI' },
-                { id: 'remote_ollama', label: 'Remote Ollama', desc: 'LAN Desktop GPU' },
-                { id: 'local_persona', label: 'Offline Engine', desc: 'Local Zero Load' },
+                { id: 'gemini', label: 'Cloud Gemini', desc: 'Google AI Studio' },
+                { id: 'remote_ollama', label: 'Remote Ollama', desc: 'LAN desktop GPU' },
+                { id: 'local_persona', label: 'Offline Engine', desc: 'No network' },
               ].map((p) => (
                 <button
                   key={p.id}
@@ -257,13 +257,13 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                 </div>
                 <div>
                   <div className="text-xs font-semibold text-[#e3e3e3] flex items-center gap-1.5">
-                    Watch Loaded Video (Vision Analysis Mode)
+                    Use Loaded Video as Context
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#3b82f6]/20 text-[#60a5fa] font-mono">
-                      Vision
+                      Frames
                     </span>
                   </div>
                   <div className="text-[10px] text-[#8e918f]">
-                    AI watches video screenshot frames to generate synced scene commentary
+                    Samples video frames so commentary stays in sync with the scene
                   </div>
                 </div>
               </div>
@@ -428,7 +428,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             ) : (
               <>
                 <Wand2 className="w-3.5 h-3.5" />
-                <span>Generate Japanese Script & Audio</span>
+                <span>Draft Script & Audio</span>
               </>
             )}
           </button>

@@ -528,7 +528,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     }
   };
 
-  // AI action execution
+  // Script action execution
   const handleTriggerAi = async (action: AiAction) => {
     setIsAiProcessing(true);
     setIsAiMenuOpen(false);
@@ -990,14 +990,14 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
             </div>
 
             <form onSubmit={handleAdd} className="relative flex items-center">
-              {/* ✨ AI Assistant Popover Button */}
+              {/* Script tools popover */}
               <div ref={aiMenuRef} className="absolute left-2 z-20">
                 <button
                   type="button"
                   onClick={() => setIsAiMenuOpen(!isAiMenuOpen)}
                   disabled={isAiProcessing}
                   className="p-1.5 rounded-lg bg-[#202124] hover:bg-[#282a2e] text-[#8ab4f8] border border-[#2e3135] transition flex items-center gap-1 text-[11px] font-medium"
-                  title="AI Script Assistant"
+                  title="Script tools"
                 >
                   {isAiProcessing ? (
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -1006,11 +1006,11 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                   )}
                 </button>
 
-                {/* AI Menu Popover */}
+                {/* Script tools menu */}
                 {isAiMenuOpen && (
                   <div className="absolute bottom-10 left-0 w-64 bg-[#141518] border border-[#26282c] rounded-sm shadow-2xl p-1.5 space-y-1 backdrop-blur-xl animate-in fade-in duration-100 z-50 select-none">
                     <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2.5 py-1 block tracking-wider">
-                      AI Script Assistant
+                      Script tools
                     </span>
                     <button
                       type="button"
