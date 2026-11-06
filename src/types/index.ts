@@ -222,6 +222,8 @@ export interface DuckingSettings {
   release: number;
 }
 
+export type VideoFit = 'contain' | 'cover' | 'stretch';
+
 export interface TimelineSettings {
   duration: number;
   fps: 30 | 60;
@@ -234,6 +236,10 @@ export interface TimelineSettings {
   videoPath?: string;
   /** Background video audio volume (0.0 - 2.0). */
   videoVolume?: number;
+  /** Seconds into the source video used at timeline position 0. */
+  videoOffset?: number;
+  /** How the background video fills the project frame. */
+  videoFit?: VideoFit;
   /** BGM ducking under voice lines. */
   ducking?: DuckingSettings;
 }

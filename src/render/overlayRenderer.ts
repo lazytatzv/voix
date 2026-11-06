@@ -19,6 +19,8 @@ export interface OverlayRenderOptions {
   showSafeArea?: boolean;
   /** Optional background video element for live preview composition. */
   backgroundVideo?: HTMLVideoElement | null;
+  /** How the background video fills the frame. Defaults to contain. */
+  backgroundFit?: 'contain' | 'cover' | 'stretch';
 }
 
 const FALLBACK_STYLE: SubtitleStyle = {
@@ -634,7 +636,34 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
   // compositing bugs cannot hide the video underneath transparent overlays.
   if (options.backgroundVideo && options.backgroundVideo.readyState >= 2) {
     try {
-      ctx.drawImage(options.backgroundVideo, 0, 0, width, height);
+      const video = options.backgroundVideo;
+      const sourceWidth = video.videoWidth || width;
+      const sourceHeight = video.videoHeight || height;
+      const fit = options.backgroundFit ?? 'contain';
+      if (fit === 'stretch' || sourceWidth <= 0 || sourceHeight <= 0) {
+        ctx.drawImage(video, 0, 0, width, height);
+      } else {
+        const scale =
+          fit === 'cover'
+            ? Math.max(width / sourceWidth, height / sourceHeight)
+            : Math.min(width / sourceWidth, height / sourceHeight);
+        const drawWidth = sourceWidth * scale;
+        const drawHeight = sourceHeight * scale;
+        ctx.save();
+        if (fit === 'cover') {
+          ctx.beginPath();
+          ctx.rect(0, 0, width, height);
+          ctx.clip();
+        }
+        ctx.drawImage(
+          video,
+          (width - drawWidth) / 2,
+          (height - drawHeight) / 2,
+          drawWidth,
+          drawHeight
+        );
+        ctx.restore();
+      }
     } catch {}
   }
 

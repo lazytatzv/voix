@@ -917,7 +917,17 @@ pub struct ExportJobPayload {
     pub crf: u32,
     pub preset: String,
     pub background_volume: f64,
+    /// Seconds into the source video used at timeline position 0.
+    #[serde(default)]
+    pub video_offset: f64,
+    /// `contain`, `cover`, or `stretch`.
+    #[serde(default = "default_video_fit")]
+    pub video_fit: String,
     pub audio_clips: Vec<ExportAudioClip>,
+}
+
+fn default_video_fit() -> String {
+    "contain".to_string()
 }
 
 #[derive(Clone, Serialize)]
@@ -1111,10 +1121,10 @@ fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String
         .filter(|p| !p.trim().is_empty())
     {
         let bg = expand_tilde(bg);
-        // Start the background at the export range start, then loop so it
-        // always covers the full requested duration.
-        cmd.arg("-ss")
-            .arg(format!("{:.3}", payload.start_time.max(0.0)));
+        // Start the background at the export range start plus the project's
+        // trimmed source offset, then loop so it always covers the duration.
+        let source_start = (payload.start_time.max(0.0) + payload.video_offset.max(0.0)).max(0.0);
+        cmd.arg("-ss").arg(format!("{:.3}", source_start));
         cmd.arg("-stream_loop").arg("-1");
         cmd.arg("-i").arg(&bg);
         has_bg_audio = probe_has_audio(&bg);
@@ -1154,10 +1164,22 @@ fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String
     }
 
     let mut filter = String::new();
+    let fit_chain = match payload.video_fit.as_str() {
+        "cover" => format!(
+            "scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
+            w = width,
+            h = height
+        ),
+        "stretch" => format!("scale={w}:{h}", w = width, h = height),
+        _ => format!(
+            "scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black",
+            w = width,
+            h = height
+        ),
+    };
     filter.push_str(&format!(
-        "[0:v]scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,tpad=stop_mode=clone:stop_duration={d}[bgv];",
-        w = width,
-        h = height,
+        "[0:v]{chain},setsar=1,tpad=stop_mode=clone:stop_duration={d}[bgv];",
+        chain = fit_chain,
         d = duration
     ));
     filter.push_str(

@@ -83,6 +83,8 @@ interface StreamExportPayload {
   crf: number;
   preset: string;
   background_volume: number;
+  video_offset: number;
+  video_fit: string;
   audio_clips: AudioClipPayload[];
 }
 
@@ -363,6 +365,8 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
       background_volume: videoMuted
         ? 0
         : options.backgroundVolume ?? project.timeline.videoVolume ?? 1,
+      video_offset: Math.max(0, project.timeline.videoOffset ?? 0),
+      video_fit: project.timeline.videoFit ?? 'contain',
       audio_clips: audioClips,
     };
     await invoke('begin_stream_export', { payload });

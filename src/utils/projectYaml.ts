@@ -54,6 +54,9 @@ export function createEmptyProject(name = 'Untitled Project'): VoixProject {
       height: 1080,
       backgroundColor: '#0f0f11',
       overlayFps: 15,
+      videoVolume: 1,
+      videoOffset: 0,
+      videoFit: 'contain',
       ducking: { ...DEFAULT_DUCKING },
     },
     characters: [],
@@ -319,6 +322,16 @@ export function normalizeProject(raw: unknown, fallbackName = 'Untitled Project'
       overlayFps: Number(timeline.overlayFps ?? 15),
       videoPath: timeline.videoPath ? String(timeline.videoPath) : undefined,
       videoVolume: timeline.videoVolume !== undefined ? Number(timeline.videoVolume) : 1,
+      videoOffset:
+        timeline.videoOffset !== undefined && Number.isFinite(Number(timeline.videoOffset))
+          ? Math.max(0, Number(timeline.videoOffset))
+          : 0,
+      videoFit:
+        timeline.videoFit === 'cover'
+          ? 'cover'
+          : timeline.videoFit === 'stretch'
+            ? 'stretch'
+            : 'contain',
       ducking: normalizeDucking(timeline.ducking),
     },
     characters: Array.isArray(root.characters)

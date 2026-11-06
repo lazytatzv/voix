@@ -2389,6 +2389,8 @@ export function App() {
             videoInfo={videoInfo}
             loadError={videoLoadError}
             loading={videoLoading}
+            videoOffset={project.timeline.videoOffset ?? 0}
+            videoFit={project.timeline.videoFit ?? 'contain'}
             onCharacterMove={(id, x, y) =>
               handleUpdateCharacter(id, {
                 customX: typeof x === 'number' && !Number.isNaN(x) ? x : undefined,

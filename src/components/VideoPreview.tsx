@@ -50,6 +50,10 @@ interface VideoPreviewProps {
   onPickVideo?: () => void;
   /** ffprobe metadata resolved before playback starts. */
   videoInfo?: MediaInfo | null;
+  /** Seconds into the source used at timeline position 0. */
+  videoOffset?: number;
+  /** How the background video fills the preview frame. */
+  videoFit?: 'contain' | 'cover' | 'stretch';
   /** Error from URL resolution (media server / missing file). */
   loadError?: string | null;
   /** True while the media URL is being resolved. */
@@ -79,6 +83,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   onReloadVideo,
   onPickVideo,
   videoInfo,
+  videoOffset = 0,
+  videoFit = 'contain',
   loadError,
   loading = false,
 }) => {
@@ -192,6 +198,23 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     });
   }, [audioItems]);
 
+  /**
+   * Map a timeline time to the background video's source clock. The offset
+   * trims the start of the recording; looping mirrors the FFmpeg export.
+   */
+  const videoTargetTime = useCallback(
+    (timelineTime: number) => {
+      const video = videoRef.current;
+      const reported =
+        video && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+      const sourceDuration = reported > 0 ? reported : videoInfo?.duration ?? 0;
+      let target = Math.max(0, timelineTime + Math.max(0, videoOffset));
+      if (sourceDuration > 0.01) target %= sourceDuration;
+      return Math.max(0.001, target);
+    },
+    [videoOffset, videoInfo]
+  );
+
   // Video play/pause following the timeline.
   useEffect(() => {
     const video = videoRef.current;
@@ -199,8 +222,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     if (isPlaying) {
       if (video.readyState >= 1) {
         try {
-          if (Math.abs(video.currentTime - currentTime) > 0.08) {
-            video.currentTime = Math.max(0.001, currentTime);
+          if (Math.abs(video.currentTime - videoTargetTime(currentTime)) > 0.08) {
+            video.currentTime = videoTargetTime(currentTime);
           }
         } catch {}
       }
@@ -210,7 +233,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     } else {
       video.pause();
     }
-  }, [isPlaying, videoSrc]);
+  }, [isPlaying, videoSrc, videoTargetTime]);
 
   // Reset video error on new source.
   useEffect(() => {
@@ -236,15 +259,16 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
-    if (!isPlaying && video.readyState >= 2 && Math.abs(video.currentTime - currentTime) > 0.05) {
+    const target = videoTargetTime(currentTime);
+    if (!isPlaying && video.readyState >= 2 && Math.abs(video.currentTime - target) > 0.05) {
       if (video.seeking) pendingSeekTimeRef.current = currentTime;
       else {
         try {
-          video.currentTime = Math.max(0.001, currentTime);
+          video.currentTime = target;
         } catch {}
       }
     }
-  }, [currentTime, videoSrc, isPlaying]);
+  }, [currentTime, videoSrc, isPlaying, videoTargetTime]);
 
   const handleLoadedMetadata = () => {
     const video = videoRef.current;
@@ -275,8 +299,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       setVideoError(null);
       setIsMetadataReady(true);
       try {
-        if (Math.abs(video.currentTime - currentTime) > 0.05) {
-          video.currentTime = Math.max(0.001, currentTime);
+        const target = videoTargetTime(currentTime);
+        if (Math.abs(video.currentTime - target) > 0.05) {
+          video.currentTime = target;
         }
       } catch {}
       renderFrameRef.current();
@@ -330,9 +355,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     if (video && pendingSeekTimeRef.current !== null) {
       const nextTime = pendingSeekTimeRef.current;
       pendingSeekTimeRef.current = null;
-      if (Math.abs(video.currentTime - nextTime) > 0.08) {
+      const target = videoTargetTime(nextTime);
+      if (Math.abs(video.currentTime - target) > 0.08) {
         try {
-          video.currentTime = nextTime;
+          video.currentTime = target;
         } catch {}
       }
     }
@@ -537,8 +563,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       showTerminal,
       showSafeArea,
       backgroundVideo: videoRef.current,
+      backgroundFit: videoFit,
     });
-  }, [displayCharacters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height]);
+  }, [displayCharacters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height, videoFit]);
 
   renderFrameRef.current = renderFrame;
 
@@ -561,14 +588,15 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       // too aggressively makes long recordings stutter; only correct real
       // drift and never interrupt an in-flight seek.
       const video = videoRef.current;
+      const videoTarget = videoTargetTime(currentTimeRef.current);
       if (
         video &&
         video.readyState >= 2 &&
         !video.seeking &&
-        Math.abs(video.currentTime - currentTimeRef.current) > 0.45
+        Math.abs(video.currentTime - videoTarget) > 0.45
       ) {
         try {
-          video.currentTime = Math.max(0.001, currentTimeRef.current);
+          video.currentTime = videoTarget;
         } catch {}
       }
 
@@ -616,7 +644,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     };
     loop();
     return () => cancelAnimationFrame(raf);
-  }, [isPlaying, audioItems, tracks, duckingIntervals, duckingSettings]);
+  }, [isPlaying, audioItems, tracks, duckingIntervals, duckingSettings, videoTargetTime]);
 
   const formatTime = (seconds: number) => {
     const safe = Number.isFinite(seconds) && seconds > 0 ? seconds : 0;
@@ -653,7 +681,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               ref={videoRef}
               src={videoSrc}
               crossOrigin="anonymous"
-              className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none"
+              className="absolute inset-0 w-full h-full pointer-events-none select-none"
+              style={{ objectFit: videoFit === 'stretch' ? 'fill' : videoFit }}
               muted={isMuted}
               playsInline
               loop

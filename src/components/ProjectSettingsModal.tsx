@@ -143,6 +143,11 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       overlayFps: Math.max(1, Math.min(60, Number(timeline.overlayFps) || 15)),
       videoVolume:
         timeline.videoVolume !== undefined ? Math.max(0, Math.min(2, timeline.videoVolume)) : 1,
+      videoOffset: Math.max(0, Number(timeline.videoOffset) || 0),
+      videoFit:
+        timeline.videoFit === 'cover' || timeline.videoFit === 'stretch'
+          ? timeline.videoFit
+          : 'contain',
       ducking: {
         enabled: Boolean(timeline.ducking?.enabled ?? DEFAULT_DUCKING.enabled),
         level: Math.max(0, Math.min(1, Number(timeline.ducking?.level ?? DEFAULT_DUCKING.level))),
@@ -331,6 +336,45 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 }
                 className="w-full accent-[#3b82f6]"
               />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                Video start offset (s)
+              </span>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={timeline.videoOffset ?? 0}
+                onChange={(e) =>
+                  setTimeline((prev) => ({
+                    ...prev,
+                    videoOffset: Math.max(0, Number(e.target.value) || 0),
+                  }))
+                }
+                className={inputClass}
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                Video fit
+              </span>
+              <select
+                value={timeline.videoFit ?? 'contain'}
+                onChange={(e) =>
+                  setTimeline((prev) => ({
+                    ...prev,
+                    videoFit: e.target.value as 'contain' | 'cover' | 'stretch',
+                  }))
+                }
+                className={inputClass}
+              >
+                <option value="contain">Contain (letterbox)</option>
+                <option value="cover">Cover (crop edges)</option>
+                <option value="stretch">Stretch to frame</option>
+              </select>
             </label>
 
             <div className="col-span-2 flex items-center justify-between bg-[#101113] border border-[#242629] rounded-sm px-3 py-2">
