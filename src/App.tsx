@@ -119,17 +119,20 @@ function mergeCharacter(c: Character): Character {
     });
   }
 
-  // 古い固定座標（画面外や余白前提のズレた値）があれば安全にリセットして自動配置に任せる
-  const hasOutdatedCoords = (c.customX !== undefined && (c.customX > 1000 || c.customX < 0)) ||
-                            (c.customY !== undefined && c.customY > 350);
+  // customX/customY are pixel coordinates in the project frame. Keep saved
+  // placements as-is (resized characters can sit anywhere vertically); only
+  // drop values that are not finite numbers.
+  const validCoord = (value: number | undefined) =>
+    value === undefined || (Number.isFinite(value) && Math.abs(value) < 100000);
+  const hasInvalidCoords = !validCoord(c.customX) || !validCoord(c.customY);
 
   return {
     ...def,
     ...c,
     id: def.id,
     name: def.name,
-    customX: hasOutdatedCoords ? undefined : c.customX,
-    customY: hasOutdatedCoords ? undefined : c.customY,
+    customX: hasInvalidCoords ? undefined : c.customX,
+    customY: hasInvalidCoords ? undefined : c.customY,
     avatar: {
       ...def.avatar,
       idle,
@@ -2480,11 +2483,8 @@ export function App() {
                 customY: typeof y === 'number' && !Number.isNaN(y) ? y : undefined,
               })
             }
-            onCharacterScale={(id, scale, customY) =>
-              handleUpdateCharacter(
-                id,
-                customY === undefined ? { scale } : { scale, customY }
-              )
+            onCharacterScale={(id, scale, position) =>
+              handleUpdateCharacter(id, { scale, ...position })
             }
           />
         </div>

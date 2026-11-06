@@ -377,10 +377,16 @@ function drawTerminalWindow(
 
 export interface CharacterLayout {
   character: Character;
+  /** Visible-pixel rectangle used for outlines, hit testing and scaling. */
   x: number;
   y: number;
   width: number;
   height: number;
+  /** Full source-image rectangle, including transparent margins, used for drawing. */
+  imageX: number;
+  imageY: number;
+  imageWidth: number;
+  imageHeight: number;
   flipped: boolean;
 }
 
@@ -537,44 +543,57 @@ function computeCharacterLayout(
 
   const baseScale = (charVoice?.scale ?? char.scale ?? 1) * animScale;
   const contentSource = idleImg && idleImg.naturalWidth ? idleImg : activeImg;
+  const sourceWidth = contentSource.naturalWidth || activeImg.naturalWidth;
+  const sourceHeight = contentSource.naturalHeight || activeImg.naturalHeight;
+  const baseRatio = sourceWidth && sourceHeight ? sourceWidth / sourceHeight : 1;
+  // 全身素材(縦長)なら画面の72%、バストアップ素材なら55%を基準にアスペクト比に応じて最適スケールを自動算出
+  const targetHeightPercent = baseRatio <= 0.65 ? 0.72 : Math.max(0.54, 0.72 - (baseRatio - 0.65) * 0.35);
+  const imageHeight = height * targetHeightPercent * baseScale;
+  const imageWidth = baseRatio * imageHeight;
+
+  let imageX = 60;
+  if (char.customX !== undefined) {
+    imageX = Math.max(-imageWidth + 60, Math.min(width - 60, char.customX));
+  } else if (char.position === 'right') {
+    imageX = width - imageWidth - 60;
+  } else if (char.position === 'center') {
+    imageX = (width - imageWidth) / 2;
+  }
+  imageX += animOffsetX;
+
+  let imageY = height - imageHeight;
+  if (char.customY !== undefined) {
+    imageY = Math.max(-imageHeight * 0.2, Math.min(height - 80, char.customY));
+  }
+  imageY += animOffsetY;
+
+  // Keep customX/customY anchored to the full source image (the behaviour
+  // stored projects were authored with), while exposing a tight visible-pixel
+  // rectangle for selection, hit testing and direct scaling.
   const contentBounds = getImageContentBounds(contentSource);
   const contentWidthRatio = Math.max(0.001, contentBounds.right - contentBounds.left);
   const contentHeightRatio = Math.max(0.001, contentBounds.bottom - contentBounds.top);
-  const baseRatio =
-    contentSource.naturalWidth && contentSource.naturalHeight
-      ? (contentSource.naturalWidth * contentWidthRatio) /
-        (contentSource.naturalHeight * contentHeightRatio)
-      : 1;
-  // 全身素材(縦長)なら画面の72%、バストアップ素材なら55%を基準にアスペクト比に応じて最適スケールを自動算出
-  const targetHeightPercent = baseRatio <= 0.65 ? 0.72 : Math.max(0.54, 0.72 - (baseRatio - 0.65) * 0.35);
-  const charHeight = height * targetHeightPercent * baseScale;
-  const charWidth = baseRatio * charHeight;
-
-  let charX = 60;
-  if (char.customX !== undefined) {
-    charX = Math.max(-charWidth + 60, Math.min(width - 60, char.customX));
-  } else if (char.position === 'right') {
-    charX = width - charWidth - 60;
-  } else if (char.position === 'center') {
-    charX = (width - charWidth) / 2;
-  }
-  charX += animOffsetX;
-
-  let charY = height - charHeight;
-  if (char.customY !== undefined) {
-    charY = Math.max(-charHeight * 0.2, Math.min(height - 80, char.customY));
-  }
-  charY += animOffsetY;
-
   const flipped =
     charVoice?.flipH !== undefined ? Boolean(charVoice.flipH) : Boolean(char.flipH || char.flipX);
+  // A flipped sprite is mirrored inside its image rect, so the transparent
+  // margins swap sides. Mirror the horizontal content offset to keep the
+  // selection frame and hit area on the pixels that are actually drawn.
+  const contentLeftRatio = flipped ? 1 - contentBounds.right : contentBounds.left;
+  const contentX = imageX + contentLeftRatio * imageWidth;
+  const contentY = imageY + contentBounds.top * imageHeight;
+  const contentWidth = Math.max(1, contentWidthRatio * imageWidth);
+  const contentHeight = Math.max(1, contentHeightRatio * imageHeight);
 
   return {
     character: char,
-    x: charX,
-    y: charY,
-    width: charWidth,
-    height: charHeight,
+    x: contentX,
+    y: contentY,
+    width: contentWidth,
+    height: contentHeight,
+    imageX,
+    imageY,
+    imageWidth,
+    imageHeight,
     flipped,
     alpha,
   };
@@ -598,6 +617,10 @@ export function getCharacterLayouts(options: OverlayRenderOptions): CharacterLay
       y: layout.y,
       width: layout.width,
       height: layout.height,
+      imageX: layout.imageX,
+      imageY: layout.imageY,
+      imageWidth: layout.imageWidth,
+      imageHeight: layout.imageHeight,
       flipped: layout.flipped,
     };
   });
@@ -612,26 +635,17 @@ function drawCharacters(
   const sprites = resolveCharacterSprites(options, activeVoice, voices);
   sprites.forEach((sprite) => {
     const layout = computeCharacterLayout(sprite, options, true);
-    const { activeImg, idleImg, isSpeaking } = sprite;
-    const bounds = getImageContentBounds(idleImg && idleImg.naturalWidth ? idleImg : activeImg);
-    const contentWidth = Math.max(0.001, bounds.right - bounds.left);
-    const contentHeight = Math.max(0.001, bounds.bottom - bounds.top);
-    // The layout rect describes only the visible pixels. Expand the draw rect
-    // so the transparent margins around them fall outside the layout box.
-    const drawWidth = layout.width / contentWidth;
-    const drawHeight = layout.height / contentHeight;
-    const drawX = layout.x - bounds.left * drawWidth;
-    const drawY = layout.y - bounds.top * drawHeight;
+    const { activeImg, isSpeaking } = sprite;
 
     ctx.save();
     ctx.filter = isSpeaking ? 'none' : 'brightness(0.88)';
     ctx.globalAlpha = layout.alpha;
     if (layout.flipped) {
-      ctx.translate(layout.x + layout.width, 0);
+      ctx.translate(layout.imageX + layout.imageWidth, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(activeImg, drawX - layout.x, drawY, drawWidth, drawHeight);
+      ctx.drawImage(activeImg, 0, layout.imageY, layout.imageWidth, layout.imageHeight);
     } else {
-      ctx.drawImage(activeImg, drawX, drawY, drawWidth, drawHeight);
+      ctx.drawImage(activeImg, layout.imageX, layout.imageY, layout.imageWidth, layout.imageHeight);
     }
     ctx.restore();
   });
