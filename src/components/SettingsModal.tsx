@@ -16,20 +16,34 @@ import {
   Save,
   CheckCircle2,
   AlertCircle,
+  AlertTriangle,
   Server,
   Zap,
+  Shield,
+  ShieldCheck,
+  Stethoscope,
+  Cpu,
+  RotateCcw,
+  Info,
 } from 'lucide-react';
 import {
   loadSettingsFromConfig,
   saveSettingsToConfig,
   openConfigFolder,
   openCacheFolder,
-  loadRawSettingsJson,
-  saveRawSettingsJson,
-  loadRawCharactersJson,
-  saveRawCharactersJson,
+  loadRawConfigYaml,
+  saveRawConfigYaml,
+  loadRawCharactersYaml,
+  saveRawCharactersYaml,
+  loadConfigSources,
+  loadBootConfig,
+  runDoctorReport,
   AppSettings,
+  BootConfig,
+  ConfigSourceInfo,
   DEFAULT_APP_SETTINGS,
+  DoctorCheck,
+  DoctorReport,
 } from '../services/configService';
 import { clearAudioCache } from '../services/audioCache';
 import { ttsManager } from '../services/tts/TTSManager';
@@ -41,7 +55,31 @@ interface SettingsModalProps {
   onSettingsSaved?: (settings: AppSettings) => void;
 }
 
-type SettingsTab = 'ai' | 'tts' | 'dotfiles' | 'export' | 'keys';
+type SettingsTab = 'ai' | 'tts' | 'dotfiles' | 'export' | 'runtime' | 'doctor' | 'keys';
+
+const runtimeSignature = (settings: AppSettings): string =>
+  [
+    settings.safeMode,
+    settings.webkitDmabuf,
+    settings.webkitCompositing,
+    settings.imeBackend,
+    settings.runtimeLogLevel,
+    settings.exportWorkdir,
+  ].join('|');
+
+const DOCTOR_STYLES: Record<DoctorCheck['status'], string> = {
+  ok: 'bg-emerald-950/20 border-emerald-800 text-emerald-300',
+  info: 'bg-sky-950/20 border-sky-800 text-sky-300',
+  warn: 'bg-amber-950/20 border-amber-800 text-amber-300',
+  error: 'bg-rose-950/20 border-rose-800 text-rose-300',
+};
+
+const DOCTOR_ICONS: Record<DoctorCheck['status'], React.ComponentType<{ className?: string }>> = {
+  ok: CheckCircle2,
+  info: Info,
+  warn: AlertTriangle,
+  error: AlertCircle,
+};
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
@@ -53,6 +91,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [isSaving, setIsSaving] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [loadedRuntimeSignature, setLoadedRuntimeSignature] = useState('');
+  const [configSources, setConfigSources] = useState<ConfigSourceInfo | null>(null);
+  const [bootConfig, setBootConfig] = useState<BootConfig | null>(null);
+  const [doctorReport, setDoctorReport] = useState<DoctorReport | null>(null);
+  const [isRunningDoctor, setIsRunningDoctor] = useState(false);
 
   // Ping states
   const [isPingingAi, setIsPingingAi] = useState(false);
@@ -78,25 +121,94 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (isOpen) {
       loadSettingsFromConfig().then((s) => {
         setSettings(s);
+        setLoadedRuntimeSignature(runtimeSignature(s));
       });
+      void loadConfigSources().then(setConfigSources);
+      void loadBootConfig().then(setBootConfig);
       refreshTtsProviders();
       loadDotfileRaw('settings');
     }
   }, [isOpen]);
 
+  useEffect(() => {
+    if (isOpen && activeTab === 'doctor' && !doctorReport && !isRunningDoctor) {
+      void handleRunDoctor();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, activeTab]);
+
   const loadDotfileRaw = async (tab: 'settings' | 'characters') => {
     setRawJsonError(null);
     setRawSaveSuccess(false);
-    if (tab === 'settings') {
-      const txt = await loadRawSettingsJson();
-      setRawJsonText(txt);
-    } else {
-      const txt = await loadRawCharactersJson();
-      try {
-        setRawJsonText(JSON.stringify(JSON.parse(txt), null, 2));
-      } catch {
-        setRawJsonText(txt);
-      }
+    const txt = tab === 'settings' ? await loadRawConfigYaml() : await loadRawCharactersYaml();
+    setRawJsonText(txt);
+  };
+
+  const reloadFromDisk = async () => {
+    setStatusMessage('Reloading config.yaml from disk...');
+    const s = await loadSettingsFromConfig();
+    setSettings(s);
+    setLoadedRuntimeSignature(runtimeSignature(s));
+    setConfigSources(await loadConfigSources());
+    setBootConfig(await loadBootConfig());
+    await loadDotfileRaw(rawTab);
+    setDoctorReport(null);
+    setStatusMessage('Reloaded from ~/.config/voix/config.yaml');
+  };
+
+  const handleRunDoctor = async () => {
+    setIsRunningDoctor(true);
+    try {
+      const report = await runDoctorReport();
+      setDoctorReport(report);
+      setConfigSources(report.configSources);
+      setBootConfig(report.boot);
+    } catch (err) {
+      setDoctorReport({
+        generatedAt: new Date().toISOString(),
+        platform: 'unknown',
+        checks: [
+          {
+            id: 'doctor-failed',
+            label: 'Doctor failed',
+            status: 'error',
+            detail: String(err),
+            hint: 'Run `pnpm tauri dev -- --doctor` in a terminal for a stack-independent report.',
+          },
+        ],
+        configSources:
+          configSources || {
+            configPath: '~/.config/voix/config.yaml',
+            profilePath: null,
+            profile: null,
+            legacyConfigPath: null,
+            envOverrideKeys: [],
+            warnings: [],
+          },
+        boot:
+          bootConfig || {
+            configPath: '~/.config/voix/config.yaml',
+            legacyConfigPath: null,
+            profile: null,
+            profilePath: null,
+            configDir: '~/.config/voix',
+            cacheDir: '~/.cache/voix',
+            dataDir: '~/.local/share/voix',
+            exportWorkdir: '~/.cache/voix/export',
+            safeMode: false,
+            webkit: { dmabuf: 'auto', compositing: 'auto' },
+            ime: {
+              backend: 'auto',
+              requestedGtkImModule: null,
+              effectiveGtkImModule: null,
+              warning: null,
+            },
+            envOverrides: {},
+            warnings: [],
+          },
+      });
+    } finally {
+      setIsRunningDoctor(false);
     }
   };
 
@@ -129,15 +241,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSaveAll = async () => {
     setIsSaving(true);
-    setStatusMessage('Saving configuration to ~/.config/voix/settings.yaml...');
+    setStatusMessage('Saving configuration to ~/.config/voix/config.yaml...');
     try {
       await saveSettingsToConfig(settings);
       onSettingsSaved?.(settings);
-      setStatusMessage('Settings saved successfully to Linux dotfiles.');
+      const needsRestart = runtimeSignature(settings) !== loadedRuntimeSignature;
+      setLoadedRuntimeSignature(runtimeSignature(settings));
+      setConfigSources(await loadConfigSources());
+      setStatusMessage(
+        needsRestart
+          ? 'Saved to config.yaml. Runtime/WebKit/IME changes apply after restart.'
+          : 'Saved to ~/.config/voix/config.yaml.'
+      );
       setTimeout(() => {
         setStatusMessage(null);
         onClose();
-      }, 700);
+      }, needsRestart ? 1800 : 700);
     } catch (e) {
       setStatusMessage(`Error: ${String(e)}`);
     } finally {
@@ -192,18 +311,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
           throw new Error('YAML root must be a mapping/object');
         }
-        await saveRawSettingsJson(rawJsonText);
+        await saveRawConfigYaml(rawJsonText);
         const s = await loadSettingsFromConfig();
         setSettings(s);
+        setLoadedRuntimeSignature(runtimeSignature(s));
+        setConfigSources(await loadConfigSources());
       } else {
-        const parsed = JSON.parse(rawJsonText);
-        const formatted = JSON.stringify(parsed, null, 2);
-        await saveRawCharactersJson(formatted);
+        await saveRawCharactersYaml(rawJsonText);
       }
       setRawSaveSuccess(true);
+      setDoctorReport(null);
       setTimeout(() => setRawSaveSuccess(false), 2500);
     } catch (err: unknown) {
-      setRawJsonError(`${rawTab === 'settings' ? 'YAML' : 'JSON'} Syntax Error: ${String(err)}`);
+      setRawJsonError(`YAML Syntax Error: ${String(err)}`);
     }
   };
 
@@ -271,8 +391,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {[
                 { id: 'ai' as const, label: 'AI & Script Engine', icon: Bot, badge: 'LLM' },
                 { id: 'tts' as const, label: 'TTS Audio Providers', icon: Volume2, badge: 'VOICEVOX' },
-                { id: 'dotfiles' as const, label: 'Dotfiles & Storage', icon: FolderOpen, badge: '~/.config' },
                 { id: 'export' as const, label: 'Video & Rendering', icon: Film, badge: 'FFmpeg' },
+                { id: 'runtime' as const, label: 'Runtime & Safety', icon: Shield, badge: 'WebKit / IME' },
+                { id: 'dotfiles' as const, label: 'Dotfiles & Schema', icon: FolderOpen, badge: '~/.config' },
+                { id: 'doctor' as const, label: 'Doctor & Diagnostics', icon: Stethoscope, badge: '--doctor' },
                 { id: 'keys' as const, label: 'Keybindings', icon: Keyboard, badge: 'Cheat Sheet' },
               ].map((tab) => {
                 const Icon = tab.icon;
@@ -533,57 +655,104 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* ================= 3. DOTFILES & RAW JSON EDITOR ================= */}
+            {/* ================= 3. DOTFILES & SCHEMA EDITOR ================= */}
             {activeTab === 'dotfiles' && (
               <div className="space-y-4 h-full flex flex-col">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-3">
                   <div>
-                    <h4 className="text-sm font-semibold text-[#e3e3e3] mb-1">Linux Dotfiles (~/.config/voix/)</h4>
+                    <h4 className="text-sm font-semibold text-[#e3e3e3] mb-1">
+                      Linux Dotfiles (~/.config/voix/)
+                    </h4>
                     <p className="text-xs text-[#8e918f]">
-                      Inspect or edit the raw configuration files directly with full syntax validation.
+                      <code className="text-[#8ab4f8]">config.yaml</code> is authoritative. JSON/YAML
+                      language servers pick up the installed schemas automatically.
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={openConfigFolder}
-                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e2023] hover:bg-[#282a2e] text-[#8ab4f8] border border-[#2e3135] flex items-center gap-1.5 transition"
-                  >
-                    <FolderOpen className="w-3.5 h-3.5" />
-                    Open in File Manager
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void reloadFromDisk()}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e2023] hover:bg-[#282a2e] text-[#c4c7c5] border border-[#2e3135] flex items-center gap-1.5 transition"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Reload
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openConfigFolder}
+                      className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e2023] hover:bg-[#282a2e] text-[#8ab4f8] border border-[#2e3135] flex items-center gap-1.5 transition"
+                    >
+                      <FolderOpen className="w-3.5 h-3.5" />
+                      Open
+                    </button>
+                  </div>
+                </div>
+
+                {/* Effective config sources */}
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono">
+                  <div className="p-2.5 rounded-lg bg-[#161719] border border-[#242628] space-y-1">
+                    <div className="text-[#6b6e70] uppercase tracking-wider">Base config</div>
+                    <div className="text-[#c4c7c5] truncate" title={configSources?.configPath}>
+                      {configSources?.configPath || '~/.config/voix/config.yaml'}
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-[#161719] border border-[#242628] space-y-1">
+                    <div className="text-[#6b6e70] uppercase tracking-wider">
+                      Profile / legacy source
+                    </div>
+                    <div className="text-[#c4c7c5] truncate" title={configSources?.profilePath || undefined}>
+                      {configSources?.profilePath
+                        ? `${configSources.profile}: ${configSources.profilePath}`
+                        : configSources?.legacyConfigPath
+                          ? `legacy: ${configSources.legacyConfigPath}`
+                          : 'none'}
+                    </div>
+                  </div>
+                  {(configSources?.envOverrideKeys.length || 0) > 0 && (
+                    <div className="col-span-2 p-2.5 rounded-lg bg-[#161719] border border-[#242628]">
+                      <span className="text-[#6b6e70] uppercase tracking-wider">Env overrides: </span>
+                      <span className="text-[#8ab4f8]">
+                        {configSources?.envOverrideKeys.join(', ')}
+                      </span>
+                    </div>
+                  )}
+                  {(bootConfig?.warnings.length || 0) > 0 && (
+                    <div className="col-span-2 p-2.5 rounded-lg bg-amber-950/20 border border-amber-800 text-amber-300 space-y-1">
+                      {bootConfig?.warnings.map((warning, index) => (
+                        <div key={index}>{warning}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 {/* Sub-tabs */}
                 <div className="flex items-center justify-between border-b border-[#242628] pb-2">
                   <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRawTab('settings');
-                        loadDotfileRaw('settings');
-                      }}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono font-medium transition ${
-                        rawTab === 'settings'
-                          ? 'bg-[#004a77] text-[#c2e7ff]'
-                          : 'text-[#8e918f] hover:text-white'
-                      }`}
-                    >
-                      settings.yaml
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setRawTab('characters');
-                        loadDotfileRaw('characters');
-                      }}
-                      className={`px-3 py-1 rounded-lg text-xs font-mono font-medium transition ${
-                        rawTab === 'characters'
-                          ? 'bg-[#004a77] text-[#c2e7ff]'
-                          : 'text-[#8e918f] hover:text-white'
-                      }`}
-                    >
-                      characters.json
-                    </button>
+                    {(
+                      [
+                        { id: 'settings' as const, label: 'config.yaml' },
+                        { id: 'characters' as const, label: 'characters.yaml' },
+                      ]
+                    ).map((tab) => (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setRawTab(tab.id);
+                          void loadDotfileRaw(tab.id);
+                        }}
+                        className={`px-3 py-1 rounded-lg text-xs font-mono font-medium transition ${
+                          rawTab === tab.id
+                            ? 'bg-[#004a77] text-[#c2e7ff]'
+                            : 'text-[#8e918f] hover:text-white'
+                        }`}
+                      >
+                        {tab.label}
+                      </button>
+                    ))}
+                    <span className="text-[10px] font-mono text-[#6b6e70]">
+                      settings.yaml is a generated flat mirror
+                    </span>
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -604,13 +773,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {rawJsonError && (
-                  <div className="p-2.5 rounded-xl bg-rose-950/30 border border-rose-800 text-rose-300 text-xs font-mono">
+                  <div className="p-2.5 rounded-xl bg-rose-950/30 border border-rose-800 text-rose-300 text-xs font-mono whitespace-pre-wrap">
                     {rawJsonError}
                   </div>
                 )}
 
                 {/* Monospaced Editor */}
-                <div className="flex-1 bg-[#0f1011] border border-[#242628] rounded-xl p-3 overflow-hidden flex flex-col">
+                <div className="flex-1 bg-[#0f1011] border border-[#242628] rounded-xl p-3 overflow-hidden flex flex-col min-h-[240px]">
                   <textarea
                     value={rawJsonText}
                     onChange={(e) => setRawJsonText(e.target.value)}
@@ -841,7 +1010,307 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             )}
 
-            {/* ================= 5. KEYBINDINGS ================= */}
+            {/* ================= 5. RUNTIME & SAFETY ================= */}
+            {activeTab === 'runtime' && (
+              <div className="space-y-6 max-w-2xl">
+                <div>
+                  <h4 className="text-sm font-semibold text-[#e3e3e3] mb-1">Runtime & Safety</h4>
+                  <p className="text-xs text-[#8e918f]">
+                    Boot-time WebKit, IME and export-workdir controls. These are read before the
+                    window starts, so changes apply after a restart.
+                  </p>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-950/20 border border-amber-800 text-amber-300 text-xs flex gap-2">
+                  <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <div className="font-semibold">GNOME Shell crash mitigation</div>
+                    <p className="text-[11px] leading-relaxed">
+                      If GTK is told to use fcitx/fcitx5 but the matching GTK module is missing, GTK
+                      can fall back to IBus. On GNOME 49-51 that path has crashed gnome-shell inside
+                      libibus. <code>auto</code> picks an installed module and never silently
+                      selects IBus unless it is the only working option.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-4 bg-[#1a1b1d] rounded-2xl border border-[#2e3135] space-y-3">
+                  <label className="flex items-start gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={settings.safeMode === true}
+                      onChange={(e) => setSettings((s) => ({ ...s, safeMode: e.target.checked }))}
+                      className="accent-[#3b82f6] mt-0.5"
+                    />
+                    <span>
+                      <span className="text-xs font-semibold text-[#e3e3e3] flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                        Safe mode
+                      </span>
+                      <span className="block text-[11px] text-[#8e918f] mt-0.5">
+                        Forces DMABUF and accelerated compositing off. Use this if Voix or the
+                        desktop becomes unstable on hybrid NVIDIA systems.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {(
+                    [
+                      {
+                        key: 'webkitDmabuf' as const,
+                        title: 'WebKit DMA-BUF renderer',
+                        help: 'WEBKIT_DISABLE_DMABUF_RENDERER. `auto` disables it on NVIDIA.',
+                      },
+                      {
+                        key: 'webkitCompositing' as const,
+                        title: 'Accelerated compositing',
+                        help: 'WEBKIT_DISABLE_COMPOSITING_MODE. Turn off for flicker/crash loops.',
+                      },
+                    ]
+                  ).map((option) => (
+                    <div key={option.key} className="p-4 bg-[#1a1b1d] rounded-2xl border border-[#2e3135]">
+                      <label className="text-xs font-medium text-[#c4c7c5] block mb-2">
+                        {option.title}
+                      </label>
+                      <div className="grid grid-cols-3 gap-1.5">
+                        {(['auto', 'on', 'off'] as const).map((value) => (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() =>
+                              setSettings((s) => ({ ...s, [option.key]: value }))
+                            }
+                            className={`py-1.5 rounded-lg text-[11px] font-mono border transition ${
+                              settings[option.key] === value
+                                ? 'bg-[#004a77] text-[#c2e7ff] border-[#005c94] font-semibold'
+                                : 'bg-[#18191b] text-[#8e918f] border-[#2e3135] hover:text-white'
+                            }`}
+                          >
+                            {value}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[10px] text-[#6f7276] font-mono mt-2 leading-snug">
+                        {option.help}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="p-4 bg-[#1a1b1d] rounded-2xl border border-[#2e3135] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-[#e3e3e3] flex items-center gap-1.5">
+                      <Cpu className="w-3.5 h-3.5 text-[#8ab4f8]" />
+                      GTK input method backend
+                    </span>
+                    <code className="text-[10px] font-mono text-[#8e918f]">
+                      GTK_IM_MODULE={bootConfig?.ime.effectiveGtkImModule || 'unset'}
+                    </code>
+                  </div>
+                  <select
+                    value={settings.imeBackend || 'auto'}
+                    onChange={(e) =>
+                      setSettings((s) => ({
+                        ...s,
+                        imeBackend: e.target.value as AppSettings['imeBackend'],
+                      }))
+                    }
+                    className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                  >
+                    <option value="auto">auto (recommended)</option>
+                    <option value="keep">keep existing environment</option>
+                    <option value="wayland">wayland</option>
+                    <option value="fcitx5">fcitx5</option>
+                    <option value="fcitx">fcitx</option>
+                    <option value="ibus">ibus (risk on GNOME 49-51)</option>
+                    <option value="simple">simple</option>
+                    <option value="xim">xim</option>
+                  </select>
+                  {bootConfig?.ime.warning && (
+                    <p className="text-[10px] font-mono text-amber-300">{bootConfig.ime.warning}</p>
+                  )}
+                  <p className="text-[10px] text-[#6f7276] font-mono leading-snug">
+                    `keep` leaves GTK_IM_MODULE untouched. Explicit fcitx5/ibus is downgraded with
+                    a warning if the module is not installed.
+                  </p>
+                </div>
+
+                <div className="p-4 bg-[#1a1b1d] rounded-2xl border border-[#2e3135] space-y-3">
+                  <span className="text-xs font-semibold text-[#e3e3e3] block">
+                    Logging & export scratch space
+                  </span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] text-[#8e918f] block mb-1">Log level</label>
+                      <select
+                        value={settings.runtimeLogLevel || 'info'}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            runtimeLogLevel: e.target.value as AppSettings['runtimeLogLevel'],
+                          }))
+                        }
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      >
+                        {['error', 'warn', 'info', 'debug', 'trace'].map((level) => (
+                          <option key={level} value={level}>
+                            {level}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[#8e918f] block mb-1">
+                        Export workdir
+                      </label>
+                      <input
+                        type="text"
+                        value={settings.exportWorkdir || '~/.cache/voix/export'}
+                        onChange={(e) =>
+                          setSettings((s) => ({ ...s, exportWorkdir: e.target.value }))
+                        }
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[11px] text-[#8e918f] block mb-1">
+                        Delete stale jobs after (days)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={settings.exportKeepDays ?? 1}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            exportKeepDays: Number(e.target.value),
+                          }))
+                        }
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-[#8e918f] block mb-1">
+                        Minimum free disk (GB)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        value={settings.exportMinFreeGb ?? 2}
+                        onChange={(e) =>
+                          setSettings((s) => ({
+                            ...s,
+                            exportMinFreeGb: Number(e.target.value),
+                          }))
+                        }
+                        className="w-full bg-[#101113] border border-[#2e3135] focus:border-[#8ab4f8] rounded-xl px-3 py-2 text-xs font-mono text-[#e3e3e3] outline-none"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[#6f7276] font-mono leading-snug">
+                    Never point this at /tmp on a tmpfs: frames are full PNGs and can exhaust RAM.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* ================= 6. DOCTOR & DIAGNOSTICS ================= */}
+            {activeTab === 'doctor' && (
+              <div className="space-y-4 max-w-3xl">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h4 className="text-sm font-semibold text-[#e3e3e3] mb-1">
+                      Doctor & Diagnostics
+                    </h4>
+                    <p className="text-xs text-[#8e918f]">
+                      Environment, IME, WebKit, FFmpeg, crash and disk checks. The same report is
+                      available headlessly with <code>voix --doctor</code>.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleRunDoctor()}
+                    disabled={isRunningDoctor}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1e2023] hover:bg-[#282a2e] text-[#8ab4f8] border border-[#2e3135] flex items-center gap-1.5 transition disabled:opacity-50"
+                  >
+                    <Stethoscope
+                      className={`w-3.5 h-3.5 ${isRunningDoctor ? 'animate-pulse' : ''}`}
+                    />
+                    {isRunningDoctor ? 'Running...' : 'Re-run checks'}
+                  </button>
+                </div>
+
+                {doctorReport && (
+                  <div className="text-[10px] font-mono text-[#6b6e70] flex flex-wrap gap-x-4 gap-y-1">
+                    <span>platform: {doctorReport.platform}</span>
+                    <span>generated: {doctorReport.generatedAt}</span>
+                    <span>config: {doctorReport.configSources.configPath}</span>
+                  </div>
+                )}
+
+                {isRunningDoctor && !doctorReport && (
+                  <div className="p-4 rounded-xl bg-[#161719] border border-[#242628] text-xs text-[#8e918f] flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#8ab4f8]" />
+                    Running system checks...
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  {doctorReport?.checks.map((check) => {
+                    const Icon = DOCTOR_ICONS[check.status];
+                    return (
+                      <div
+                        key={check.id}
+                        className={`p-3 rounded-xl border text-xs ${DOCTOR_STYLES[check.status]}`}
+                      >
+                        <div className="flex items-start gap-2">
+                          <Icon className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{check.label}</span>
+                              <span className="text-[9px] font-mono uppercase opacity-70">
+                                {check.status}
+                              </span>
+                            </div>
+                            <div className="font-mono text-[11px] break-words">{check.detail}</div>
+                            {check.hint && (
+                              <div className="text-[10px] opacity-80 break-words">
+                                fix: {check.hint}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {doctorReport && doctorReport.checks.length === 0 && (
+                  <div className="p-4 rounded-xl bg-[#161719] border border-[#242628] text-xs text-[#8e918f]">
+                    No checks were returned.
+                  </div>
+                )}
+
+                {doctorReport && doctorReport.configSources.warnings.length > 0 && (
+                  <div className="p-3 rounded-xl bg-[#161719] border border-[#242628] text-[10px] font-mono text-[#8e918f] space-y-1">
+                    <div className="uppercase tracking-wider text-[#6b6e70]">
+                      Config warnings
+                    </div>
+                    {doctorReport.configSources.warnings.map((warning, index) => (
+                      <div key={index} className="text-amber-300">
+                        {warning}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ================= 7. KEYBINDINGS ================= */}
             {activeTab === 'keys' && (
               <div className="space-y-5 max-w-2xl">
                 <div>

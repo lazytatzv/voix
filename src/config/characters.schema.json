@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://voix.local/characters.schema.json",
+  "title": "Voix characters",
+  "description": "Character presets for ~/.config/voix/characters.yaml.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "characters": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "ttsProviderId", "speakerId", "avatar"],
+        "additionalProperties": true,
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "ttsProviderId": { "type": "string", "default": "voicevox" },
+          "speakerId": { "type": "integer" },
+          "styleId": { "type": "integer" },
+          "position": {
+            "type": "string",
+            "enum": ["left", "right", "center", "hidden"],
+            "default": "left"
+          },
+          "customX": { "type": "number" },
+          "customY": { "type": "number" },
+          "scale": { "type": "number" },
+          "flipH": { "type": "boolean" },
+          "voiceVolume": { "type": "number" },
+          "zIndex": { "type": "integer" },
+          "avatar": {
+            "type": "object",
+            "required": ["idle"],
+            "additionalProperties": true,
+            "properties": {
+              "idle": { "type": "string" },
+              "speaking": { "type": "string" },
+              "blinking": { "type": "string" },
+              "expressions": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              }
+            }
+          },
+          "subtitleStyle": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      }
+    }
+  }
+}

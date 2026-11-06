@@ -1,0 +1,225 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://voix.local/config.schema.json",
+  "title": "Voix configuration",
+  "description": "Configuration for ~/.config/voix/config.yaml. Legacy flat settings.yaml keys are accepted, but new files should use this nested shape.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "version": {
+      "type": "integer",
+      "const": 1,
+      "description": "Config format version."
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": true,
+      "description": "Boot-time settings. Changes here require an application restart.",
+      "properties": {
+        "safe_mode": {
+          "type": "boolean",
+          "default": false,
+          "description": "Disable risky WebKit GPU paths. Equivalent to dmabuf=off and compositing=off."
+        },
+        "log_level": {
+          "type": "string",
+          "enum": ["error", "warn", "info", "debug", "trace"],
+          "default": "info"
+        },
+        "webkit": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "dmabuf": {
+              "type": "string",
+              "enum": ["auto", "on", "off"],
+              "default": "auto",
+              "description": "off sets WEBKIT_DISABLE_DMABUF_RENDERER=1. Recommended on NVIDIA."
+            },
+            "compositing": {
+              "type": "string",
+              "enum": ["auto", "on", "off"],
+              "default": "auto",
+              "description": "off sets WEBKIT_DISABLE_COMPOSITING_MODE=1."
+            }
+          }
+        },
+        "ime": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "backend": {
+              "type": "string",
+              "enum": ["auto", "keep", "wayland", "fcitx5", "fcitx", "ibus", "simple", "xim"],
+              "default": "auto",
+              "description": "auto avoids falling back to IBus when the configured GTK IM module is not installed. On GNOME Shell 49-51 that fallback can crash the shell."
+            }
+          }
+        },
+        "export_workdir": {
+          "type": "string",
+          "default": "~/.cache/voix/export",
+          "description": "Temporary frame directory for exports. Keep this on real disk, not tmpfs."
+        },
+        "export_keep_days": {
+          "type": "number",
+          "minimum": 0,
+          "default": 1,
+          "description": "Delete unfinished export jobs older than this after startup."
+        },
+        "export_min_free_gb": {
+          "type": "number",
+          "minimum": 0,
+          "default": 2,
+          "description": "Abort an export before free disk space drops below this value."
+        }
+      }
+    },
+    "ui": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "autosave": {
+          "type": "boolean",
+          "default": true,
+          "description": "Write autosave.voix.yaml and localStorage snapshots."
+        },
+        "terminal_overlay": {
+          "type": "boolean",
+          "default": true,
+          "description": "Render terminal-style overlays for engineering videos."
+        },
+        "timeline": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "snap": {
+              "type": "boolean",
+              "default": true
+            }
+          }
+        }
+      }
+    },
+    "ai": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "provider": {
+          "type": "string",
+          "enum": ["gemini", "remote_ollama", "remote_openai", "local_persona"],
+          "default": "gemini"
+        },
+        "gemini_api_key": {
+          "type": "string",
+          "default": ""
+        },
+        "ollama": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "default": "http://192.168.1.100:11434"
+            },
+            "model": {
+              "type": "string",
+              "default": "qwen2.5:latest"
+            }
+          }
+        },
+        "openai": {
+          "type": "object",
+          "additionalProperties": true,
+          "properties": {
+            "endpoint": {
+              "type": "string",
+              "default": "http://localhost:8000/v1"
+            }
+          }
+        }
+      }
+    },
+    "tts": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "providers": {
+          "type": "array",
+          "description": "VOICEVOX-compatible speech engines.",
+          "items": {
+            "type": "object",
+            "required": ["id", "endpoint"],
+            "additionalProperties": true,
+            "properties": {
+              "id": { "type": "string" },
+              "name": { "type": "string" },
+              "endpoint": { "type": "string" },
+              "enabled": { "type": "boolean", "default": true }
+            }
+          },
+          "default": [
+            { "id": "voicevox", "name": "VOICEVOX", "endpoint": "http://localhost:50021", "enabled": true },
+            { "id": "coeiroink", "name": "COEIROINK", "endpoint": "http://localhost:50031", "enabled": true },
+            { "id": "aivis", "name": "AivisSpeech", "endpoint": "http://localhost:10101", "enabled": true }
+          ]
+        }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "output": {
+          "type": "string",
+          "default": "~/voix_output.mp4"
+        },
+        "fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 30
+        },
+        "width": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 16384,
+          "default": 1920
+        },
+        "height": {
+          "type": "integer",
+          "minimum": 2,
+          "maximum": 16384,
+          "default": 1080
+        },
+        "overlay_fps": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 120,
+          "default": 15
+        },
+        "crf": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 51,
+          "default": 20
+        },
+        "preset": {
+          "type": "string",
+          "enum": ["ultrafast", "fast", "medium", "slow"],
+          "default": "medium"
+        },
+        "background": {
+          "type": "string",
+          "default": "#0f0f11"
+        },
+        "hardware_acceleration": {
+          "type": "string",
+          "enum": ["auto", "vaapi", "nvenc", "cpu"],
+          "default": "auto",
+          "description": "Reserved for the encoder pipeline. The frame compositor currently uses x264/VP9."
+        }
+      }
+    }
+  }
+}
