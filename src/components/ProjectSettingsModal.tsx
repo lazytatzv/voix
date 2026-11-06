@@ -143,6 +143,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
       overlayFps: Math.max(1, Math.min(60, Number(timeline.overlayFps) || 15)),
       videoVolume:
         timeline.videoVolume !== undefined ? Math.max(0, Math.min(2, timeline.videoVolume)) : 1,
+      videoSpeed: Math.max(0.25, Math.min(4, Number(timeline.videoSpeed) || 1)),
       videoOffset: Math.max(0, Number(timeline.videoOffset) || 0),
       videoFit:
         timeline.videoFit === 'cover' || timeline.videoFit === 'stretch'
@@ -333,6 +334,23 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 value={timeline.videoVolume ?? 1}
                 onChange={(e) =>
                   setTimeline((prev) => ({ ...prev, videoVolume: Number(e.target.value) }))
+                }
+                className="w-full accent-[#3b82f6]"
+              />
+            </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                Video speed ({(timeline.videoSpeed ?? 1).toFixed(2)}×)
+              </span>
+              <input
+                type="range"
+                min={0.25}
+                max={4}
+                step={0.05}
+                value={timeline.videoSpeed ?? 1}
+                onChange={(e) =>
+                  setTimeline((prev) => ({ ...prev, videoSpeed: Number(e.target.value) }))
                 }
                 className="w-full accent-[#3b82f6]"
               />

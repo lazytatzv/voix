@@ -2390,6 +2390,7 @@ export function App() {
             loadError={videoLoadError}
             loading={videoLoading}
             videoOffset={project.timeline.videoOffset ?? 0}
+            videoSpeed={project.timeline.videoSpeed ?? 1}
             videoFit={project.timeline.videoFit ?? 'contain'}
             onCharacterMove={(id, x, y) =>
               handleUpdateCharacter(id, {

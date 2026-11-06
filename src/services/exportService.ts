@@ -62,6 +62,8 @@ interface AudioClipPayload {
   volume: number;
   /** Seconds trimmed from the source before the clip is placed. */
   offset: number;
+  /** Playback rate applied to the source before mixing. */
+  speed: number;
   loop_audio: boolean;
   fade_in: number;
   fade_out: number;
@@ -84,6 +86,7 @@ interface StreamExportPayload {
   preset: string;
   background_volume: number;
   video_offset: number;
+  video_speed: number;
   video_fit: string;
   audio_clips: AudioClipPayload[];
 }
@@ -288,6 +291,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
             duration: clipEnd - clipStart,
             volume: Math.max(0, item.volumeScale ?? 1),
             offset: Math.max(0, clipStart - item.startTime),
+            speed: 1,
             loop_audio: false,
             fade_in: 0,
             fade_out: 0,
@@ -334,7 +338,10 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
             start: clipStart - exportStart,
             duration: clipDuration,
             volume: Math.max(0, item.volume ?? 1),
-            offset: Math.max(0, item.offset ?? 0) + (clipStart - item.startTime),
+            offset:
+              Math.max(0, item.offset ?? 0) +
+              (clipStart - item.startTime) * Math.max(0.25, Math.min(4, item.speed ?? 1)),
+            speed: Math.max(0.25, Math.min(4, item.speed ?? 1)),
             loop_audio: Boolean(item.loop),
             fade_in: item.startTime >= exportStart ? Math.max(0, item.fadeIn ?? 0) : 0,
             fade_out: itemEnd <= exportEnd ? Math.max(0, item.fadeOut ?? 0) : 0,
@@ -366,6 +373,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
         ? 0
         : options.backgroundVolume ?? project.timeline.videoVolume ?? 1,
       video_offset: Math.max(0, project.timeline.videoOffset ?? 0),
+      video_speed: Math.max(0.25, Math.min(4, project.timeline.videoSpeed ?? 1)),
       video_fit: project.timeline.videoFit ?? 'contain',
       audio_clips: audioClips,
     };

@@ -52,6 +52,8 @@ interface VideoPreviewProps {
   videoInfo?: MediaInfo | null;
   /** Seconds into the source used at timeline position 0. */
   videoOffset?: number;
+  /** Background video playback rate. */
+  videoSpeed?: number;
   /** How the background video fills the preview frame. */
   videoFit?: 'contain' | 'cover' | 'stretch';
   /** Error from URL resolution (media server / missing file). */
@@ -84,6 +86,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   onPickVideo,
   videoInfo,
   videoOffset = 0,
+  videoSpeed = 1,
   videoFit = 'contain',
   loadError,
   loading = false,
@@ -208,11 +211,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       const reported =
         video && Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
       const sourceDuration = reported > 0 ? reported : videoInfo?.duration ?? 0;
-      let target = Math.max(0, timelineTime + Math.max(0, videoOffset));
+      let target = Math.max(
+        0,
+        timelineTime * Math.max(0.25, Math.min(4, videoSpeed)) + Math.max(0, videoOffset)
+      );
       if (sourceDuration > 0.01) target %= sourceDuration;
       return Math.max(0.001, target);
     },
-    [videoOffset, videoInfo]
+    [videoOffset, videoSpeed, videoInfo]
   );
 
   // Video play/pause following the timeline.
@@ -249,7 +255,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     const video = videoRef.current;
     if (!video) return;
     video.volume = Math.max(0, Math.min(1, videoVolume));
-  }, [videoVolume, videoSrc]);
+    video.playbackRate = Math.max(0.25, Math.min(4, videoSpeed));
+  }, [videoVolume, videoSpeed, videoSrc]);
 
   useEffect(() => {
     if (previewAudioRef.current) previewAudioRef.current.muted = isMuted;
@@ -624,7 +631,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           Math.min(1, (item.volume ?? 1) * fadeGain * duckGain)
         );
         if (isPlayingRef.current && active && tracks?.find((t) => t.id === 'audio')?.muted !== true) {
-          const expected = currentTimeRef.current - item.startTime + Math.max(0, item.offset ?? 0);
+          const speed = Math.max(0.25, Math.min(4, item.speed ?? 1));
+          let expected =
+            (currentTimeRef.current - item.startTime) * speed + Math.max(0, item.offset ?? 0);
+          if (item.loop && Number.isFinite(audio.duration) && audio.duration > 0.01) {
+            expected %= audio.duration;
+          }
+          audio.playbackRate = speed;
           if (audio.paused) {
             try {
               audio.currentTime = Math.max(0, expected);

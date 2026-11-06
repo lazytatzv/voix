@@ -162,6 +162,8 @@ export interface AudioItem extends BaseTimelineItem {
   type: 'audio';
   src: string;
   volume: number;
+  /** Playback rate for the source audio (0.25 - 4.0, default 1). */
+  speed?: number;
   /** Seconds trimmed from the start of the source audio. */
   offset?: number;
   isBgm?: boolean;
@@ -236,6 +238,8 @@ export interface TimelineSettings {
   videoPath?: string;
   /** Background video audio volume (0.0 - 2.0). */
   videoVolume?: number;
+  /** Background video playback rate (0.25 - 4.0). */
+  videoSpeed?: number;
   /** Seconds into the source video used at timeline position 0. */
   videoOffset?: number;
   /** How the background video fills the project frame. */

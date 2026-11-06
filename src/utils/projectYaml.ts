@@ -55,6 +55,7 @@ export function createEmptyProject(name = 'Untitled Project'): VoixProject {
       backgroundColor: '#0f0f11',
       overlayFps: 15,
       videoVolume: 1,
+      videoSpeed: 1,
       videoOffset: 0,
       videoFit: 'contain',
       ducking: { ...DEFAULT_DUCKING },
@@ -254,6 +255,10 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
       type: 'audio',
       src: String(rec.src ?? ''),
       volume: Number(rec.volume ?? 1),
+      speed:
+        rec.speed !== undefined && Number.isFinite(Number(rec.speed))
+          ? Math.max(0.25, Math.min(4, Number(rec.speed)))
+          : 1,
       offset: rec.offset !== undefined ? Math.max(0, Number(rec.offset)) : 0,
       isBgm: Boolean(rec.isBgm),
       loop: Boolean(rec.loop),
@@ -322,6 +327,10 @@ export function normalizeProject(raw: unknown, fallbackName = 'Untitled Project'
       overlayFps: Number(timeline.overlayFps ?? 15),
       videoPath: timeline.videoPath ? String(timeline.videoPath) : undefined,
       videoVolume: timeline.videoVolume !== undefined ? Number(timeline.videoVolume) : 1,
+      videoSpeed:
+        timeline.videoSpeed !== undefined && Number.isFinite(Number(timeline.videoSpeed))
+          ? Math.max(0.25, Math.min(4, Number(timeline.videoSpeed)))
+          : 1,
       videoOffset:
         timeline.videoOffset !== undefined && Number.isFinite(Number(timeline.videoOffset))
           ? Math.max(0, Number(timeline.videoOffset))

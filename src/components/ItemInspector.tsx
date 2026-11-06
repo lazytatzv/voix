@@ -1140,6 +1140,18 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     onChange={(value) => patch({ volume: value } as Partial<TimelineItem>)}
                   />
                   <NumberField
+                    label="Speed (×)"
+                    value={audio.speed ?? 1}
+                    step={0.05}
+                    min={0.25}
+                    max={4}
+                    onChange={(value) =>
+                      patch({
+                        speed: Math.max(0.25, Math.min(4, value)),
+                      } as Partial<TimelineItem>)
+                    }
+                  />
+                  <NumberField
                     label="Source offset (s)"
                     value={audio.offset ?? 0}
                     step={0.01}

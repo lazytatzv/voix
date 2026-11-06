@@ -891,6 +891,9 @@ pub struct ExportAudioClip {
     pub volume: f64,
     #[serde(default)]
     pub offset: f64,
+    /// Source playback rate (0.25 - 4.0).
+    #[serde(default = "default_speed")]
+    pub speed: f64,
     #[serde(default)]
     pub loop_audio: bool,
     #[serde(default)]
@@ -920,10 +923,17 @@ pub struct ExportJobPayload {
     /// Seconds into the source video used at timeline position 0.
     #[serde(default)]
     pub video_offset: f64,
+    /// Background video playback rate (0.25 - 4.0).
+    #[serde(default = "default_speed")]
+    pub video_speed: f64,
     /// `contain`, `cover`, or `stretch`.
     #[serde(default = "default_video_fit")]
     pub video_fit: String,
     pub audio_clips: Vec<ExportAudioClip>,
+}
+
+fn default_speed() -> f64 {
+    1.0
 }
 
 fn default_video_fit() -> String {
@@ -1090,6 +1100,26 @@ fn ducking_volume_expr(ducking: &ExportDucking) -> Option<String> {
         .map(|expr| format!(",volume=volume='{}':eval=frame", expr))
 }
 
+fn atempo_chain(speed: f64) -> String {
+    let mut remaining = speed.clamp(0.25, 4.0);
+    if (remaining - 1.0).abs() < 0.0001 {
+        return String::new();
+    }
+    let mut parts = Vec::new();
+    while remaining > 2.0 {
+        parts.push("atempo=2.0".to_string());
+        remaining /= 2.0;
+    }
+    while remaining < 0.5 {
+        parts.push("atempo=0.5".to_string());
+        remaining /= 0.5;
+    }
+    if (remaining - 1.0).abs() > 0.0001 {
+        parts.push(format!("atempo={:.6}", remaining));
+    }
+    parts.join(",")
+}
+
 /// Build the FFmpeg invocation shared by the streaming export. Overlay frames
 /// are read from stdin as concatenated PNGs, so no frames ever touch the disk.
 fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String), String> {
@@ -1123,7 +1153,9 @@ fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String
         let bg = expand_tilde(bg);
         // Start the background at the export range start plus the project's
         // trimmed source offset, then loop so it always covers the duration.
-        let source_start = (payload.start_time.max(0.0) + payload.video_offset.max(0.0)).max(0.0);
+        let speed = payload.video_speed.clamp(0.25, 4.0);
+        let source_start = (payload.start_time.max(0.0) * speed + payload.video_offset.max(0.0))
+            .max(0.0);
         cmd.arg("-ss").arg(format!("{:.3}", source_start));
         cmd.arg("-stream_loop").arg("-1");
         cmd.arg("-i").arg(&bg);
@@ -1164,6 +1196,12 @@ fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String
     }
 
     let mut filter = String::new();
+    let video_speed = payload.video_speed.clamp(0.25, 4.0);
+    let setpts = if (video_speed - 1.0).abs() > 0.0001 {
+        format!("setpts=PTS/{:.6},", video_speed)
+    } else {
+        String::new()
+    };
     let fit_chain = match payload.video_fit.as_str() {
         "cover" => format!(
             "scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
@@ -1178,7 +1216,8 @@ fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String
         ),
     };
     filter.push_str(&format!(
-        "[0:v]{chain},setsar=1,tpad=stop_mode=clone:stop_duration={d}[bgv];",
+        "[0:v]{pts}{chain},setsar=1,tpad=stop_mode=clone:stop_duration={d}[bgv];",
+        pts = setpts,
         chain = fit_chain,
         d = duration
     ));
@@ -1188,24 +1227,38 @@ fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String
 
     let mut amix_labels: Vec<String> = Vec::new();
     if has_bg_audio && payload.background_volume > 0.001 {
-        filter.push_str(&format!(
-            "[0:a]aformat=sample_rates=48000:channel_layouts=stereo,volume={}[abg];",
-            payload.background_volume
-        ));
+        let mut chain = String::from(
+            "[0:a]aformat=sample_rates=48000:channel_layouts=stereo",
+        );
+        let atempo = atempo_chain(video_speed);
+        if !atempo.is_empty() {
+            chain.push_str(&format!(",{}", atempo));
+        }
+        chain.push_str(&format!(",volume={}[abg];", payload.background_volume));
+        filter.push_str(&chain);
         amix_labels.push("[abg]".to_string());
     }
 
     for (i, clip) in audio_input_indices.iter().enumerate() {
         let input_idx = 2 + i;
         let offset = clip.offset.max(0.0);
-        let source_end = offset + clip.duration.max(0.05);
+        let speed = if clip.speed.is_finite() {
+            clip.speed.clamp(0.25, 4.0)
+        } else {
+            1.0
+        };
+        let source_end = offset + clip.duration.max(0.05) * speed;
         let mut chain = format!(
-            "[{}:a]atrim=start={}:end={},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo,volume={}",
+            "[{}:a]atrim=start={}:end={},asetpts=PTS-STARTPTS,aformat=sample_rates=48000:channel_layouts=stereo",
             input_idx,
             offset,
-            source_end,
-            clip.volume.max(0.0)
+            source_end
         );
+        let atempo = atempo_chain(speed);
+        if !atempo.is_empty() {
+            chain.push_str(&format!(",{}", atempo));
+        }
+        chain.push_str(&format!(",volume={}", clip.volume.max(0.0)));
         if clip.fade_in > 0.001 {
             chain.push_str(&format!(",afade=t=in:st=0:d={}", clip.fade_in));
         }
