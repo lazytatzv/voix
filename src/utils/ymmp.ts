@@ -251,6 +251,10 @@ function estimateTextWidth(text: string, fontSize: number): number {
   }, 0));
 }
 
+function normalizeNewlines(value: unknown): string {
+  return String(value ?? '').replace(/\r\n?/g, '\n');
+}
+
 function toTextItem(
   raw: Rec,
   index: number,
@@ -258,7 +262,7 @@ function toTextItem(
   frameWidth: number,
   frameHeight: number
 ): TextItem | null {
-  const text = String(raw.Text ?? '');
+  const text = normalizeNewlines(raw.Text);
   if (!text) return null;
   const startTime = asNumber(raw.Frame) / fps;
   const duration = Math.max(0.05, asNumber(raw.Length) / fps);
@@ -319,7 +323,7 @@ function toVoiceItem(
   characters: Map<string, Character>,
   fallbackCharacter?: Character
 ): VoiceItem | null {
-  const text = String(raw.Serif ?? raw.Text ?? '').trim();
+  const text = normalizeNewlines(raw.Serif ?? raw.Text).trim();
   if (!text) return null;
   const characterName = String(raw.CharacterName ?? '').trim();
   const character =
@@ -333,6 +337,8 @@ function toVoiceItem(
   const pitchScale = Math.min(0.3, Math.max(-0.3, Math.abs(pitchRaw) > 1 ? pitchRaw / 100 : pitchRaw));
   const intonationRaw = asNumber(parameter.Intonation, 1);
   const intonationScale = Math.min(2, Math.max(0, intonationRaw > 3 ? intonationRaw / 100 : intonationRaw));
+  const volumeRaw = valueOf(raw.Volume, 100);
+  const volumeScale = Math.min(2, Math.max(0, volumeRaw > 4 ? volumeRaw / 100 : volumeRaw));
   return {
     id: `ymmp_voice_${index}`,
     type: 'voice',
@@ -351,7 +357,7 @@ function toVoiceItem(
     prePhonemeLength: Math.max(0, asNumber(parameter.PrePhonemeLength, 0.1)),
     postPhonemeLength: Math.max(0, asNumber(parameter.PostPhonemeLength, 0.2)),
     pauseLengthScale: Math.min(3, Math.max(0.1, asNumber(parameter.PauseLengthScale, 1))),
-    volumeScale: 1,
+    volumeScale,
     anim: 'bounce',
     isSynthesizing: false,
   };

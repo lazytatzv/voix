@@ -35,8 +35,9 @@ function makeYmmp() {
             Frame: 60,
             Length: 240,
             Layer: 1,
-            Serif: 'こんにちはなのだ！',
+            Serif: 'こんにちはなのだ！\r\n今日も元気？',
             CharacterName: 'ずんだもん（あまあま）',
+            Volume: { Values: [{ Value: 50 }] },
             VoiceParameter: {
               Speed: 120,
               Pitch: 5,
@@ -141,7 +142,7 @@ describe('parseYmmpProject', () => {
       type: 'voice',
       startTime: 1,
       duration: 4,
-      text: 'こんにちはなのだ！',
+      text: 'こんにちはなのだ！\n今日も元気？',
       characterId: 'zundamon',
       speedScale: 1.2,
       pitchScale: 0.05,
@@ -149,6 +150,7 @@ describe('parseYmmpProject', () => {
       prePhonemeLength: 0.15,
       postPhonemeLength: 0.25,
       pauseLengthScale: 1.5,
+      volumeScale: 0.5,
     });
 
     const text = result.project.items.find((item) => item.type === 'text');
