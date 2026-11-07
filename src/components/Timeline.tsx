@@ -20,6 +20,9 @@ import {
   Scissors,
   Flag,
   Copy,
+  ChevronLeft,
+  ChevronRight,
+  ArrowLeftToLine,
 } from 'lucide-react';
 import { Character, ItemType, Marker, TimelineItem, TrackKind, TrackState } from '../types';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
@@ -45,6 +48,8 @@ interface TimelineProps {
   onSelectItem: (id: string | null, additive?: boolean) => void;
   onDeleteItem: (id: string) => void;
   onDeleteItems?: (ids: string[]) => void;
+  onRippleDeleteSelected?: () => void;
+  onNudgeSelected?: (direction: -1 | 1) => void;
   onDuplicateSelected?: () => void;
   onAddItem: (type: ItemType) => void;
   onUpdateTrack: (id: TrackKind, updates: Partial<TrackState>) => void;
@@ -161,6 +166,8 @@ export const Timeline: React.FC<TimelineProps> = ({
   onSelectItem,
   onDeleteItem,
   onDeleteItems,
+  onRippleDeleteSelected,
+  onNudgeSelected,
   onDuplicateSelected,
   onAddItem,
   onUpdateTrack,
@@ -549,6 +556,26 @@ export const Timeline: React.FC<TimelineProps> = ({
                   Duplicate
                 </button>
               )}
+              {onNudgeSelected && (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onNudgeSelected(-1)}
+                    className="px-1 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#c4c7c5] hover:text-white border border-[#2e3135]"
+                    title="Nudge selected items left by one frame (Alt+←)"
+                  >
+                    <ChevronLeft className="w-3 h-3" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onNudgeSelected(1)}
+                    className="px-1 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#c4c7c5] hover:text-white border border-[#2e3135]"
+                    title="Nudge selected items right by one frame (Alt+→)"
+                  >
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </>
+              )}
               {onSplitSelected && selectedItemIds.length === 1 && (
                 <button
                   type="button"
@@ -558,6 +585,17 @@ export const Timeline: React.FC<TimelineProps> = ({
                 >
                   <Scissors className="w-3 h-3" />
                   Split
+                </button>
+              )}
+              {onRippleDeleteSelected && (
+                <button
+                  type="button"
+                  onClick={onRippleDeleteSelected}
+                  className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-rose-400 hover:text-rose-300 border border-[#2e3135] flex items-center gap-1"
+                  title="Ripple delete selected items and close the gap (Shift+Delete)"
+                >
+                  <ArrowLeftToLine className="w-3 h-3" />
+                  Ripple
                 </button>
               )}
               <button

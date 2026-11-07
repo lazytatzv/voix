@@ -18,6 +18,7 @@ import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { ItemInspector } from './components/ItemInspector';
 import { addSnapshotKeyframe } from './render/keyframes';
 import { parseSrt } from './utils/srt';
+import { nudgeTimelineItems, rippleDeleteTimelineItems } from './utils/timelineEdit';
 import {
   AudioItem,
   Character,
@@ -159,6 +160,19 @@ function sanitizeCharacterList(list: Character[]): Character[] {
     result.push(merged);
   });
   return result;
+}
+
+/** True when any requested item or its track is locked. */
+function selectionHasLockedItems(project: VoixProject, ids: string[]): boolean {
+  const idSet = new Set(ids);
+  return project.items.some((item) => {
+    if (!idSet.has(item.id)) return false;
+    const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
+    return Boolean(
+      item.locked ||
+        project.tracks?.find((track) => track.id === trackKind)?.locked
+    );
+  });
 }
 
 function loadInitialProject(): VoixProject {
@@ -1375,15 +1389,7 @@ export function App() {
     (ids: string[]) => {
       if (ids.length === 0) return;
       const idSet = new Set(ids);
-      const hasLocked = projectRef.current.items.some((item) => {
-        if (!idSet.has(item.id)) return false;
-        const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
-        return (
-          item.locked ||
-          projectRef.current.tracks?.find((track) => track.id === trackKind)?.locked
-        );
-      });
-      if (hasLocked) {
+      if (selectionHasLockedItems(projectRef.current, ids)) {
         setToast('Track is locked. Unlock it before deleting items.');
         return;
       }
@@ -1402,6 +1408,42 @@ export function App() {
   const handleDeleteItem = useCallback(
     (id: string) => handleDeleteItems([id]),
     [handleDeleteItems]
+  );
+
+  /** Move selected items by a time delta (one frame by default from the UI). */
+  const handleNudgeItems = useCallback(
+    (ids: string[], delta: number) => {
+      if (ids.length === 0 || delta === 0) return;
+      const current = projectRef.current.items;
+      if (nudgeTimelineItems(current, ids, delta) === current) return;
+      commitProject((previous) => ({
+        ...previous,
+        items: nudgeTimelineItems(previous.items, ids, delta),
+      }));
+    },
+    [commitProject]
+  );
+
+  /** Delete items and close the gaps they leave behind. */
+  const handleRippleDeleteItems = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      if (selectionHasLockedItems(projectRef.current, ids)) {
+        setToast('Track is locked. Unlock it before deleting items.');
+        return;
+      }
+      const result = rippleDeleteTimelineItems(projectRef.current.items, ids);
+      if (result.removed === 0) return;
+      const idSet = new Set(ids);
+      commitProject((previous) => ({ ...previous, items: result.items }));
+      setSelectedItemId((current) => (current && idSet.has(current) ? null : current));
+      setSelectedItemIds((previous) => previous.filter((id) => !idSet.has(id)));
+      setInspectedItemId((current) => (current && idSet.has(current) ? null : current));
+      setToast(
+        `Ripple deleted ${result.removed} item${result.removed === 1 ? '' : 's'} · closed ${result.removedDuration.toFixed(2)}s`
+      );
+    },
+    [commitProject]
   );
 
   const handleDuplicateItems = useCallback(
@@ -2328,8 +2370,15 @@ export function App() {
       if (event.key === 'Delete' || event.key === 'Backspace') {
         event.preventDefault();
         const selection = selectedItemIdsRef.current;
-        if (selection.length > 0) handleDeleteItems(selection);
-        else if (selectedItemIdRef.current) handleDeleteItems([selectedItemIdRef.current]);
+        const ids =
+          selection.length > 0
+            ? selection
+            : selectedItemIdRef.current
+              ? [selectedItemIdRef.current]
+              : [];
+        if (ids.length === 0) return;
+        if (event.shiftKey) handleRippleDeleteItems(ids);
+        else handleDeleteItems(ids);
         return;
       }
       if (event.key.toLowerCase() === 's') {
@@ -2345,6 +2394,22 @@ export function App() {
       if (event.key.toLowerCase() === 'k') {
         event.preventDefault();
         handleAddKeyframeAtPlayhead();
+        return;
+      }
+      if (
+        event.altKey &&
+        (event.key === 'ArrowLeft' || event.key === 'ArrowRight') &&
+        (selectedItemIdsRef.current.length > 0 || selectedItemIdRef.current)
+      ) {
+        event.preventDefault();
+        const selection =
+          selectedItemIdsRef.current.length > 0
+            ? selectedItemIdsRef.current
+            : [selectedItemIdRef.current!];
+        const step = event.shiftKey
+          ? 1
+          : 1 / (projectRef.current.timeline.fps || 30);
+        handleNudgeItems(selection, event.key === 'ArrowLeft' ? -step : step);
         return;
       }
       if (event.key === 'ArrowLeft') {
@@ -2363,6 +2428,8 @@ export function App() {
   }, [
     handleCopyItems,
     handleDeleteItems,
+    handleNudgeItems,
+    handleRippleDeleteItems,
     handleDuplicateItems,
     handleAddKeyframeAtPlayhead,
     handleAddMarker,
@@ -2646,6 +2713,13 @@ export function App() {
             }}
             onDeleteItem={handleDeleteItem}
             onDeleteItems={handleDeleteItems}
+            onRippleDeleteSelected={() => handleRippleDeleteItems(selectedItemIdsRef.current)}
+            onNudgeSelected={(direction) =>
+              handleNudgeItems(
+                selectedItemIdsRef.current,
+                direction / (project.timeline.fps || 30)
+              )
+            }
             onDuplicateSelected={() => handleDuplicateItems(selectedItemIdsRef.current)}
             onAddItem={handleAddItem}
             onUpdateTrack={updateTrack}

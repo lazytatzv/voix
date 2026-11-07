@@ -1323,6 +1323,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="bg-[#18191b] rounded-2xl border border-[#282a2c] divide-y divide-[#242628] overflow-hidden">
                   {[
                     { key: 'Space', desc: 'Play / Pause video preview playback' },
+                    { key: 'Alt + ← / →', desc: 'Nudge selected timeline items by one frame' },
+                    { key: 'Alt + Shift + ← / →', desc: 'Nudge selected timeline items by one second' },
+                    { key: 'Shift + Delete', desc: 'Ripple delete selected items and close the gap' },
                     { key: 'Ctrl + Enter', desc: 'Batch apply & synthesize RAW script to timeline' },
                     { key: 'Ctrl + S', desc: 'Save project (.voix file)' },
                     { key: 'Ctrl + ,', desc: 'Open Settings (Preferences)' },
