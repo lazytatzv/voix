@@ -25,3 +25,6 @@ target/
 !.vscode/extensions.json
 .idea
 .DS_Store
+
+# Local pnpm settings (generated with placeholder approvals)
+pnpm-workspace.yaml
