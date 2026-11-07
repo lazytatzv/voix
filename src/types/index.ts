@@ -90,6 +90,12 @@ export interface SubtitleStyle {
   fontSize: number;
   fontFamily: string;
   fontWeight: '600' | '700' | '800' | '900';
+  /** Line-height multiplier (default 1.32). */
+  lineHeight?: number;
+  /** Extra spacing between characters in project pixels. */
+  letterSpacing?: number;
+  /** Draw Japanese-style vertical text (columns run top to bottom). */
+  vertical?: boolean;
 
   // 縁取り 1 (メイン)
   strokeColor: string;

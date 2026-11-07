@@ -63,7 +63,7 @@ function makeProject(): VoixProject {
       name: 'Caption',
       text: 'YAML → timeline',
       effects: { blur: 3, brightness: 1.1, hueRotate: -15 },
-      style: { ...DEFAULT_SUBTITLE_STYLE, fontSize: 64, bgStyle: 'pill' },
+      style: { ...DEFAULT_SUBTITLE_STYLE, fontSize: 64, bgStyle: 'pill', lineHeight: 1.5, letterSpacing: 2, vertical: true },
       xPercent: 42,
       yPercent: 30,
       widthPercent: 75,
@@ -154,6 +154,9 @@ describe('project YAML roundtrip', () => {
 
     const text = restored.items.find((item) => item.id === 'text_1');
     expect(text?.type === 'text' && text.style.fontSize).toBe(64);
+    expect(text?.type === 'text' && text.style.lineHeight).toBe(1.5);
+    expect(text?.type === 'text' && text.style.letterSpacing).toBe(2);
+    expect(text?.type === 'text' && text.style.vertical).toBe(true);
     expect(text?.type === 'text' && text.align).toBe('left');
     expect(text?.effects).toEqual({ blur: 3, brightness: 1.1, hueRotate: -15 });
     expect(text?.keyframes).toEqual([

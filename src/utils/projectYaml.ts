@@ -169,6 +169,15 @@ function normalizeStyle(raw: unknown, fallback: SubtitleStyle = DEFAULT_SUBTITLE
     fontSize: Number(rec.fontSize ?? fallback.fontSize) || fallback.fontSize,
     fontFamily: String(rec.fontFamily ?? fallback.fontFamily),
     fontWeight: (rec.fontWeight as SubtitleStyle['fontWeight']) || fallback.fontWeight,
+    lineHeight:
+      rec.lineHeight !== undefined && Number.isFinite(Number(rec.lineHeight))
+        ? Math.max(0.6, Math.min(3, Number(rec.lineHeight)))
+        : fallback.lineHeight,
+    letterSpacing:
+      rec.letterSpacing !== undefined && Number.isFinite(Number(rec.letterSpacing))
+        ? Math.max(-20, Math.min(80, Number(rec.letterSpacing)))
+        : fallback.letterSpacing,
+    vertical: rec.vertical !== undefined ? Boolean(rec.vertical) : fallback.vertical,
     strokeColor: String(rec.strokeColor ?? fallback.strokeColor),
     strokeWidth: Number(rec.strokeWidth ?? fallback.strokeWidth) || 0,
     bgStyle: (rec.bgStyle as SubtitleStyle['bgStyle']) || fallback.bgStyle,

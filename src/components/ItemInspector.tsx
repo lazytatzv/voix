@@ -1010,6 +1010,22 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                       className={inputClass}
                     />
                   </Field>
+                  <NumberField
+                    label="Line height (×)"
+                    value={style.lineHeight ?? 1.32}
+                    step={0.05}
+                    min={0.6}
+                    max={3}
+                    onChange={(value) => patchStyle({ lineHeight: value })}
+                  />
+                  <NumberField
+                    label="Letter spacing (px)"
+                    value={style.letterSpacing ?? 0}
+                    step={0.5}
+                    min={-20}
+                    max={80}
+                    onChange={(value) => patchStyle({ letterSpacing: value })}
+                  />
                   <ColorField
                     label="Fill"
                     value={style.textColor}
@@ -1082,6 +1098,15 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                       className="accent-[#3b82f6]"
                     />
                     Drop shadow
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer col-span-2">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(style.vertical)}
+                      onChange={(e) => patchStyle({ vertical: e.target.checked })}
+                      className="accent-[#3b82f6]"
+                    />
+                    Vertical writing (縦書き)
                   </label>
                   </div>
                 </section>

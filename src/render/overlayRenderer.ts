@@ -89,12 +89,15 @@ function activeVoiceAt(items: TimelineItem[], time: number): VoiceItem | undefin
 function wrapText(
   ctx: CanvasRenderingContext2D,
   text: string,
-  maxWidth: number
+  maxWidth: number,
+  letterSpacing = 0
 ): string[] {
+  const measure = (value: string) =>
+    ctx.measureText(value).width + letterSpacing * Math.max(0, value.length - 1);
   const explicit = text.split('\n');
   const lines: string[] = [];
   for (const paragraph of explicit) {
-    if (ctx.measureText(paragraph).width <= maxWidth) {
+    if (measure(paragraph) <= maxWidth) {
       lines.push(paragraph);
       continue;
     }
@@ -104,7 +107,7 @@ function wrapText(
       if (char === '(' || char === '（' || char === '[' || char === '［') parenDepth++;
       if (char === ')' || char === '）' || char === ']' || char === '］') parenDepth = Math.max(0, parenDepth - 1);
       const next = current + char;
-      if (ctx.measureText(next).width > maxWidth && current.length > 0 && parenDepth === 0) {
+      if (measure(next) > maxWidth && current.length > 0 && parenDepth === 0) {
         // Prefer breaking after Japanese punctuation / spaces.
         const breakMatch = current.match(/^([\s\S]*[、。！？!?，,])/);
         if (breakMatch && breakMatch[1].length >= current.length * 0.55) {
@@ -141,8 +144,184 @@ interface StyledTextOptions {
   lineHeight?: number;
 }
 
+/**
+ * Japanese vertical writing: each newline starts a new column, characters run
+ * top to bottom, and ruby annotations are stacked to the right of the base
+ * characters. Kept separate from the horizontal path so line breaking and
+ * background plates can follow different geometry.
+ */
+function drawVerticalStyledText(
+  ctx: CanvasRenderingContext2D,
+  options: StyledTextOptions,
+  style: SubtitleStyle
+) {
+  const rubyMode = style.rubyDisplay || 'above';
+  let displayText = options.text || '';
+  if (rubyMode === 'hidden') displayText = getSubtitleDisplayText(displayText);
+  const centerX = options.centerX + (options.offsetX ?? 0);
+  const centerY = options.centerY + (options.offsetY ?? 0);
+  const fontSize = style.fontSize || 48;
+  const font = `${style.fontWeight || '900'} ${fontSize}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
+  const columnGap = fontSize * (style.lineHeight ?? 1.32);
+  const charAdvance = Math.max(fontSize * 0.5, fontSize + (style.letterSpacing ?? 0));
+  const align = options.align || style.align || 'center';
+  const columns = displayText.split('\n');
+  const columnCount = Math.max(1, columns.length);
+  const maxRows = Math.max(
+    1,
+    ...columns.map((line) => Array.from(getSubtitleDisplayText(line)).length)
+  );
+  const blockHeight = maxRows * charAdvance;
+  const blockTop = centerY - blockHeight / 2 + charAdvance / 2;
+
+  let firstX = centerX - ((columnCount - 1) * columnGap) / 2;
+  if (align === 'left') {
+    firstX = centerX - options.maxWidth / 2 + columnGap / 2;
+  } else if (align === 'right') {
+    firstX = centerX + options.maxWidth / 2 - ((columnCount - 1) * columnGap) - columnGap / 2;
+  }
+
+  interface Glyph {
+    char: string;
+    row: number;
+    x: number;
+    reading?: string;
+  }
+
+  const glyphs: Glyph[] = [];
+  columns.forEach((line, columnIndex) => {
+    const columnX = firstX + columnIndex * columnGap;
+    const tokens =
+      rubyMode === 'above' || rubyMode === 'inline'
+        ? parsePronunciationTokens(line)
+        : [{ text: line }];
+    let row = 0;
+    tokens.forEach((token) => {
+      Array.from(token.text).forEach((char, charIndex) => {
+        glyphs.push({
+          char,
+          row,
+          x: columnX,
+          reading: charIndex === 0 ? token.reading : undefined,
+        });
+        row += 1;
+      });
+    });
+  });
+
+  ctx.save();
+  ctx.globalAlpha = options.opacity ?? 1;
+  ctx.font = font;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineJoin = 'round';
+  ctx.miterLimit = 2;
+
+  const scale = options.scale ?? 1;
+  if (options.rotation || scale !== 1) {
+    ctx.translate(centerX, centerY);
+    if (options.rotation) ctx.rotate((options.rotation * Math.PI) / 180);
+    if (scale !== 1) ctx.scale(scale, scale);
+    ctx.translate(-centerX, -centerY);
+  }
+
+  if (style.bgStyle === 'pill' || style.bgStyle === 'banner') {
+    const plateWidth = fontSize + 26;
+    const columnRows = new Map<number, number>();
+    glyphs.forEach((glyph) => {
+      const columnIndex = Math.round((glyph.x - firstX) / columnGap);
+      columnRows.set(columnIndex, Math.max(columnRows.get(columnIndex) ?? 0, glyph.row + 1));
+    });
+    ctx.fillStyle = style.bgColor || 'rgba(12, 13, 17, 0.82)';
+    columnRows.forEach((rows, columnIndex) => {
+      const x = firstX + columnIndex * columnGap;
+      const height = rows * charAdvance + 26;
+      roundRectPath(
+        ctx,
+        x - plateWidth / 2,
+        blockTop - charAdvance / 2 - 13,
+        plateWidth,
+        height,
+        style.bgStyle === 'banner' ? 2 : 14
+      );
+      ctx.fill();
+    });
+  }
+
+  const applyShadow = () => {
+    if (!style.hasShadow) return;
+    ctx.shadowColor = style.shadowColor || 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur = style.shadowBlur ?? 8;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = style.shadowOffsetY ?? 4;
+  };
+  const clearShadow = () => {
+    ctx.shadowColor = 'transparent';
+    ctx.shadowBlur = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+  };
+
+  const paintLayer = (mode: 'outerStroke' | 'innerStroke' | 'fill') => {
+    ctx.font = font;
+    ctx.textAlign = 'center';
+    glyphs.forEach((glyph) => {
+      const y = blockTop + glyph.row * charAdvance;
+      if (mode === 'outerStroke') {
+        ctx.lineWidth = style.outerStrokeWidth || 0;
+        ctx.strokeStyle = style.outerStrokeColor || 'transparent';
+        if (ctx.lineWidth > 0) ctx.strokeText(glyph.char, glyph.x, y);
+      } else if (mode === 'innerStroke') {
+        ctx.lineWidth = style.strokeWidth || 0;
+        ctx.strokeStyle = style.strokeColor || 'transparent';
+        if (ctx.lineWidth > 0) ctx.strokeText(glyph.char, glyph.x, y);
+      } else {
+        ctx.fillStyle = style.textColor || '#ffffff';
+        ctx.fillText(glyph.char, glyph.x, y);
+      }
+    });
+  };
+
+  if ((style.outerStrokeWidth || 0) > 0) {
+    applyShadow();
+    paintLayer('outerStroke');
+    clearShadow();
+  }
+  if ((style.strokeWidth || 0) > 0) paintLayer('innerStroke');
+  if ((style.outerStrokeWidth || 0) <= 0) {
+    applyShadow();
+    paintLayer('fill');
+    clearShadow();
+  } else {
+    paintLayer('fill');
+  }
+
+  if (rubyMode === 'above') {
+    const rubySize = Math.max(12, Math.round(fontSize * 0.36));
+    const rubyAdvance = rubySize * 1.05;
+    ctx.font = `700 ${rubySize}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
+    ctx.fillStyle = style.textColor || '#ffffff';
+    ctx.textAlign = 'center';
+    glyphs.forEach((glyph) => {
+      if (!glyph.reading) return;
+      const y = blockTop + glyph.row * charAdvance;
+      const chars = Array.from(glyph.reading);
+      const startY = y - ((chars.length - 1) * rubyAdvance) / 2;
+      chars.forEach((char, index) => {
+        ctx.fillText(char, glyph.x + fontSize * 0.64, startY + index * rubyAdvance);
+      });
+    });
+  }
+
+  ctx.restore();
+}
+
 function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOptions) {
   const style = { ...FALLBACK_STYLE, ...options.style };
+  if (style.vertical) {
+    drawVerticalStyledText(ctx, options, style);
+    return;
+  }
   const align = options.align || style.align || 'center';
   const rubyMode = style.rubyDisplay || 'above';
   let displayText = options.text || '';
@@ -158,8 +337,15 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
 
-  const lines = wrapText(ctx, displayText, Math.max(40, options.maxWidth));
-  const lineHeight = (style.fontSize || 48) * (options.lineHeight ?? 1.32);
+  const lines = wrapText(
+    ctx,
+    displayText,
+    Math.max(40, options.maxWidth),
+    style.letterSpacing ?? 0
+  );
+  const lineHeight =
+    (style.fontSize || 48) *
+    (style.lineHeight ?? options.lineHeight ?? 1.32);
   const totalHeight = (lines.length - 1) * lineHeight;
   const blockTop = centerY - totalHeight / 2;
 
@@ -181,7 +367,10 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
 
     ctx.font = font;
     const tokenWidths = tokens.map((t) => ctx.measureText(t.text).width);
-    const lineWidth = tokenWidths.reduce((sum, w) => sum + w, 0);
+    const letterSpacing = style.letterSpacing ?? 0;
+    const lineWidth =
+      tokenWidths.reduce((sum, w) => sum + w, 0) +
+      letterSpacing * Math.max(0, tokens.length - 1);
     const leftX =
       align === 'center'
         ? centerX - lineWidth / 2
@@ -274,7 +463,7 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
           ctx.textAlign = 'left';
           ctx.font = font;
         }
-        cursor += tokenWidth;
+        cursor += tokenWidth + letterSpacing;
       });
     };
 

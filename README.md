@@ -14,6 +14,7 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 - **WYSIWYGプレビュー** — プレビューと書き出しが同じ Canvas コンポジター（`src/render/overlayRenderer.ts`）を使うため、見た目と出力が一致します。立ち絵はプレビュー上で直接ドラッグ配置でき、枠・中央・下端へスナップします。
 - **テロップ・画像モーション** — フェードイン/アウトに加えて、スライド・ズーム・ポップの登場/退場アニメーションをアイテム単位で設定できます。タイミングはプレビューと書き出しで共通です。
 - **アイテム別ビジュアルエフェクト** — テロップ・画像ごとに明るさ・コントラスト・彩度・ぼかし・色相回転・グレースケール・セピア・反転を調整できます。Canvasフィルターとしてプレビューと書き出しの両方に適用されます。
+- **縦書き・行間・字間** — テロップは日本語の縦書き（縦組み）に対応し、行間と字間を数値で調整できます。プレビューと書き出しで同じレイアウトを使います。
 - **キーフレーム** — テロップ・画像の位置、拡大率、回転、不透明度を複数キーで打てます。線形・イーズイン/アウト・ホールドで補間し、`K` キーまたはインスペクターから追加。YAMLにも保存され、プレビューと書き出しで同じ補間を使います。
 - **音声・動画の速度調整** — BGM/SE は 0.25〜4× の再生速度、背景動画も開始オフセット・速度・フィット（contain / cover / stretch）をプロジェクト設定から調整できます。速度はプレビューとFFmpeg書き出しの両方に反映されます。
 - **BGMダッキング** — セリフ中だけBGMを自動で下げ、話し終わると滑らかに戻します。下げ幅・アタック・リリースはプロジェクト設定で調整でき、プレビューと書き出しの両方に同じカーブが適用されます。
@@ -181,7 +182,7 @@ markers:
 ### 種類別フィールド
 
 - **voice**: `characterId`, `text`, `subtitleText`, `expression`, `speedScale`, `pitchScale`, `volumeScale`, `intonationScale`, `prePhonemeLength`, `postPhonemeLength`, `pauseLengthScale`, `audioKey`, `phonemes`, `terminal: { cmd, output }`, `se`, `anim`, `flipH`, `scale`
-- **text**: `text`, `style`（`fontSize`, `fontFamily`, `textColor`, `strokeColor`, `strokeWidth`, `outerStrokeColor`, `outerStrokeWidth`, `bgStyle`, `bgColor`, `hasShadow`, `rubyDisplay` など）, `xPercent`, `yPercent`, `widthPercent`, `align`, `rotation`, `opacity`
+- **text**: `text`, `style`（`fontSize`, `fontFamily`, `textColor`, `strokeColor`, `strokeWidth`, `outerStrokeColor`, `outerStrokeWidth`, `lineHeight`, `letterSpacing`, `vertical`, `bgStyle`, `bgColor`, `hasShadow`, `rubyDisplay` など）, `xPercent`, `yPercent`, `widthPercent`, `align`, `rotation`, `opacity`
 - **image**: `x`, `y`, `width`, `height`, `rotation`, `opacity`, `flipH`
 - **audio**: `volume`, `speed`（0.25-4倍速）, `offset`（曲の頭出し秒）, `isBgm`, `loop`, `fadeIn`, `fadeOut`
 - **video**: `volume`, `offsetTime`
