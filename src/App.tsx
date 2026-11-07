@@ -15,6 +15,7 @@ import { AiVideoGeneratorModal } from './components/AiVideoGeneratorModal';
 import { TachieImportModal } from './components/TachieImportModal';
 import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
+import { AssetAuditModal } from './components/AssetAuditModal';
 import { ItemInspector } from './components/ItemInspector';
 import { addSnapshotKeyframe } from './render/keyframes';
 import { parseSrt } from './utils/srt';
@@ -52,6 +53,9 @@ import {
 } from './utils/projectYaml';
 import { loadCharactersFromConfig, loadSettingsFromConfig, saveCharactersToConfig } from './services/configService';
 import { describeYmmpImport, openYmmpProject, readYmmpPath } from './services/ymmpImport';
+import { auditProjectAssets, describeMissingAssets } from './services/assetAudit';
+import { replaceProjectAssetPath } from './utils/projectAssets';
+import type { YmmpImportStats } from './utils/ymmp';
 import { loadCachedAudio, isTauriRuntime } from './services/audioCache';
 import { mediaUrlFor, forgetMediaUrl } from './utils/mediaUrl';
 import { probeMedia, forgetMediaProbe, MediaInfo } from './services/mediaProbe';
@@ -243,6 +247,7 @@ export function App() {
   const [tachieTargetCharId, setTachieTargetCharId] = useState<string | null>(null);
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
+  const [isAssetAuditOpen, setIsAssetAuditOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -1707,6 +1712,22 @@ export function App() {
   }, [commitProject]);
 
   /** Import a Yukkuri Movie Maker 4 project (`.ymmp`) as a Voix project. */
+  const finishYmmpImport = useCallback(
+    async (imported: VoixProject, stats: YmmpImportStats, fileName: string) => {
+      applyProject(imported, null);
+      setIsDirty(true);
+      let message = `Imported ${fileName}: ${describeYmmpImport(stats)}`;
+      try {
+        const missing = describeMissingAssets(await auditProjectAssets(imported));
+        if (missing) message += ` · ${missing} — open Assets to relink`;
+      } catch (err) {
+        console.warn('[App] YMM4 asset audit failed:', err);
+      }
+      setToast(message);
+    },
+    [applyProject]
+  );
+
   const handleImportYmmp = useCallback(async () => {
     try {
       const result = await openYmmpProject({
@@ -1714,15 +1735,23 @@ export function App() {
         fallbackCharacters: defaultCharacters,
       });
       if (!result) return;
-      applyProject(result.project, null);
-      setIsDirty(true);
       const fileName = result.path.split(/[\\/]/).pop() || result.path;
-      setToast(`Imported ${fileName}: ${describeYmmpImport(result.stats)}`);
+      await finishYmmpImport(result.project, result.stats, fileName);
     } catch (err) {
       console.error('[App] YMM4 import failed:', err);
       setToast(`YMM4 import failed: ${String(err)}`);
     }
-  }, [applyProject]);
+  }, [finishYmmpImport]);
+
+  /** Rewrite all references to a moved media file after the asset audit. */
+  const handleRelinkAsset = useCallback(
+    (oldPath: string, newPath: string) => {
+      commitProject((previous) => replaceProjectAssetPath(previous, oldPath, newPath));
+      const name = newPath.split(/[\\/]/).pop() || newPath;
+      setToast(`Relinked asset: ${name}`);
+    },
+    [commitProject]
+  );
 
   /** Export the current voice lines as a SubRip file for players / YMM4. */
   const handleExportSubtitles = useCallback(async () => {
@@ -2228,9 +2257,8 @@ export function App() {
         fallbackCharacters: defaultCharacters,
       })
         .then((result) => {
-          applyProject(result.project, null);
-          setIsDirty(true);
-          setToast(`Imported ${filePath.split(/[\\/]/).pop()}: ${describeYmmpImport(result.stats)}`);
+          const fileName = filePath.split(/[\\/]/).pop() || filePath;
+          return finishYmmpImport(result.project, result.stats, fileName);
         })
         .catch((err) => setToast(`YMM4 import failed: ${String(err)}`));
       return;
@@ -2546,6 +2574,7 @@ export function App() {
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
+        onOpenAssets={() => setIsAssetAuditOpen(true)}
         onExportVideo={() => setIsExportModalOpen(true)}
         onOpenAiVideoGenerator={() => setIsAiVideoModalOpen(true)}
         hasVideo={Boolean(videoSrc)}
@@ -2808,6 +2837,13 @@ export function App() {
         computedDuration={totalDuration}
         onClose={() => setIsProjectSettingsOpen(false)}
         onApply={handleApplyProjectSettings}
+      />
+
+      <AssetAuditModal
+        isOpen={isAssetAuditOpen}
+        project={project}
+        onClose={() => setIsAssetAuditOpen(false)}
+        onRelink={handleRelinkAsset}
       />
 
       <ItemInspector

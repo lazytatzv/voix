@@ -17,6 +17,7 @@ import {
   History,
   FileText,
   FileJson,
+  FileWarning,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -34,6 +35,7 @@ interface HeaderProps {
   onImportSubtitles: () => void;
   onImportYmmp?: () => void;
   onExportSubtitles?: () => void;
+  onOpenAssets?: () => void;
   onOpenCharacterSettings: () => void;
   onOpenSettings?: () => void;
   onOpenProjectSettings?: () => void;
@@ -65,6 +67,7 @@ export const Header: React.FC<HeaderProps> = ({
   onImportSubtitles,
   onImportYmmp,
   onExportSubtitles,
+  onOpenAssets,
   onOpenCharacterSettings,
   onOpenSettings,
   onOpenProjectSettings,
@@ -307,6 +310,16 @@ export const Header: React.FC<HeaderProps> = ({
               title="Project settings (resolution, tracks, background)"
             >
               <Settings2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {onOpenAssets && (
+            <button
+              type="button"
+              onClick={onOpenAssets}
+              className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-[#c4c7c5] transition"
+              title="Asset audit (find and relink missing files)"
+            >
+              <FileWarning className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
