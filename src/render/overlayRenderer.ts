@@ -74,6 +74,10 @@ function trackVisible(tracks: TrackState[] | undefined, id: string): boolean {
   return tracks.find((t) => t.id === id)?.visible !== false;
 }
 
+function fontPrefix(style: SubtitleStyle): string {
+  return `${style.italic ? 'italic ' : ''}${style.fontWeight || '900'}`;
+}
+
 function activeVoiceAt(items: TimelineItem[], time: number): VoiceItem | undefined {
   return items
     .filter(
@@ -161,7 +165,7 @@ function drawVerticalStyledText(
   const centerX = options.centerX + (options.offsetX ?? 0);
   const centerY = options.centerY + (options.offsetY ?? 0);
   const fontSize = style.fontSize || 48;
-  const font = `${style.fontWeight || '900'} ${fontSize}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
+  const font = `${fontPrefix(style)} ${fontSize}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
   const columnGap = fontSize * (style.lineHeight ?? 1.32);
   const charAdvance = Math.max(fontSize * 0.5, fontSize + (style.letterSpacing ?? 0));
   const align = options.align || style.align || 'center';
@@ -299,7 +303,7 @@ function drawVerticalStyledText(
   if (rubyMode === 'above') {
     const rubySize = Math.max(12, Math.round(fontSize * 0.36));
     const rubyAdvance = rubySize * 1.05;
-    ctx.font = `700 ${rubySize}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
+    ctx.font = `${fontPrefix({ ...style, fontWeight: '700' })} ${rubySize}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
     ctx.fillStyle = style.textColor || '#ffffff';
     ctx.textAlign = 'center';
     glyphs.forEach((glyph) => {
@@ -329,7 +333,7 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
   const centerX = options.centerX + (options.offsetX ?? 0);
   const centerY = options.centerY + (options.offsetY ?? 0);
 
-  const font = `${style.fontWeight || '900'} ${style.fontSize || 48}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
+  const font = `${fontPrefix(style)} ${style.fontSize || 48}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
   ctx.save();
   ctx.globalAlpha = options.opacity ?? 1;
   ctx.font = font;
@@ -337,12 +341,15 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
   ctx.lineJoin = 'round';
   ctx.miterLimit = 2;
 
-  const lines = wrapText(
-    ctx,
-    displayText,
-    Math.max(40, options.maxWidth),
-    style.letterSpacing ?? 0
-  );
+  const lines =
+    style.wordWrap === false
+      ? displayText.split('\n')
+      : wrapText(
+          ctx,
+          displayText,
+          Math.max(40, options.maxWidth),
+          style.letterSpacing ?? 0
+        );
   const lineHeight =
     (style.fontSize || 48) *
     (style.lineHeight ?? options.lineHeight ?? 1.32);
@@ -418,7 +425,7 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
       ctx.shadowOffsetY = 0;
     };
 
-    const rubyFont = `700 ${Math.max(12, Math.round((style.fontSize || 48) * 0.36))}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
+    const rubyFont = `${fontPrefix({ ...style, fontWeight: '700' })} ${Math.max(12, Math.round((style.fontSize || 48) * 0.36))}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
     const rubyY = lineY - (style.fontSize || 48) * 0.68;
 
     const drawLayer = (mode: 'outerStroke' | 'innerStroke' | 'fill') => {

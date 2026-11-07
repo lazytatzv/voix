@@ -56,12 +56,16 @@ function makeYmmp() {
             Y: -538.5,
             BasePoint: 'LeftTop',
             FontSize: { Values: [{ Value: 64 }], Span: 0, AnimationType: 'None' },
+            LineHeight2: { Values: [{ Value: 150 }] },
+            LetterSpacing2: { Values: [{ Value: 100 }] },
+            WordWrap: 'NoWrap',
             MaxWidth: { Values: [{ Value: 1200 }] },
             Font: 'Yu Gothic UI',
             FontColor: '#FF112233',
             StyleColor: '#FF000000',
             Style: 'Outline',
             Bold: true,
+            Italic: true,
             Layer: 5,
             FadeIn: 0.2,
             FadeOut: 0.3,
@@ -170,6 +174,10 @@ describe('parseYmmpProject', () => {
       expect(text.style.textColor).toBe('#112233');
       expect(text.style.strokeColor).toBe('#000000');
       expect(text.style.strokeWidth).toBeGreaterThan(0);
+      expect(text.style.lineHeight).toBe(1.5);
+      expect(text.style.letterSpacing).toBe(64);
+      expect(text.style.italic).toBe(true);
+      expect(text.style.wordWrap).toBe(false);
       expect(text.xPercent).toBeGreaterThan(0);
       expect(text.xPercent).toBeLessThan(15);
       expect(text.yPercent).toBeLessThan(10);

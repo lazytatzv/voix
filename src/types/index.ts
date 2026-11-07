@@ -94,6 +94,10 @@ export interface SubtitleStyle {
   lineHeight?: number;
   /** Extra spacing between characters in project pixels. */
   letterSpacing?: number;
+  /** Draw text in italic. */
+  italic?: boolean;
+  /** Wrap long lines at the item width. False keeps explicit newlines only. */
+  wordWrap?: boolean;
   /** Draw Japanese-style vertical text (columns run top to bottom). */
   vertical?: boolean;
 

@@ -1099,6 +1099,24 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     />
                     Drop shadow
                   </label>
+                  <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(style.italic)}
+                      onChange={(e) => patchStyle({ italic: e.target.checked })}
+                      className="accent-[#3b82f6]"
+                    />
+                    Italic
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={style.wordWrap !== false}
+                      onChange={(e) => patchStyle({ wordWrap: e.target.checked })}
+                      className="accent-[#3b82f6]"
+                    />
+                    Wrap long lines
+                  </label>
                   <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer col-span-2">
                     <input
                       type="checkbox"

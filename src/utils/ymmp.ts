@@ -282,6 +282,16 @@ function toTextItem(
   else if (horizontal.includes('bottom')) centerY -= (fontSize * zoom * 1.2) / 2;
   const styleValue = String(raw.Style ?? '').toLowerCase();
   const hasStroke = styleValue.includes('outline') || styleValue.includes('edge');
+  const lineHeightValue = valueOf(raw.LineHeight2, 100);
+  const lineHeight = Math.max(
+    0.6,
+    Math.min(3, lineHeightValue > 5 ? lineHeightValue / 100 : lineHeightValue)
+  );
+  const spacingValue = valueOf(raw.LetterSpacing2, 0);
+  const letterSpacing = Math.max(
+    -20,
+    Math.min(80, spacingValue > 5 ? (spacingValue / 100) * fontSize : spacingValue)
+  );
   return {
     id: `ymmp_text_${index}`,
     type: 'text',
@@ -299,6 +309,13 @@ function toTextItem(
       fontFamily: typeof raw.Font === 'string' && raw.Font.trim() ? raw.Font : DEFAULT_SUBTITLE_STYLE.fontFamily,
       fontSize,
       fontWeight: raw.Bold ? '700' : '600',
+      lineHeight,
+      letterSpacing,
+      italic: Boolean(raw.Italic),
+      wordWrap:
+        raw.WordWrap !== undefined
+          ? String(raw.WordWrap).toLowerCase() !== 'nowrap'
+          : undefined,
       textColor: colorOf(raw.FontColor, '#ffffff'),
       strokeColor: colorOf(raw.StyleColor, '#0a0a0c'),
       strokeWidth: hasStroke ? Math.max(2, Math.round(fontSize * 0.08)) : 0,

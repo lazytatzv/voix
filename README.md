@@ -182,7 +182,7 @@ markers:
 ### 種類別フィールド
 
 - **voice**: `characterId`, `text`, `subtitleText`, `expression`, `speedScale`, `pitchScale`, `volumeScale`, `intonationScale`, `prePhonemeLength`, `postPhonemeLength`, `pauseLengthScale`, `audioKey`, `phonemes`, `terminal: { cmd, output }`, `se`, `anim`, `flipH`, `scale`
-- **text**: `text`, `style`（`fontSize`, `fontFamily`, `textColor`, `strokeColor`, `strokeWidth`, `outerStrokeColor`, `outerStrokeWidth`, `lineHeight`, `letterSpacing`, `vertical`, `bgStyle`, `bgColor`, `hasShadow`, `rubyDisplay` など）, `xPercent`, `yPercent`, `widthPercent`, `align`, `rotation`, `opacity`
+- **text**: `text`, `style`（`fontSize`, `fontFamily`, `textColor`, `strokeColor`, `strokeWidth`, `outerStrokeColor`, `outerStrokeWidth`, `lineHeight`, `letterSpacing`, `italic`, `wordWrap`, `vertical`, `bgStyle`, `bgColor`, `hasShadow`, `rubyDisplay` など）, `xPercent`, `yPercent`, `widthPercent`, `align`, `rotation`, `opacity`
 - **image**: `x`, `y`, `width`, `height`, `rotation`, `opacity`, `flipH`
 - **audio**: `volume`, `speed`（0.25-4倍速）, `offset`（曲の頭出し秒）, `isBgm`, `loop`, `fadeIn`, `fadeOut`
 - **video**: `volume`, `offsetTime`
@@ -227,7 +227,7 @@ keyframes:
 | YMM4のアイテム | Voixでの扱い |
 |---|---|
 | VoiceItem | `voice`。CharacterNameからキャラクターを照合し、話速・音高・抑揚・句読点の間・前後無音・音量を引き継ぎます |
-| TextItem | `text`。文字色・縁色・フォント・サイズ・位置・回転・不透明度を変換します |
+| TextItem | `text`。文字色・縁色・フォント・サイズ・位置・回転・不透明度に加え、行間（`LineHeight2`）・文字間隔（`LetterSpacing2`）・太字/斜体・`WordWrap` を変換します |
 | AudioItem | `audio`。音量・再生速度・頭出し・ループを引き継ぎます |
 | ImageItem | `image`。元画像の自然サイズとZoomから表示サイズを計算し、フレーム中心基準のX/Yを配置に変換します |
 | VideoItem（最初の1件） | プロジェクトの背景動画 |
