@@ -2,6 +2,7 @@ import { Character, ImageItem, SubtitleStyle, TextItem, TimelineItem, TrackState
 import { getCachedImage, getImageContentBounds } from './imageCache';
 import { computeItemMotion } from './itemMotion';
 import { resolveItemTransform } from './keyframes';
+import { buildCanvasFilter } from './itemEffects';
 import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } from '../utils/pronunciation';
 
 export interface OverlayRenderOptions {
@@ -713,6 +714,8 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       const transform = resolveItemTransform(item, time);
       if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
       ctx.save();
+      const filter = buildCanvasFilter(item.effects);
+      if (filter !== 'none') ctx.filter = filter;
       ctx.globalAlpha = transform.opacity * motion.alpha;
       ctx.translate(
         transform.x + item.width / 2 + motion.offsetX,
@@ -743,6 +746,9 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       const motion = computeItemMotion(item, time);
       const transform = resolveItemTransform(item, time);
       if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
+      ctx.save();
+      const filter = buildCanvasFilter(item.effects);
+      if (filter !== 'none') ctx.filter = filter;
       drawStyledText(ctx, {
         text: item.text,
         style: item.style,
@@ -756,6 +762,7 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
         offsetY: motion.offsetY,
         scale: motion.scale * transform.scale,
       });
+      ctx.restore();
     });
   }
 
@@ -773,6 +780,9 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
     if (subtitleText) {
       const motion = computeItemMotion(activeVoice, time);
       if (motion.alpha > 0.001) {
+        ctx.save();
+        const filter = buildCanvasFilter(activeVoice.effects);
+        if (filter !== 'none') ctx.filter = filter;
         drawStyledText(ctx, {
           text: subtitleText,
           style,
@@ -785,6 +795,7 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
           offsetY: motion.offsetY,
           scale: motion.scale,
         });
+        ctx.restore();
       }
     }
   }

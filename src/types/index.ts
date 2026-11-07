@@ -22,6 +22,8 @@ export interface BaseTimelineItem {
   startTime: number;
   duration: number;
   name: string;
+  /** Colour/blur adjustments applied while compositing this item. */
+  effects?: ItemEffects;
   /** When true the item is still persisted but skipped by preview/export. */
   hidden?: boolean;
   locked?: boolean;
@@ -38,6 +40,29 @@ export interface BaseTimelineItem {
 }
 
 export type KeyframeEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold';
+
+/**
+ * Canvas filter effects for one timeline item. Values mirror CSS filter
+ * functions, so the inspector, preview and export share one interpretation.
+ */
+export interface ItemEffects {
+  /** Gaussian blur radius in project pixels. */
+  blur?: number;
+  /** Brightness multiplier, 1 = unchanged. */
+  brightness?: number;
+  /** Contrast multiplier, 1 = unchanged. */
+  contrast?: number;
+  /** Saturation multiplier, 1 = unchanged (0 = grayscale). */
+  saturation?: number;
+  /** Hue rotation in degrees. */
+  hueRotate?: number;
+  /** Grayscale amount from 0 to 1. */
+  grayscale?: number;
+  /** Sepia amount from 0 to 1. */
+  sepia?: number;
+  /** Colour inversion amount from 0 to 1. */
+  invert?: number;
+}
 
 /**
  * A YMM4-style animation key. `time` is relative to the item start. Text

@@ -22,6 +22,7 @@ import {
   Character,
   ImageItem,
   ItemAnimation,
+  ItemEffects,
   KeyframeEasing,
   SubtitleStyle,
   TextItem,
@@ -36,6 +37,7 @@ import {
   getItemBaseTransform,
   sampleKeyframes,
 } from '../render/keyframes';
+import { normalizeItemEffects } from '../render/itemEffects';
 
 interface ItemInspectorProps {
   isOpen: boolean;
@@ -136,6 +138,101 @@ const ColorField: React.FC<{
     </div>
   </Field>
 );
+
+const EffectsSection: React.FC<{
+  item: TextItem | ImageItem;
+  onUpdate: (id: string, updates: Partial<TimelineItem>) => void;
+}> = ({ item, onUpdate }) => {
+  const effects = item.effects ?? {};
+  const set = (key: keyof ItemEffects, value: number) => {
+    onUpdate(item.id, {
+      effects: normalizeItemEffects({ ...effects, [key]: value }),
+    } as Partial<TimelineItem>);
+  };
+  const reset = () => onUpdate(item.id, { effects: undefined } as Partial<TimelineItem>);
+
+  return (
+    <section className="border-t border-[#242629] pt-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className={labelClass}>Visual effects</span>
+        <button
+          type="button"
+          onClick={reset}
+          disabled={!item.effects}
+          className="px-2 py-0.5 text-[10px] font-mono bg-[#181a1d] border border-[#2a2c30] rounded-sm text-[#c4c7c5] hover:text-white disabled:opacity-40"
+        >
+          Reset
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <SliderField
+          label="Brightness"
+          value={effects.brightness ?? 1}
+          min={0}
+          max={3}
+          step={0.01}
+          onChange={(value) => set('brightness', value)}
+        />
+        <SliderField
+          label="Contrast"
+          value={effects.contrast ?? 1}
+          min={0}
+          max={3}
+          step={0.01}
+          onChange={(value) => set('contrast', value)}
+        />
+        <SliderField
+          label="Saturation"
+          value={effects.saturation ?? 1}
+          min={0}
+          max={3}
+          step={0.01}
+          onChange={(value) => set('saturation', value)}
+        />
+        <SliderField
+          label="Blur (px)"
+          value={effects.blur ?? 0}
+          min={0}
+          max={30}
+          step={0.5}
+          onChange={(value) => set('blur', value)}
+        />
+        <SliderField
+          label="Hue rotate (°)"
+          value={effects.hueRotate ?? 0}
+          min={-180}
+          max={180}
+          step={1}
+          onChange={(value) => set('hueRotate', value)}
+        />
+        <SliderField
+          label="Grayscale"
+          value={effects.grayscale ?? 0}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(value) => set('grayscale', value)}
+        />
+        <SliderField
+          label="Sepia"
+          value={effects.sepia ?? 0}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(value) => set('sepia', value)}
+        />
+        <SliderField
+          label="Invert"
+          value={effects.invert ?? 0}
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(value) => set('invert', value)}
+        />
+      </div>
+    </section>
+  );
+};
 
 const EASING_OPTIONS: Array<{ value: KeyframeEasing; label: string }> = [
   { value: 'linear', label: 'Linear' },
@@ -1140,6 +1237,10 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
               onUpdate={onUpdate}
               onSeek={onSeek}
             />
+          )}
+
+          {(item.type === 'text' || item.type === 'image') && (
+            <EffectsSection item={item as TextItem | ImageItem} onUpdate={onUpdate} />
           )}
 
           {item.type === 'audio' && (() => {
