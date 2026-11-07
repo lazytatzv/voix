@@ -36,6 +36,7 @@ import { VoicevoxProvider } from './services/tts/VoicevoxProvider';
 import {
   autosaveProject,
   autosaveProjectOnUnload,
+  exportProjectSrt,
   loadAutosaveProject,
   openProjectFile,
   projectWithDuration,
@@ -1658,6 +1659,17 @@ export function App() {
     }
   }, [commitProject]);
 
+  /** Export the current voice lines as a SubRip file for players / YMM4. */
+  const handleExportSubtitles = useCallback(async () => {
+    try {
+      const path = await exportProjectSrt(projectRef.current);
+      if (path) setToast(`Exported subtitles: ${path.split('/').pop()}`);
+    } catch (err) {
+      console.error('[App] subtitle export failed:', err);
+      setToast(`Subtitle export failed: ${String(err)}`);
+    }
+  }, []);
+
   const handleDeleteMarker = useCallback(
     (id: string) => {
       const marker = projectRef.current.markers?.find((entry) => entry.id === id);
@@ -2426,6 +2438,7 @@ export function App() {
         onVideoSelect={handleVideoSelect}
         onAutoTranscribe={handleAutoTranscribe}
         onImportSubtitles={() => void handleImportSubtitles()}
+        onExportSubtitles={() => void handleExportSubtitles()}
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}

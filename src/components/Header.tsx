@@ -31,6 +31,7 @@ interface HeaderProps {
   onVideoSelect: (fileOrPath: File | string) => void;
   onAutoTranscribe: () => void;
   onImportSubtitles: () => void;
+  onExportSubtitles?: () => void;
   onOpenCharacterSettings: () => void;
   onOpenSettings?: () => void;
   onOpenProjectSettings?: () => void;
@@ -60,6 +61,7 @@ export const Header: React.FC<HeaderProps> = ({
   onVideoSelect,
   onAutoTranscribe,
   onImportSubtitles,
+  onExportSubtitles,
   onOpenCharacterSettings,
   onOpenSettings,
   onOpenProjectSettings,
@@ -352,6 +354,18 @@ export const Header: React.FC<HeaderProps> = ({
           <FileText className="w-3.5 h-3.5 text-[#8ab4f8]" />
           <span>Import SRT</span>
         </button>
+
+        {onExportSubtitles && (
+          <button
+            type="button"
+            onClick={onExportSubtitles}
+            className="px-2.5 py-1 bg-[#151619] hover:bg-[#1f2126] text-[#c4c7c5] hover:text-white text-xs font-mono rounded-sm border border-[#282a2e] flex items-center gap-1.5 transition active:scale-95"
+            title="Export the voice-line timing as SubRip (.srt) subtitles"
+          >
+            <Download className="w-3.5 h-3.5 text-[#8ab4f8]" />
+            <span>Export SRT</span>
+          </button>
+        )}
 
         <button
           type="button"

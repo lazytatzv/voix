@@ -9,6 +9,7 @@ import {
   projectToYaml,
   sanitizeProject,
 } from '../utils/projectYaml';
+import { buildSrt } from '../utils/srt';
 
 const AUTOSAVE_LOCAL_KEY = 'voix_project_autosave_v2';
 const AUTOSAVE_FILE_NAME = 'autosave.voix.yaml';
@@ -175,6 +176,36 @@ export async function loadAutosaveProject(): Promise<VoixProject | null> {
     console.warn('[projectService] local autosave load failed:', err);
   }
   return null;
+}
+
+/**
+ * Write the project's voice lines as a SubRip subtitle file. This makes it
+ * possible to reuse Voix timing in YMM4, video players and editors, or as a
+ * subtitle track alongside an exported MP4.
+ */
+export async function exportProjectSrt(project: VoixProject): Promise<string | null> {
+  const srt = buildSrt(project.items);
+  if (!srt) throw new Error('No voice or subtitle lines to export');
+
+  if (isTauriRuntime()) {
+    const picked = await save({
+      title: 'Export subtitles as SRT',
+      defaultPath: `${safeFileName(project.name)}.srt`,
+      filters: [{ name: 'SubRip subtitles', extensions: ['srt'] }],
+    });
+    if (!picked) return null;
+    await invoke('write_text_file', { path: picked, content: srt });
+    return picked;
+  }
+
+  const blob = new Blob([srt], { type: 'application/x-subrip;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${safeFileName(project.name)}.srt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  return a.download;
 }
 
 export async function exportProjectToLegacyJson(project: VoixProject): Promise<void> {
