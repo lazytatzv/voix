@@ -9,7 +9,7 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 
 ## 主な機能
 
-- **マルチトラック・タイムライン** — 背景動画 / キャラクター / 音声・字幕 / テキスト / 画像 / BGM・SE の6レーン。ドラッグで移動、右端ドラッグで長さ変更、`S` で再生ヘッド位置に分割、波形表示、Altでスナップ解除。SRTファイルを字幕テキストとして読み込めます。また、音声アイテムのタイミングからSRTを書き出せます。
+- **マルチトラック・タイムライン** — 背景動画 / キャラクター / 音声・字幕 / テキスト / 画像 / BGM・SE の6レーン。ドラッグで移動、右端ドラッグで長さ変更、`S` で再生ヘッド位置に分割、波形表示、Altでスナップ解除。SRTファイルを字幕テキストとして読み込めます。また、音声アイテムのタイミングからSRTを書き出せます。ゆっくりMovieMaker4の `.ymmp` プロジェクトをヘッダーまたはドラッグ＆ドロップで読み込めます（声・テロップ・画像・音声・背景動画に対応、未対応アイテムは件数を表示してスキップ）。
 - **マーカー** — タイムラインに名前付きの目印を置き、クリックでシーク。近くのアイテムはマーカーへスナップします。位置はYAMLに保存されます。
 - **WYSIWYGプレビュー** — プレビューと書き出しが同じ Canvas コンポジター（`src/render/overlayRenderer.ts`）を使うため、見た目と出力が一致します。立ち絵はプレビュー上で直接ドラッグ配置でき、枠・中央・下端へスナップします。
 - **テロップ・画像モーション** — フェードイン/アウトに加えて、スライド・ズーム・ポップの登場/退場アニメーションをアイテム単位で設定できます。タイミングはプレビューと書き出しで共通です。
@@ -21,7 +21,7 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 - **自動保存** — `~/.config/voix/autosave.voix.yaml` と localStorage の二重保存。次回起動時に復元します。
 - **音声キャッシュ** — 合成済みWAVを `~/.cache/voix/audio` に保存し、`audioKey` としてプロジェクトに記録。再起動後の再合成を不要にします。
 - **TTSプロバイダー** — VOICEVOX / COEIROINK / AivisSpeech など、VOICEVOX互換APIに対応。キャラクター設定ではエンジン・キャラクター・スタイルを個別に選べ、VOICEVOXの全話者・全スタイルをそのまま一覧表示します。**All voices** の試聴ブラウザでは、検索しながら各話者・各スタイルの ▶ を押すだけでその声を再生でき、**Play all** で一覧の全ボイスを順番に試聴できます。話者を変えると該当セリフの古い音声キャッシュを破棄して自動で再合成します。
-- **インスペクター** — 選択アイテムのセリフ・話速・音高・音量・表情・テロップスタイル・画像座標・BGMフェードなどを数値編集。
+- **インスペクター** — 選択アイテムのセリフ・話速・音高・抑揚・句読点の間・前後の無音・音量・表情・テロップスタイル・画像座標・BGMフェードなどを数値編集。
 - **書き出し** — 透過オーバーレイPNGをフレーム合成し、Rust側でFFmpegに渡して背景動画・音声と結合。範囲指定・進捗表示・実行中キャンセルに対応します。
 - **Linuxフレンドリー** — XDG準拠の設定/キャッシュ/データディレクトリ、`~` 展開、xdg-open連携。WebKitGTKでも背景動画・BGMを再生できるよう blob URL 経由で読み込みます。
 
@@ -178,7 +178,7 @@ markers:
 
 ### 種類別フィールド
 
-- **voice**: `characterId`, `text`, `subtitleText`, `expression`, `speedScale`, `pitchScale`, `volumeScale`, `audioKey`, `phonemes`, `terminal: { cmd, output }`, `se`, `anim`, `flipH`, `scale`
+- **voice**: `characterId`, `text`, `subtitleText`, `expression`, `speedScale`, `pitchScale`, `volumeScale`, `intonationScale`, `prePhonemeLength`, `postPhonemeLength`, `pauseLengthScale`, `audioKey`, `phonemes`, `terminal: { cmd, output }`, `se`, `anim`, `flipH`, `scale`
 - **text**: `text`, `style`（`fontSize`, `fontFamily`, `textColor`, `strokeColor`, `strokeWidth`, `outerStrokeColor`, `outerStrokeWidth`, `bgStyle`, `bgColor`, `hasShadow`, `rubyDisplay` など）, `xPercent`, `yPercent`, `widthPercent`, `align`, `rotation`, `opacity`
 - **image**: `x`, `y`, `width`, `height`, `rotation`, `opacity`, `flipH`
 - **audio**: `volume`, `speed`（0.25-4倍速）, `offset`（曲の頭出し秒）, `isBgm`, `loop`, `fadeIn`, `fadeOut`

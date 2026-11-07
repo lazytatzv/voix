@@ -3,6 +3,16 @@ import { containsEnglish, convertEnglishToVoicevox } from '../../utils/englishTo
 import { getTtsSpokenText } from '../../utils/pronunciation';
 import { parseSpeakerList } from './speakerUtils';
 
+export interface TTSOptions {
+  speedScale?: number;
+  pitchScale?: number;
+  volumeScale?: number;
+  intonationScale?: number;
+  prePhonemeLength?: number;
+  postPhonemeLength?: number;
+  pauseLengthScale?: number;
+}
+
 export interface TTSProvider {
   id: string;
   name: string;
@@ -12,7 +22,7 @@ export interface TTSProvider {
   synthesize(
     speakerId: number,
     text: string,
-    options?: { speedScale?: number; pitchScale?: number }
+    options?: TTSOptions
   ): Promise<{
     audioBlob: Blob;
     duration: number;
@@ -44,6 +54,7 @@ interface VoicevoxAudioQuery {
   volumeScale: number;
   prePhonemeLength: number;
   postPhonemeLength: number;
+  pauseLengthScale?: number;
   outputSamplingRate: number;
   outputStereo: boolean;
   [key: string]: unknown;
@@ -86,7 +97,7 @@ export class VoicevoxProvider implements TTSProvider {
   async synthesize(
     speakerId: number,
     text: string,
-    options?: { speedScale?: number; pitchScale?: number }
+    options?: TTSOptions
   ): Promise<{
     audioBlob: Blob;
     duration: number;
@@ -118,16 +129,38 @@ export class VoicevoxProvider implements TTSProvider {
 
     const audioQuery = (await queryRes.json()) as VoicevoxAudioQuery;
 
-    if (options?.speedScale) audioQuery.speedScale = options.speedScale;
-    if (options?.pitchScale) audioQuery.pitchScale = options.pitchScale;
+    if (options?.speedScale !== undefined) {
+      audioQuery.speedScale = Math.max(0.1, options.speedScale);
+    }
+    if (options?.pitchScale !== undefined) audioQuery.pitchScale = options.pitchScale;
+    if (options?.intonationScale !== undefined) {
+      audioQuery.intonationScale = Math.max(0, Math.min(2, options.intonationScale));
+    }
+    if (options?.prePhonemeLength !== undefined) {
+      audioQuery.prePhonemeLength = Math.max(0, options.prePhonemeLength);
+    }
+    if (options?.postPhonemeLength !== undefined) {
+      audioQuery.postPhonemeLength = Math.max(0, options.postPhonemeLength);
+    }
+    if (options?.pauseLengthScale !== undefined) {
+      audioQuery.pauseLengthScale = Math.max(0.1, Math.min(3, options.pauseLengthScale));
+    }
 
-    // 語尾の母音・息の減衰がプツッと切れないように十分な余韻（最低0.20s）を確保
-    audioQuery.postPhonemeLength = Math.max(audioQuery.postPhonemeLength ?? 0, 0.2);
-    audioQuery.prePhonemeLength = Math.max(audioQuery.prePhonemeLength ?? 0, 0.1);
+    // 語尾の母音・息の減衰がプツッと切れないように十分な余韻（最低0.20s）を確保。
+    // ただしユーザーが明示的に無音区間を指定した場合はその値を尊重する。
+    if (options?.postPhonemeLength === undefined) {
+      audioQuery.postPhonemeLength = Math.max(audioQuery.postPhonemeLength ?? 0, 0.2);
+    }
+    if (options?.prePhonemeLength === undefined) {
+      audioQuery.prePhonemeLength = Math.max(audioQuery.prePhonemeLength ?? 0, 0.1);
+    }
+    audioQuery.postPhonemeLength = Math.max(audioQuery.postPhonemeLength ?? 0, 0.01);
+    audioQuery.prePhonemeLength = Math.max(audioQuery.prePhonemeLength ?? 0, 0.01);
 
     // 音素タイミング・尺を計算 (speedScale反映)
     const phonemes: PhonemeTiming[] = [];
     const speed = audioQuery.speedScale || 1.0;
+    const pauseScale = audioQuery.pauseLengthScale ?? 1;
     let currentTime = (audioQuery.prePhonemeLength || 0.1) / speed;
 
     for (const phrase of audioQuery.accent_phrases) {
@@ -142,7 +175,7 @@ export class VoicevoxProvider implements TTSProvider {
         currentTime += mora.vowel_length / speed;
       }
       if (phrase.pause_mora) {
-        currentTime += (phrase.pause_mora.vowel_length || 0) / speed;
+        currentTime += ((phrase.pause_mora.vowel_length || 0) * pauseScale) / speed;
       }
     }
     const totalEstimatedDuration = currentTime + (audioQuery.postPhonemeLength || 0.1) / speed;

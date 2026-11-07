@@ -50,6 +50,7 @@ import {
   projectFromYaml,
 } from './utils/projectYaml';
 import { loadCharactersFromConfig, loadSettingsFromConfig, saveCharactersToConfig } from './services/configService';
+import { describeYmmpImport, openYmmpProject, readYmmpPath } from './services/ymmpImport';
 import { loadCachedAudio, isTauriRuntime } from './services/audioCache';
 import { mediaUrlFor, forgetMediaUrl } from './utils/mediaUrl';
 import { probeMedia, forgetMediaProbe, MediaInfo } from './services/mediaProbe';
@@ -583,6 +584,10 @@ export function App() {
               speedScale: item.speedScale ?? 1,
               pitchScale: item.pitchScale ?? 0,
               volumeScale: item.volumeScale ?? 1,
+              intonationScale: item.intonationScale ?? 1,
+              prePhonemeLength: item.prePhonemeLength ?? 0.1,
+              postPhonemeLength: item.postPhonemeLength ?? 0.2,
+              pauseLengthScale: item.pauseLengthScale ?? 1,
             },
             !force
           );
@@ -642,7 +647,7 @@ export function App() {
       const item = projectRef.current.items.find((entry) => entry.id === id);
       const affectsAudio =
         item?.type === 'voice' &&
-        ['text', 'characterId', 'speedScale', 'pitchScale'].some((key) =>
+        ['text', 'characterId', 'speedScale', 'pitchScale', 'intonationScale', 'prePhonemeLength', 'postPhonemeLength', 'pauseLengthScale'].some((key) =>
           Object.prototype.hasOwnProperty.call(updates, key)
         );
 
@@ -1659,6 +1664,24 @@ export function App() {
     }
   }, [commitProject]);
 
+  /** Import a Yukkuri Movie Maker 4 project (`.ymmp`) as a Voix project. */
+  const handleImportYmmp = useCallback(async () => {
+    try {
+      const result = await openYmmpProject({
+        existingCharacters: projectRef.current.characters,
+        fallbackCharacters: defaultCharacters,
+      });
+      if (!result) return;
+      applyProject(result.project, null);
+      setIsDirty(true);
+      const fileName = result.path.split(/[\\/]/).pop() || result.path;
+      setToast(`Imported ${fileName}: ${describeYmmpImport(result.stats)}`);
+    } catch (err) {
+      console.error('[App] YMM4 import failed:', err);
+      setToast(`YMM4 import failed: ${String(err)}`);
+    }
+  }, [applyProject]);
+
   /** Export the current voice lines as a SubRip file for players / YMM4. */
   const handleExportSubtitles = useCallback(async () => {
     try {
@@ -2157,6 +2180,19 @@ export function App() {
       void addImageFromPath(filePath);
       return;
     }
+    if (ext === 'ymmp') {
+      void readYmmpPath(filePath, {
+        existingCharacters: projectRef.current.characters,
+        fallbackCharacters: defaultCharacters,
+      })
+        .then((result) => {
+          applyProject(result.project, null);
+          setIsDirty(true);
+          setToast(`Imported ${filePath.split(/[\\/]/).pop()}: ${describeYmmpImport(result.stats)}`);
+        })
+        .catch((err) => setToast(`YMM4 import failed: ${String(err)}`));
+      return;
+    }
     if (PROJECT_EXTENSIONS.includes(ext)) {
       readProjectPath(filePath)
         .then((loaded) => {
@@ -2438,6 +2474,7 @@ export function App() {
         onVideoSelect={handleVideoSelect}
         onAutoTranscribe={handleAutoTranscribe}
         onImportSubtitles={() => void handleImportSubtitles()}
+        onImportYmmp={() => void handleImportYmmp()}
         onExportSubtitles={() => void handleExportSubtitles()}
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}

@@ -16,6 +16,7 @@ import {
   Redo2,
   History,
   FileText,
+  FileJson,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -31,6 +32,7 @@ interface HeaderProps {
   onVideoSelect: (fileOrPath: File | string) => void;
   onAutoTranscribe: () => void;
   onImportSubtitles: () => void;
+  onImportYmmp?: () => void;
   onExportSubtitles?: () => void;
   onOpenCharacterSettings: () => void;
   onOpenSettings?: () => void;
@@ -61,6 +63,7 @@ export const Header: React.FC<HeaderProps> = ({
   onVideoSelect,
   onAutoTranscribe,
   onImportSubtitles,
+  onImportYmmp,
   onExportSubtitles,
   onOpenCharacterSettings,
   onOpenSettings,
@@ -342,6 +345,18 @@ export const Header: React.FC<HeaderProps> = ({
           >
             <Layers className={`w-3.5 h-3.5 ${isTranscribing ? 'animate-spin' : ''}`} />
             <span>{isTranscribing ? 'Transcribing...' : 'Auto Captions'}</span>
+          </button>
+        )}
+
+        {onImportYmmp && (
+          <button
+            type="button"
+            onClick={onImportYmmp}
+            className="px-2.5 py-1 bg-[#151619] hover:bg-[#1f2126] text-[#c4c7c5] hover:text-white text-xs font-mono rounded-sm border border-[#282a2e] flex items-center gap-1.5 transition active:scale-95"
+            title="Import a Yukkuri Movie Maker 4 project (.ymmp)"
+          >
+            <FileJson className="w-3.5 h-3.5 text-[#f8b26a]" />
+            <span>Import YMM4</span>
           </button>
         )}
 

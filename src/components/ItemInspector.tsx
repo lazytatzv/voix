@@ -633,6 +633,38 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     step={0.01}
                     onChange={(value) => patch({ volumeScale: value } as Partial<TimelineItem>)}
                   />
+                  <SliderField
+                    label="Intonation"
+                    value={voice.intonationScale ?? 1}
+                    min={0}
+                    max={2}
+                    step={0.01}
+                    onChange={(value) => patch({ intonationScale: value } as Partial<TimelineItem>)}
+                  />
+                  <SliderField
+                    label="Pause scale"
+                    value={voice.pauseLengthScale ?? 1}
+                    min={0.1}
+                    max={3}
+                    step={0.01}
+                    onChange={(value) => patch({ pauseLengthScale: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Pre silence (s)"
+                    value={voice.prePhonemeLength ?? 0.1}
+                    step={0.01}
+                    min={0}
+                    max={3}
+                    onChange={(value) => patch({ prePhonemeLength: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Post silence (s)"
+                    value={voice.postPhonemeLength ?? 0.2}
+                    step={0.01}
+                    min={0}
+                    max={3}
+                    onChange={(value) => patch({ postPhonemeLength: value } as Partial<TimelineItem>)}
+                  />
                   <NumberField
                     label="Tachie scale"
                     value={voice.scale ?? 1}

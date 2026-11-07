@@ -141,6 +141,14 @@ export interface VoiceItem extends BaseTimelineItem {
   speedScale?: number;
   pitchScale?: number;
   volumeScale?: number;
+  /** VOICEVOX-style intonation strength (0 = flat, 1 = default, up to 2). */
+  intonationScale?: number;
+  /** Silence inserted before the first phoneme, in seconds. */
+  prePhonemeLength?: number;
+  /** Silence inserted after the last phoneme, in seconds. */
+  postPhonemeLength?: number;
+  /** Multiplier applied to pauses between phrases (0.1 - 3). */
+  pauseLengthScale?: number;
   terminal?: {
     cmd: string;
     output?: string;

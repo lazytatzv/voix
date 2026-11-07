@@ -238,6 +238,22 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
       speedScale: rec.speedScale !== undefined ? Number(rec.speedScale) : 1,
       pitchScale: rec.pitchScale !== undefined ? Number(rec.pitchScale) : 0,
       volumeScale: rec.volumeScale !== undefined ? Number(rec.volumeScale) : 1,
+      intonationScale:
+        rec.intonationScale !== undefined && Number.isFinite(Number(rec.intonationScale))
+          ? Math.max(0, Math.min(2, Number(rec.intonationScale)))
+          : 1,
+      prePhonemeLength:
+        rec.prePhonemeLength !== undefined && Number.isFinite(Number(rec.prePhonemeLength))
+          ? Math.max(0, Number(rec.prePhonemeLength))
+          : 0.1,
+      postPhonemeLength:
+        rec.postPhonemeLength !== undefined && Number.isFinite(Number(rec.postPhonemeLength))
+          ? Math.max(0, Number(rec.postPhonemeLength))
+          : 0.2,
+      pauseLengthScale:
+        rec.pauseLengthScale !== undefined && Number.isFinite(Number(rec.pauseLengthScale))
+          ? Math.max(0.1, Math.min(3, Number(rec.pauseLengthScale)))
+          : 1,
       phonemes: Array.isArray(rec.phonemes)
         ? (rec.phonemes as VoiceItem['phonemes'])
         : undefined,

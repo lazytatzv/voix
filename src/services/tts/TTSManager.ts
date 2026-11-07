@@ -1,4 +1,4 @@
-import { TTSProvider, VoicevoxProvider } from './VoicevoxProvider';
+import { TTSOptions, TTSProvider, VoicevoxProvider } from './VoicevoxProvider';
 import { Speaker, PhonemeTiming } from '../../types';
 import { makeCacheKey } from '../../utils/hash';
 import {
@@ -79,7 +79,7 @@ export class TTSManager {
     providerId: string,
     speakerId: number,
     text: string,
-    options?: { speedScale?: number; pitchScale?: number; volumeScale?: number }
+    options?: TTSOptions
   ): string {
     return makeCacheKey([
       providerId,
@@ -88,6 +88,10 @@ export class TTSManager {
       (options?.speedScale ?? 1).toFixed(3),
       (options?.pitchScale ?? 0).toFixed(3),
       (options?.volumeScale ?? 1).toFixed(3),
+      (options?.intonationScale ?? 1).toFixed(3),
+      (options?.prePhonemeLength ?? 0.1).toFixed(3),
+      (options?.postPhonemeLength ?? 0.2).toFixed(3),
+      (options?.pauseLengthScale ?? 1).toFixed(3),
     ]);
   }
 
@@ -95,7 +99,7 @@ export class TTSManager {
     providerId: string,
     speakerId: number,
     text: string,
-    options?: { speedScale?: number; pitchScale?: number; volumeScale?: number },
+    options?: TTSOptions,
     useCache = true
   ): Promise<TTSResult> {
     const key = this.getCacheKey(providerId, speakerId, text, options);
@@ -141,7 +145,7 @@ export class TTSManager {
     providerId: string,
     speakerId: number,
     text: string,
-    options?: { speedScale?: number; pitchScale?: number; volumeScale?: number }
+    options?: TTSOptions
   ): Promise<TTSResult> {
     if (this.cache.has(key)) return this.cache.get(key)!;
     const disk = await loadCachedAudio(key);
