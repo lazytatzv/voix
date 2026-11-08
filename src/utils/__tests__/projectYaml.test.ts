@@ -50,6 +50,8 @@ function makeProject(): VoixProject {
       speedScale: 1.1,
       pitchScale: -0.05,
       volumeScale: 0.8,
+      fadeIn: 0.25,
+      fadeOut: 0.4,
       terminal: { cmd: 'echo yaml', output: 'yaml' },
       se: 'pop',
       anim: 'bounce',
@@ -151,6 +153,8 @@ describe('project YAML roundtrip', () => {
       speedScale: 1.1,
       pitchScale: -0.05,
       volumeScale: 0.8,
+      fadeIn: 0.25,
+      fadeOut: 0.4,
       se: 'pop',
       anim: 'bounce',
     });

@@ -67,6 +67,7 @@ import { ScriptLinePrompt, formatSpeechWithPersona } from './services/aiService'
 import { matchCharacter, ParsedScriptLine, ParsedYamlConfig, DEFAULT_LINE_GAP } from './utils/scriptParser';
 import { soundEffectManager } from './utils/soundEffects';
 import { voiceAudioPlayer } from './services/voicePlayer';
+import type { VoicePlaybackOptions } from './services/voicePlayer';
 import { buildVoiceTtsOptions } from './services/tts/voiceParams';
 
 const AUTOSAVE_LOCAL_KEY = 'voix_project_autosave_v2';
@@ -558,8 +559,15 @@ export function App() {
   }, []);
 
   const playVoiceAudio = useCallback(
-    (id: string, source: Blob | string, volume = 1, offset = 0, audioKey?: string) => {
-      void voiceAudioPlayer.playVoice(id, source, volume, offset, audioKey);
+    (
+      id: string,
+      source: Blob | string,
+      volume = 1,
+      offset = 0,
+      audioKey?: string,
+      options?: VoicePlaybackOptions
+    ) => {
+      void voiceAudioPlayer.playVoice(id, source, volume, offset, audioKey, options);
     },
     []
   );
@@ -810,7 +818,11 @@ export function App() {
         const offset = Math.max(0, currentTimeRef.current - item.startTime);
         const source = item.audioBlob || item.audioBlobUrl;
         if (source) {
-          playVoiceAudio(item.id, source, item.volumeScale ?? 1, offset, item.audioKey);
+          playVoiceAudio(item.id, source, item.volumeScale ?? 1, offset, item.audioKey, {
+            duration: Math.max(0, item.duration - offset),
+            fadeIn: item.fadeIn ?? 0,
+            fadeOut: item.fadeOut ?? 0,
+          });
         } else {
           void ensureVoiceAudio(item.id).then((url) => {
             if (!url) return;
@@ -819,7 +831,11 @@ export function App() {
               currentTimeRef.current < item.startTime + item.duration
             ) {
               const currentOffset = Math.max(0, currentTimeRef.current - item.startTime);
-              playVoiceAudio(item.id, url, item.volumeScale ?? 1, currentOffset, item.audioKey);
+              playVoiceAudio(item.id, url, item.volumeScale ?? 1, currentOffset, item.audioKey, {
+                duration: Math.max(0, item.duration - currentOffset),
+                fadeIn: item.fadeIn ?? 0,
+                fadeOut: item.fadeOut ?? 0,
+              });
             }
           });
         }

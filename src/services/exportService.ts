@@ -290,16 +290,23 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
           const clipStart = Math.max(item.startTime, exportStart);
           const clipEnd = Math.min(item.startTime + item.duration, exportEnd);
           if (clipEnd - clipStart < 0.02) continue;
+          const clipDuration = clipEnd - clipStart;
           audioClips.push({
             path,
             start: clipStart - exportStart,
-            duration: clipEnd - clipStart,
+            duration: clipDuration,
             volume: Math.max(0, item.volumeScale ?? 1),
             offset: Math.max(0, clipStart - item.startTime),
             speed: 1,
             loop_audio: false,
-            fade_in: 0,
-            fade_out: 0,
+            fade_in:
+              item.startTime >= exportStart
+                ? Math.min(clipDuration, Math.max(0, item.fadeIn ?? 0))
+                : 0,
+            fade_out:
+              item.startTime + item.duration <= exportEnd
+                ? Math.min(clipDuration, Math.max(0, item.fadeOut ?? 0))
+                : 0,
           });
         } catch (err) {
           console.warn('[export] voice preparation failed:', item.text, err);

@@ -730,6 +730,20 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     step={0.01}
                     onChange={(value) => patch({ volumeScale: value } as Partial<TimelineItem>)}
                   />
+                  <NumberField
+                    label="Fade in (s)"
+                    value={voice.fadeIn ?? 0}
+                    step={0.05}
+                    min={0}
+                    onChange={(value) => patch({ fadeIn: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Fade out (s)"
+                    value={voice.fadeOut ?? 0}
+                    step={0.05}
+                    min={0}
+                    onChange={(value) => patch({ fadeOut: value } as Partial<TimelineItem>)}
+                  />
                   <SliderField
                     label="Intonation"
                     value={voice.intonationScale ?? 1}

@@ -23,7 +23,7 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 - **自動保存** — `~/.config/voix/autosave.voix.yaml` と localStorage の二重保存。次回起動時に復元します。
 - **音声キャッシュ** — 合成済みWAVを `~/.cache/voix/audio` に保存し、`audioKey` としてプロジェクトに記録。再起動後の再合成を不要にします。
 - **TTSプロバイダー** — VOICEVOX / COEIROINK / AivisSpeech など、VOICEVOX互換APIに対応。キャラクター設定ではエンジン・キャラクター・スタイルを個別に選べ、VOICEVOXの全話者・全スタイルをそのまま一覧表示します。**All voices** の試聴ブラウザでは、検索しながら各話者・各スタイルの ▶ を押すだけでその声を再生でき、**Play all** で一覧の全ボイスを順番に試聴できます。話者を変えると該当セリフの古い音声キャッシュを破棄して自動で再合成します。
-- **インスペクター** — 選択アイテムのセリフ・話速・音高・抑揚・句読点の間・前後の無音・音量・表情・テロップスタイル・画像座標・BGMフェードなどを数値編集。
+- **インスペクター** — 選択アイテムのセリフ・話速・音高・抑揚・句読点の間・前後の無音・音量・セリフのフェードイン/アウト・表情・テロップスタイル・画像座標・BGMフェードなどを数値編集。
 - **書き出し** — 透過オーバーレイPNGをフレーム合成し、Rust側でFFmpegに渡して背景動画・音声と結合。範囲指定・進捗表示・実行中キャンセルに対応します。
 - **Linuxフレンドリー** — XDG準拠の設定/キャッシュ/データディレクトリ、`~` 展開、xdg-open連携。WebKitGTKでも背景動画・BGMを再生できるよう blob URL 経由で読み込みます。
 
@@ -174,7 +174,7 @@ markers:
 | `startTime` / `duration` | タイムライン上の開始秒・長さ（秒） |
 | `name` | タイムライン表示名 |
 | `hidden` / `locked` | 個別の非表示・編集ロック |
-| `fadeIn` / `fadeOut` | フェード時間（秒）。テロップ・画像・音声に適用 |
+| `fadeIn` / `fadeOut` | フェード時間（秒）。テロップ・画像・音声・セリフに適用 |
 | `animIn` / `animOut` | `fade` / `slide-up` / `slide-down` / `slide-left` / `slide-right` / `zoom` / `pop` |
 | `effects` | 描画フィルター: `blur`, `brightness`, `contrast`, `saturation`, `hueRotate`, `grayscale`, `sepia`, `invert` |
 | `src` | 画像・音声・動画の絶対パス（`~` 可） |
@@ -239,7 +239,7 @@ keyframes:
 
 | YMM4のアイテム | Voixでの扱い |
 |---|---|
-| VoiceItem | `voice`。CharacterNameからキャラクターを照合し、話速・音高・抑揚・句読点の間・前後無音・音量を引き継ぎます |
+| VoiceItem | `voice`。CharacterNameからキャラクターを照合し、話速・音高・抑揚・句読点の間・前後無音・音量・`VoiceFadeIn` / `VoiceFadeOut` を引き継ぎます |
 | TextItem | `text`。文字色・縁色・フォント・サイズ・位置・回転・不透明度に加え、行間（`LineHeight2`）・文字間隔（`LetterSpacing2`）・太字/斜体/下線/取り消し線・`WordWrap`・一文字ずつの表示/非表示（`DisplayInterval` / `HideInterval`）を変換します |
 | AudioItem | `audio`。音量・再生速度・頭出し・ループを引き継ぎます |
 | ImageItem | `image`。元画像の自然サイズとZoomから表示サイズを計算し、フレーム中心基準のX/Yを配置に変換します |

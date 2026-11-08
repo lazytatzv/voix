@@ -395,6 +395,8 @@ function toVoiceItem(
     postPhonemeLength: Math.max(0, asNumber(parameter.PostPhonemeLength, 0.2)),
     pauseLengthScale: Math.min(3, Math.max(0.1, asNumber(parameter.PauseLengthScale, 1))),
     volumeScale,
+    fadeIn: Math.max(0, asNumber(raw.VoiceFadeIn, 0)),
+    fadeOut: Math.max(0, asNumber(raw.VoiceFadeOut, 0)),
     anim: 'bounce',
     isSynthesizing: false,
   };

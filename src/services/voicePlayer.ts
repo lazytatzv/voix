@@ -17,6 +17,19 @@ interface ActiveVoice {
   duration: number;
   /** Per-line target gain, restored when the voice track is unmuted. */
   volume: number;
+  /** Fade-in length applied to this playback, used to rebuild the envelope. */
+  fadeIn: number;
+  /** Fade-out length applied to this playback, used to rebuild the envelope. */
+  fadeOut: number;
+}
+
+export interface VoicePlaybackOptions {
+  /** Timeline clip length from the requested offset, in seconds. */
+  duration?: number;
+  /** Seconds spent fading in at the start of the clip. */
+  fadeIn?: number;
+  /** Seconds spent fading out before the clip end. */
+  fadeOut?: number;
 }
 
 export class VoiceAudioPlayer {
@@ -78,7 +91,8 @@ export class VoiceAudioPlayer {
     source: Blob | string,
     volume = 1.0,
     offset = 0,
-    cacheKey?: string
+    cacheKey?: string,
+    options: VoicePlaybackOptions = {}
   ): Promise<boolean> {
     const ctx = this.getContext();
     if (ctx.state === 'suspended') {
@@ -94,6 +108,25 @@ export class VoiceAudioPlayer {
       return false;
     }
 
+    const now = ctx.currentTime;
+    const remainingInBuffer = Math.max(0, buffer.duration - playOffset);
+    const playDuration = Math.max(
+      0,
+      Math.min(options.duration ?? remainingInBuffer, remainingInBuffer)
+    );
+    if (playDuration < 0.03) return false;
+
+    // Clamp and fit both fades into the clip. A resumed line starts already
+    // audible, so the fade-in only applies when playback starts at the top.
+    let fadeIn = Math.max(0, Math.min(options.fadeIn ?? 0, playDuration));
+    let fadeOut = Math.max(0, Math.min(options.fadeOut ?? 0, playDuration));
+    if (fadeIn + fadeOut > playDuration) {
+      const scale = playDuration / (fadeIn + fadeOut);
+      fadeIn *= scale;
+      fadeOut *= scale;
+    }
+    if (playOffset > 0.03) fadeIn = 0;
+
     // Stop previous instance of the same voice line if already active
     this.stopVoice(id, false);
 
@@ -103,7 +136,14 @@ export class VoiceAudioPlayer {
     const gainNode = ctx.createGain();
     const requestedVolume = Math.max(0, Math.min(2, volume));
     const targetVolume = this.isMuted ? 0 : requestedVolume;
-    gainNode.gain.setValueAtTime(targetVolume, ctx.currentTime);
+    gainNode.gain.setValueAtTime(fadeIn > 0 ? 0 : targetVolume, now);
+    if (fadeIn > 0) {
+      gainNode.gain.linearRampToValueAtTime(targetVolume, now + fadeIn);
+    }
+    if (fadeOut > 0) {
+      gainNode.gain.setValueAtTime(targetVolume, now + playDuration - fadeOut);
+      gainNode.gain.linearRampToValueAtTime(0.0001, now + playDuration);
+    }
 
     sourceNode.connect(gainNode);
     gainNode.connect(ctx.destination);
@@ -116,15 +156,22 @@ export class VoiceAudioPlayer {
     };
 
     try {
-      sourceNode.start(0, playOffset);
+      sourceNode.start(now, playOffset);
+      // Honour the timeline clip length so a short item cannot keep talking
+      // past its end, matching the exported FFmpeg clip.
+      if (playDuration < remainingInBuffer - 0.01) {
+        sourceNode.stop(now + playDuration);
+      }
       this.activeVoices.set(id, {
         id,
         source: sourceNode,
         gainNode,
-        startedAtContextTime: ctx.currentTime,
+        startedAtContextTime: now,
         offset: playOffset,
-        duration: buffer.duration,
+        duration: playDuration,
         volume: requestedVolume,
+        fadeIn,
+        fadeOut,
       });
       return true;
     } catch (err) {
@@ -193,10 +240,48 @@ export class VoiceAudioPlayer {
   public setMuted(muted: boolean): void {
     this.isMuted = muted;
     if (this.ctx && this.ctx.state === 'running') {
-      const now = this.ctx.currentTime;
       for (const voice of this.activeVoices.values()) {
-        voice.gainNode.gain.setValueAtTime(muted ? 0 : voice.volume, now);
+        this.applyGainEnvelope(voice, muted);
       }
+    }
+  }
+
+  /**
+   * Rebuild a voice's gain automation after a mute toggle. Scheduled ramps
+   * from `playVoice` survive a plain `setValueAtTime`, so they are cancelled
+   * first; unmuting then resumes the fade envelope at its current position.
+   */
+  private applyGainEnvelope(voice: ActiveVoice, muted: boolean): void {
+    const ctx = this.ctx;
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const gain = voice.gainNode.gain;
+    gain.cancelScheduledValues(now);
+    if (muted) {
+      gain.setValueAtTime(0, now);
+      return;
+    }
+    const end = voice.startedAtContextTime + voice.duration;
+    const elapsed = Math.max(0, now - voice.startedAtContextTime);
+    if (voice.fadeIn > 0 && elapsed < voice.fadeIn) {
+      gain.setValueAtTime(voice.volume * (elapsed / voice.fadeIn), now);
+      gain.linearRampToValueAtTime(voice.volume, voice.startedAtContextTime + voice.fadeIn);
+      if (voice.fadeOut > 0) {
+        gain.setValueAtTime(voice.volume, end - voice.fadeOut);
+        gain.linearRampToValueAtTime(0.0001, end);
+      }
+      return;
+    }
+    if (voice.fadeOut > 0 && elapsed > voice.duration - voice.fadeOut) {
+      const remaining = Math.max(0, (voice.duration - elapsed) / voice.fadeOut);
+      gain.setValueAtTime(voice.volume * remaining, now);
+      gain.linearRampToValueAtTime(0.0001, end);
+      return;
+    }
+    gain.setValueAtTime(voice.volume, now);
+    if (voice.fadeOut > 0) {
+      gain.setValueAtTime(voice.volume, end - voice.fadeOut);
+      gain.linearRampToValueAtTime(0.0001, end);
     }
   }
 
