@@ -17,7 +17,7 @@ import { AudioItem, Character, DuckingSettings, TimelineItem, TrackState } from 
 import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
 import { computeItemMotion } from '../render/itemMotion';
 import { resolveItemTransform } from '../render/keyframes';
-import { loadImage, collectCharacterImageSources, clearImageCache } from '../render/imageCache';
+import { loadImage, collectCharacterImageSources } from '../render/imageCache';
 import { mediaUrlFor } from '../utils/mediaUrl';
 import { appLog } from '../utils/appLog';
 import { MediaInfo } from '../services/mediaProbe';
@@ -76,6 +76,9 @@ interface VideoPreviewProps {
   /** True while the media URL is being resolved. */
   loading?: boolean;
 }
+
+/** Upper bound for the preview backing store: full 4K redraws are costly in WebKitGTK. */
+const PREVIEW_MAX_DIMENSION = 2560;
 
 /**
  * Which top corner of a tachie should carry the resize grip, and where does the
@@ -254,16 +257,17 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     isPlayingRef.current = isPlaying;
   }, [isPlaying]);
 
-  // Preload every character avatar / expression.
+  // Preload every character avatar / expression. Keep already-decoded images
+  // in the cache: clearing it here made characters vanish for a few frames
+  // every time an item changed (voice hydration, inspector edits, ...).
   useEffect(() => {
     let cancelled = false;
-    clearImageCache();
     const sources = collectCharacterImageSources(characters);
     items.forEach((item) => {
       if (item.type === 'image' && item.src) sources.push(item.src);
     });
-    Promise.all(sources.map((src) => loadImage(src))).then(() => {
-      if (!cancelled) setImageVersion((v) => v + 1);
+    Promise.all(sources.map((src) => loadImage(src))).then((images) => {
+      if (!cancelled && images.some(Boolean)) setImageVersion((v) => v + 1);
     });
     return () => {
       cancelled = true;
@@ -508,15 +512,44 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, [activeAudioUrl, isMuted]);
 
-  // Draw the preview at a capped backing resolution. The project is still
-  // rendered in project coordinates, so text and images keep their layout
-  // while 4K projects avoid rendering millions of pixels every frame.
+  // Match the canvas backing store to its on-screen size (including HiDPI)
+  // instead of downscaling everything to 720p. Rendering above the project
+  // resolution adds no detail, and a dimension cap keeps 4K previews smooth.
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const scale = Math.min(1, 1280 / Math.max(1, width), 720 / Math.max(1, height));
-    canvas.width = Math.max(2, Math.round(width * scale));
-    canvas.height = Math.max(2, Math.round(height * scale));
+    const container = containerRef.current;
+    if (!canvas || !container) return;
+
+    const resize = () => {
+      const rect = container.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const cssWidth = rect.width > 0 ? rect.width : width;
+      const cssHeight = rect.height > 0 ? rect.height : height;
+      const scale = Math.min(
+        dpr,
+        width / Math.max(1, cssWidth),
+        height / Math.max(1, cssHeight),
+        PREVIEW_MAX_DIMENSION / Math.max(1, cssWidth, cssHeight)
+      );
+      const nextWidth = Math.max(2, Math.round(cssWidth * scale));
+      const nextHeight = Math.max(2, Math.round(cssHeight * scale));
+      if (canvas.width === nextWidth && canvas.height === nextHeight) return;
+      canvas.width = nextWidth;
+      canvas.height = nextHeight;
+      renderFrameRef.current();
+    };
+
+    resize();
+    window.addEventListener('resize', resize);
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(resize);
+      observer.observe(container);
+    }
+    return () => {
+      window.removeEventListener('resize', resize);
+      observer?.disconnect();
+    };
   }, [width, height]);
 
   const displayCharacters = useMemo(() => {
@@ -1290,8 +1323,6 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
         <canvas
           ref={canvasRef}
-          width={width}
-          height={height}
           className={`absolute inset-0 w-full h-full object-contain select-none ${
             hoveredCharacterId || hoveredVisualItemId ? 'cursor-move' : 'cursor-pointer'
           }`}

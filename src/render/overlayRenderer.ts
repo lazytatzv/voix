@@ -1065,6 +1065,10 @@ function drawTextItem(
 
 export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: OverlayRenderOptions): void {
   const { width, height, time, items, characters, tracks } = options;
+  // High-quality downscaling matters for 4K sources drawn into a smaller
+  // preview canvas and for scaled tachie images in the export pass.
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   // Clear the whole backing store even when the caller renders with a scale
   // transform (the preview uses a capped-resolution canvas).
   ctx.save();
