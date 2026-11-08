@@ -3,6 +3,7 @@ import { containsEnglish, convertEnglishToVoicevox } from '../../utils/englishTo
 import { getTtsSpokenText } from '../../utils/pronunciation';
 import { parseSpeakerList } from './speakerUtils';
 import { VOICEVOX_CATALOG_SPEAKERS } from '../../utils/voicevoxCatalog';
+import { COEIROINK_CATALOG_SPEAKERS } from '../../utils/coeiroinkCatalog';
 
 export interface TTSOptions {
   speedScale?: number;
@@ -73,28 +74,49 @@ export class VoicevoxProvider implements TTSProvider {
   }
 
   async isAvailable(): Promise<boolean> {
-    try {
-      const res = await fetch(`${this.endpoint}/version`, { signal: AbortSignal.timeout(1500) });
-      return res.ok;
-    } catch {
-      return false;
+    // Probe common endpoints for VOICEVOX (/version) and COEIROINK (/v1/speakers, /docs, /version)
+    const checkUrls = [
+      `${this.endpoint}/version`,
+      `${this.endpoint}/v1/speakers`,
+      `${this.endpoint}/speakers`,
+      `${this.endpoint}/docs`,
+    ];
+    for (const url of checkUrls) {
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(1200) });
+        if (res.ok) return true;
+      } catch {
+        // try next
+      }
     }
+    return false;
   }
 
   async getSpeakers(): Promise<Speaker[]> {
-    try {
-      const res = await fetch(`${this.endpoint}/speakers`, {
-        signal: AbortSignal.timeout(4000),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        const list = parseSpeakerList(data);
-        if (list.length > 0) return list;
+    // Support both /v1/speakers (COEIROINK v2) and /speakers (VOICEVOX / COEIROINK v1)
+    const endpoints = [`${this.endpoint}/v1/speakers`, `${this.endpoint}/speakers`];
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          signal: AbortSignal.timeout(3500),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const list = parseSpeakerList(data);
+          if (list.length > 0) return list;
+        }
+      } catch (e) {
+        // try next
       }
-    } catch (e) {
-      console.warn('Failed to fetch live VOICEVOX speakers, using catalog fallback:', e);
     }
-    return VOICEVOX_CATALOG_SPEAKERS;
+
+    if (this.id === 'voicevox') {
+      return VOICEVOX_CATALOG_SPEAKERS;
+    }
+    if (this.id === 'coeiroink') {
+      return COEIROINK_CATALOG_SPEAKERS;
+    }
+    return [];
   }
 
   async synthesize(
@@ -119,18 +141,34 @@ export class VoicevoxProvider implements TTSProvider {
     const spokenAnnotated = getTtsSpokenText(text);
     // (b) 英文が含まれる場合は自動で発音カタカナに変換してVOICEVOXに渡す
     const speechText = containsEnglish(spokenAnnotated) ? convertEnglishToVoicevox(spokenAnnotated) : spokenAnnotated;
-    const queryUrl = new URL(`${this.endpoint}/audio_query`);
-    queryUrl.searchParams.set('speaker', speakerId.toString());
-    queryUrl.searchParams.set('text', speechText);
 
-    const queryRes = await fetch(queryUrl.toString(), {
-      method: 'POST',
-    });
-    if (!queryRes.ok) {
-      throw new Error(`Audio query failed: ${queryRes.status} ${await queryRes.text()}`);
+    let audioQuery: VoicevoxAudioQuery | null = null;
+    const queryUrls = [
+      `${this.endpoint}/audio_query`,
+      `${this.endpoint}/v1/audio_query`,
+    ];
+
+    for (const qBase of queryUrls) {
+      try {
+        const queryUrl = new URL(qBase);
+        queryUrl.searchParams.set('speaker', speakerId.toString());
+        queryUrl.searchParams.set('text', speechText);
+
+        const queryRes = await fetch(queryUrl.toString(), {
+          method: 'POST',
+        });
+        if (queryRes.ok) {
+          audioQuery = (await queryRes.json()) as VoicevoxAudioQuery;
+          break;
+        }
+      } catch {
+        // try next
+      }
     }
 
-    const audioQuery = (await queryRes.json()) as VoicevoxAudioQuery;
+    if (!audioQuery) {
+      throw new Error(`Audio query failed for speaker ${speakerId} on ${this.name} (${this.endpoint})`);
+    }
 
     if (options?.speedScale !== undefined) {
       audioQuery.speedScale = Math.max(0.1, options.speedScale);
@@ -184,19 +222,35 @@ export class VoicevoxProvider implements TTSProvider {
     const totalEstimatedDuration = currentTime + (audioQuery.postPhonemeLength || 0.1) / speed;
 
     // 2. 音声合成 (WAVデータ取得)
-    const synthUrl = new URL(`${this.endpoint}/synthesis`);
-    synthUrl.searchParams.set('speaker', speakerId.toString());
+    let synthRes: Response | null = null;
+    const synthUrls = [
+      `${this.endpoint}/synthesis`,
+      `${this.endpoint}/v1/synthesis`,
+    ];
 
-    const synthRes = await fetch(synthUrl.toString(), {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(audioQuery),
-    });
+    for (const sBase of synthUrls) {
+      try {
+        const synthUrl = new URL(sBase);
+        synthUrl.searchParams.set('speaker', speakerId.toString());
 
-    if (!synthRes.ok) {
-      throw new Error(`Synthesis failed: ${synthRes.status} ${await synthRes.text()}`);
+        const res = await fetch(synthUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(audioQuery),
+        });
+        if (res.ok) {
+          synthRes = res;
+          break;
+        }
+      } catch {
+        // try next
+      }
+    }
+
+    if (!synthRes) {
+      throw new Error(`Synthesis failed for speaker ${speakerId} on ${this.name} (${this.endpoint})`);
     }
 
     const audioBlob = await synthRes.blob();

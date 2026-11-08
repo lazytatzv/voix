@@ -24,8 +24,8 @@ export class TTSManager {
     const defaultVoicevox = new VoicevoxProvider('voicevox', 'VOICEVOX (localhost:50021)', 'http://localhost:50021');
     this.providers.set(defaultVoicevox.id, defaultVoicevox);
 
-    // COEIROINK等の互換エンジンもワンクリックで足せるようにプリセット登録可能
-    const coeiroink = new VoicevoxProvider('coeiroink', 'COEIROINK (localhost:50031)', 'http://localhost:50031');
+    // COEIROINK v2 (デフォルトポート: 50032)
+    const coeiroink = new VoicevoxProvider('coeiroink', 'COEIROINK (localhost:50032)', 'http://localhost:50032');
     this.providers.set(coeiroink.id, coeiroink);
 
     const aivis = new VoicevoxProvider('aivis', 'AivisSpeech (localhost:10101)', 'http://localhost:10101');
@@ -55,8 +55,8 @@ export class TTSManager {
       Array.from(this.providers.values()).map(async (provider) => {
         try {
           const available = await provider.isAvailable();
-          // For primary provider, provide offline catalog speakers even if engine is offline
-          if (!available && provider.id !== 'voicevox') return null;
+          // For primary providers (voicevox and coeiroink), provide catalog speakers even if engine is offline
+          if (!available && provider.id !== 'voicevox' && provider.id !== 'coeiroink') return null;
           const speakers = await provider.getSpeakers();
           if (speakers.length === 0) return null;
           return {

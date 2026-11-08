@@ -31,6 +31,7 @@ import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
 import { SafeAvatarImg } from './SafeAvatarImg';
 import { defaultCharacters } from '../utils/defaultCharacters';
 import { VOICEVOX_CATALOG } from '../utils/voicevoxCatalog';
+import { COEIROINK_CATALOG } from '../utils/coeiroinkCatalog';
 import { VOICE_TONE_PRESETS } from '../utils/voiceTonePresets';
 
 interface ProviderVoices {
@@ -73,6 +74,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   } | null>(null);
   const [auditionAll, setAuditionAll] = useState(false);
   const [isPresetPickerOpen, setIsPresetPickerOpen] = useState(false);
+  const [isCoeiroinkPickerOpen, setIsCoeiroinkPickerOpen] = useState(false);
   const auditionTokenRef = useRef(0);
   const auditionTimerRef = useRef<number | null>(null);
   const auditionWaitResolveRef = useRef<(() => void) | null>(null);
@@ -356,6 +358,31 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     setIsPresetPickerOpen(false);
   };
 
+  const handleAddFromCoeiroinkCatalog = (preset: (typeof COEIROINK_CATALOG)[0]) => {
+    stopAudition();
+    const newId = `char_${Date.now()}`;
+    const newChar: Character = {
+      id: newId,
+      name: preset.name,
+      ttsProviderId: 'coeiroink',
+      speakerId: preset.styles[0]?.id ?? 0,
+      styleId: preset.styles[0]?.id ?? 0,
+      avatar: {
+        idle: '/characters/metan.png',
+        speaking: '/characters/metan.png',
+        blinking: '/characters/metan.png',
+      },
+      subtitleStyle: {
+        ...SUBTITLE_PRESETS[0].style,
+        outerStrokeColor: preset.color,
+      },
+      position: characters.length % 2 === 0 ? 'left' : 'right',
+    };
+    onAddCharacter(newChar);
+    setSelectedCharId(newId);
+    setIsCoeiroinkPickerOpen(false);
+  };
+
   const positions: Array<{ id: 'left' | 'right' | 'center' | 'hidden'; label: string }> = [
     { id: 'left', label: 'Left' },
     { id: 'center', label: 'Center' },
@@ -549,6 +576,44 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       </div>
                       <span className="text-[10px] font-mono text-[#6f7377] flex-shrink-0">
                         ID {p.defaultSpeakerId}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="relative mt-2">
+              <button
+                type="button"
+                onClick={() => setIsCoeiroinkPickerOpen((prev) => !prev)}
+                className="w-full py-2 px-3 rounded-xl bg-[#251825] hover:bg-[#342234] text-[#f472b6] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#442642] transition cursor-pointer"
+                title="Add character from COEIROINK character catalog"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-pink-400" />
+                COEIROINK ({COEIROINK_CATALOG.length})
+              </button>
+              {isCoeiroinkPickerOpen && (
+                <div className="absolute left-0 bottom-full mb-1 w-60 max-h-72 overflow-y-auto bg-[#181a1d] border border-[#2e3137] rounded-xl shadow-2xl p-2 z-50 space-y-1">
+                  <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2 mb-1 block">
+                    Pick COEIROINK Character
+                  </span>
+                  {COEIROINK_CATALOG.map((p) => (
+                    <button
+                      key={p.uuid}
+                      type="button"
+                      onClick={() => handleAddFromCoeiroinkCatalog(p)}
+                      className="w-full text-left p-1.5 rounded hover:bg-[#24272d] transition flex items-center justify-between text-xs cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: p.color }}
+                        />
+                        <span className="text-[#e3e3e3] truncate">{p.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#6f7377] flex-shrink-0">
+                        {p.styles.length} styles
                       </span>
                     </button>
                   ))}

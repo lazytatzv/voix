@@ -43,11 +43,27 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 | VOICEVOX ENGINE | `http://localhost:50021` で起動（Docker可） |
 | 日本語フォント | Noto Sans JP 推奨 |
 
-### VOICEVOX の起動（同梱スクリプト）
+### 音声合成エンジン (VOICEVOX / COEIROINK) の起動（Docker）
+
+VOICEVOX（ポート 50021）および COEIROINK（ポート 50032）を Docker でワンコマンド起動できます:
 
 ```bash
-./voicevox.sh start        # CPU版
-./voicevox.sh start gpu    # NVIDIA GPU版
+# 全エンジン起動（VOICEVOX + COEIROINK）
+./tts-engines.sh start all         # CPU版
+./tts-engines.sh start all gpu     # NVIDIA GPU版
+./tts-engines.sh status            # ヘルスチェック
+./tts-engines.sh stop all          # 全停止
+
+# 個別起動: COEIROINK (localhost:50032)
+./coeiroink.sh start               # CPU版
+./coeiroink.sh start gpu           # GPU版
+./coeiroink.sh status
+./coeiroink.sh stop
+
+# 個別起動: VOICEVOX (localhost:50021)
+./voicevox.sh start                # CPU版
+./voicevox.sh start gpu            # GPU版
+./voicevox.sh status
 ./voicevox.sh stop
 ```
 

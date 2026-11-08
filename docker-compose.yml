@@ -1,5 +1,7 @@
 services:
-  # VOICEVOX Engine (CPU版) - 一般的な環境用
+  # ==============================================================================
+  #  VOICEVOX Engine (デフォルトポート: 50021)
+  # ==============================================================================
   voicevox-cpu:
     image: voicevox/voicevox_engine:cpu-ubuntu20.04-latest
     container_name: voicevox_engine
@@ -7,8 +9,6 @@ services:
       - "50021:50021"
     restart: unless-stopped
 
-  # NVIDIA GPU版 (GPUアクセラレーションを使用したい場合)
-  # 起動方法: docker compose --profile gpu up -d
   voicevox-gpu:
     image: voicevox/voicevox_engine:nvidia-ubuntu20.04-latest
     container_name: voicevox_engine_gpu
@@ -23,3 +23,42 @@ services:
               count: all
               capabilities: [gpu]
     profiles: ["gpu"]
+
+  # ==============================================================================
+  #  COEIROINK Engine (デフォルトポート: 50032)
+  # ==============================================================================
+  coeiroink-cpu:
+    build:
+      context: ./docker/coeiroink
+      dockerfile: Dockerfile.cpu
+    image: voix/coeiroink:cpu
+    container_name: coeiroink_engine
+    ports:
+      - "50032:50032"
+    volumes:
+      - coeiroink_speaker_info:/app/coeiroink/speaker_info
+    restart: unless-stopped
+    profiles: ["coeiroink", "all"]
+
+  coeiroink-gpu:
+    build:
+      context: ./docker/coeiroink
+      dockerfile: Dockerfile.gpu
+    image: voix/coeiroink:gpu
+    container_name: coeiroink_engine_gpu
+    ports:
+      - "50032:50032"
+    volumes:
+      - coeiroink_speaker_info:/app/coeiroink/speaker_info
+    restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    profiles: ["coeiroink-gpu", "gpu"]
+
+volumes:
+  coeiroink_speaker_info:
