@@ -19,6 +19,7 @@ import {
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
   AudioItem,
+  BlendMode,
   Character,
   ImageItem,
   ItemAnimation,
@@ -38,6 +39,7 @@ import {
   sampleKeyframes,
 } from '../render/keyframes';
 import { normalizeItemEffects } from '../render/itemEffects';
+import { BLEND_MODES } from '../render/blendModes';
 
 interface ItemInspectorProps {
   isOpen: boolean;
@@ -164,6 +166,23 @@ const EffectsSection: React.FC<{
           Reset
         </button>
       </div>
+      <Field label="Blend mode">
+        <select
+          value={item.blendMode ?? 'normal'}
+          onChange={(e) =>
+            onUpdate(item.id, {
+              blendMode: e.target.value as BlendMode,
+            } as Partial<TimelineItem>)
+          }
+          className={inputClass}
+        >
+          {BLEND_MODES.map((mode) => (
+            <option key={mode} value={mode}>
+              {mode}
+            </option>
+          ))}
+        </select>
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <SliderField
           label="Brightness"

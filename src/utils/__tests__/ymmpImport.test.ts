@@ -77,6 +77,7 @@ function makeYmmp() {
             Layer: 5,
             FadeIn: 0.2,
             FadeOut: 0.3,
+            Blend: 'Screen',
           },
           {
             $type: 'YukkuriMovieMaker.Project.Items.AudioItem, YukkuriMovieMaker',
@@ -97,6 +98,7 @@ function makeYmmp() {
             Y: -50,
             Zoom: 150,
             Opacity: 80,
+            Blend: 'Multiply',
           },
           {
             $type: 'YukkuriMovieMaker.Project.Items.VideoItem, YukkuriMovieMaker',
@@ -190,6 +192,7 @@ describe('parseYmmpProject', () => {
       expect(text.style.underline).toBe(true);
       expect(text.style.strikethrough).toBe(true);
       expect(text.style.wordWrap).toBe(false);
+      expect(text.blendMode).toBe('screen');
       expect(text.displayInterval).toBe(0.05);
       expect(text.displayDirection).toBe('from-last');
       expect(text.hideInterval).toBe(0.08);
@@ -221,6 +224,7 @@ describe('parseYmmpProject', () => {
       x: 790,
       y: 285,
       opacity: 0.8,
+      blendMode: 'multiply',
     });
     expect(result.imagePlacements).toHaveLength(1);
     expect(result.imagePlacements[0]).toMatchObject({

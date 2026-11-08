@@ -10,6 +10,7 @@ import {
   VoixProject,
 } from '../types';
 import { DEFAULT_SUBTITLE_STYLE, DEFAULT_TRACKS, computeProjectDuration } from './projectYaml';
+import { normalizeYmmpBlend } from '../render/blendModes';
 
 /**
  * Tolerant importer for Yukkuri Movie Maker 4 projects (`.ymmp`).
@@ -317,6 +318,7 @@ function toTextItem(
     locked: Boolean(raw.IsLocked),
     fadeIn: Math.max(0, asNumber(raw.FadeIn, 0)),
     fadeOut: Math.max(0, asNumber(raw.FadeOut, 0)),
+    blendMode: normalizeYmmpBlend(raw.Blend),
     text,
     style: {
       ...DEFAULT_SUBTITLE_STYLE,
@@ -459,6 +461,7 @@ function toImageItem(
     locked: Boolean(raw.IsLocked),
     fadeIn: Math.max(0, asNumber(raw.FadeIn, 0)),
     fadeOut: Math.max(0, asNumber(raw.FadeOut, 0)),
+    blendMode: normalizeYmmpBlend(raw.Blend),
     src,
     x: frameWidth / 2 + centerX - width / 2,
     y: frameHeight / 2 + centerY - height / 2,

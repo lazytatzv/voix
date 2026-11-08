@@ -13,6 +13,7 @@ import {
 import { DEFAULT_DUCKING, normalizeDucking } from './audioDucking';
 import { normalizeKeyframes } from '../render/keyframes';
 import { normalizeItemEffects } from '../render/itemEffects';
+import { normalizeBlendMode } from '../render/blendModes';
 
 export const PROJECT_FORMAT = 'voix-project';
 export const PROJECT_VERSION = '1.1.0';
@@ -233,6 +234,7 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
     duration: Math.max(0.05, Number(rec.duration ?? 1)),
     name: String(rec.name ?? type),
     effects: normalizeItemEffects(rec.effects),
+    blendMode: normalizeBlendMode(rec.blendMode),
     hidden: Boolean(rec.hidden),
     locked: Boolean(rec.locked),
     fadeIn: rec.fadeIn !== undefined ? Math.max(0, Number(rec.fadeIn)) : undefined,

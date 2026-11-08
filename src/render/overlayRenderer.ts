@@ -3,6 +3,7 @@ import { getCachedImage, getImageContentBounds } from './imageCache';
 import { computeItemMotion } from './itemMotion';
 import { resolveItemTransform } from './keyframes';
 import { buildCanvasFilter } from './itemEffects';
+import { canvasBlendMode } from './blendModes';
 import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } from '../utils/pronunciation';
 import { computeTextRevealRange, textRevealCharacterCount } from '../utils/textReveal';
 import type { TextRevealTiming } from '../utils/textReveal';
@@ -1001,6 +1002,7 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       ctx.save();
       const filter = buildCanvasFilter(item.effects);
       if (filter !== 'none') ctx.filter = filter;
+      ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
       ctx.globalAlpha = transform.opacity * motion.alpha;
       ctx.translate(
         transform.x + item.width / 2 + motion.offsetX,
@@ -1034,6 +1036,7 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       ctx.save();
       const filter = buildCanvasFilter(item.effects);
       if (filter !== 'none') ctx.filter = filter;
+      ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
       drawStyledText(ctx, {
         text: item.text,
         style: item.style,

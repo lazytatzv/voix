@@ -4,6 +4,26 @@
 
 export type ItemType = 'voice' | 'video' | 'audio' | 'text' | 'image';
 
+/** Canvas compositing modes exposed for text and image items. */
+export type BlendMode =
+  | 'normal'
+  | 'multiply'
+  | 'screen'
+  | 'overlay'
+  | 'darken'
+  | 'lighten'
+  | 'color-dodge'
+  | 'color-burn'
+  | 'hard-light'
+  | 'soft-light'
+  | 'difference'
+  | 'exclusion'
+  | 'hue'
+  | 'saturation'
+  | 'color'
+  | 'luminosity'
+  | 'add';
+
 /** Enter/exit motion for visual timeline items. */
 export type ItemAnimation =
   | 'none'
@@ -24,6 +44,8 @@ export interface BaseTimelineItem {
   name: string;
   /** Colour/blur adjustments applied while compositing this item. */
   effects?: ItemEffects;
+  /** Canvas blend mode used when compositing this item (YMM4 Blend). */
+  blendMode?: BlendMode;
   /** When true the item is still persisted but skipped by preview/export. */
   hidden?: boolean;
   locked?: boolean;
