@@ -23,6 +23,7 @@ export interface ScriptLinePrompt {
   expression?: string;
   pauseAfter?: number; // 秒単位の間・ポーズ時間（タメ、ツッコミの余韻、テンポ演出）
   se?: string;
+  seOffset?: number; // SEタイミング（秒）。0=発話冒頭、マイナス=発話直前、プラス=セリフ中盤〜オチ
   anim?: string;
   terminal?: {
     cmd: string;
@@ -406,7 +407,13 @@ ${lineCountInstruction}
    - 畳み掛けるようなツッコミ・速いテンポ: 0.1 〜 0.3 秒
    - 通常の自然な会話の間: 0.4 〜 0.6 秒
    - 驚き・困惑・ツッコミ待ち・落ち・タメ・画面の展開待ち: 0.8 〜 1.5 秒
-6. すべて自然な日本語:
+6. 効果音（SE）の配置と自由なタイミング演出（se, seOffset）:
+   - 効果音は無理に全セリフにつける必要はありません。驚き・ツッコミ・ボケ・オチ・場面展開など重要な瞬間に厳選してください。
+   - 【最重要】SEを鳴らすタイミング（seOffset: 秒数）は、喋りだす瞬間（0秒）に固定する必要はありません:
+     * 発話前のタメ・驚きの合図（セリフ開始の直前）: seOffset: -0.25 〜 -0.1
+     * オチ・ツッコミ・画面操作の完了時（セリフ中盤〜発話後）: seOffset: 0.5 〜 1.2
+     * 発話冒頭に合わせる場合: seOffset: 0
+7. すべて自然な日本語:
    生成するセリフ（text）は、100%必ずすべて自然で魅力的な日本語で出力してください。
 
 ${baseInstructions}
@@ -425,6 +432,7 @@ ${charProfiles}
     "expression": "shock",
     "pauseAfter": 0.8,
     "se": "pop",
+    "seOffset": -0.15,
     "anim": "bounce"
   },
   {
@@ -433,7 +441,8 @@ ${charProfiles}
     "subtitleText": "画面の具体的なUIや操作内容を解説・ツッコミするセリフですわ。",
     "expression": "smile",
     "pauseAfter": 0.4,
-    "se": "chime"
+    "se": "chime",
+    "seOffset": 0.6
   }
 ]
 ※ text: 音声合成エンジン用のセリフ（英単語やアルファベットは正しく発音できるカタカナ読みに変換）
@@ -441,6 +450,7 @@ ${charProfiles}
 ※ expression: キャラクターごとの使用可能な表情リストからセリフの感情・文脈に合わせて厳選
 ※ pauseAfter: 発話後の間合いの秒数（0.1〜1.5秒程度。テンポ感やタメに合わせて演出）
 ※ se (任意): "pop", "chime", "click", "punch", "error", "success", "laser", "kira", "question"
+※ seOffset (任意): SEを鳴らすタイミング（秒）。0=発話冒頭、マイナス=発話直前、プラス=セリフ中盤〜発話後
 ※ anim (任意): "bounce", "pop", "shake", "nod"
 ※ 重ねて警告: 定型文は避け、映像の実際の出来事に合わせたオリジナルの日本語セリフを出力してください。`;
 
@@ -588,6 +598,8 @@ function parseScriptJson(
       pause?: number;
       gap?: number;
       se?: string;
+      seOffset?: number;
+      se_offset?: number;
       anim?: string;
       cmd?: string;
       output?: string;
@@ -616,6 +628,13 @@ function parseScriptJson(
         pauseAfter = Math.max(0.05, Math.min(3.0, Number(rawPause.toFixed(2))));
       }
 
+      // SEタイミング (seOffset)
+      let seOffset: number | undefined = undefined;
+      const rawSeOffset = item.seOffset ?? item.se_offset;
+      if (typeof rawSeOffset === 'number' && !isNaN(rawSeOffset)) {
+        seOffset = Math.max(-2.0, Math.min(5.0, Number(rawSeOffset.toFixed(2))));
+      }
+
       let terminal: { cmd: string; output?: string } | undefined = undefined;
       if (item.terminal?.cmd) {
         terminal = item.terminal;
@@ -631,6 +650,7 @@ function parseScriptJson(
         expression: expr,
         pauseAfter,
         se: item.se ? String(item.se).trim() : undefined,
+        seOffset,
         anim: item.anim ? String(item.anim).trim() : undefined,
         terminal,
       };

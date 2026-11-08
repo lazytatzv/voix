@@ -907,15 +907,35 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                       )}
                     </div>
                   </Field>
-                  <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(voice.flipH)}
-                      onChange={(e) => patch({ flipH: e.target.checked } as Partial<TimelineItem>)}
-                      className="accent-[#3b82f6]"
+                  {voice.se ? (
+                    <NumberField
+                      label="SE offset (s)"
+                      value={voice.seOffset ?? 0}
+                      step={0.05}
+                      onChange={(value) => patch({ seOffset: value } as Partial<TimelineItem>)}
                     />
-                    Flip tachie horizontally
-                  </label>
+                  ) : (
+                    <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(voice.flipH)}
+                        onChange={(e) => patch({ flipH: e.target.checked } as Partial<TimelineItem>)}
+                        className="accent-[#3b82f6]"
+                      />
+                      Flip tachie horizontally
+                    </label>
+                  )}
+                  {voice.se && (
+                    <label className="col-span-2 flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] pb-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(voice.flipH)}
+                        onChange={(e) => patch({ flipH: e.target.checked } as Partial<TimelineItem>)}
+                        className="accent-[#3b82f6]"
+                      />
+                      Flip tachie horizontally
+                    </label>
+                  )}
                   <div className="col-span-2 flex items-center justify-between bg-[#101113] border border-[#242629] rounded-sm px-3 py-2">
                     <div className="text-[11px] font-mono text-[#8e918f] flex items-center gap-1.5">
                       <Volume2 className="w-3.5 h-3.5" />

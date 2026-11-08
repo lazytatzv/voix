@@ -38,19 +38,20 @@ export interface OverlayRenderOptions {
 
 const FALLBACK_STYLE: SubtitleStyle = {
   textColor: '#ffffff',
-  fontSize: 48,
-  fontFamily: "'Noto Sans JP', 'Google Sans', sans-serif",
+  fontSize: 60,
+  fontFamily: "'Zen Kaku Gothic New', 'Noto Sans JP', 'Google Sans', sans-serif",
   fontWeight: '900',
-  strokeColor: '#090a0c',
-  strokeWidth: 8,
+  strokeColor: '#08090c',
+  strokeWidth: 10,
   outerStrokeColor: '#3b82f6',
-  outerStrokeWidth: 14,
+  outerStrokeWidth: 18,
   hasShadow: true,
-  shadowColor: 'rgba(0, 0, 0, 0.85)',
-  shadowBlur: 10,
-  shadowOffsetY: 4,
+  shadowColor: 'rgba(0, 0, 0, 0.95)',
+  shadowBlur: 14,
+  shadowOffsetY: 6,
+  letterSpacing: 2,
   bgStyle: 'none',
-  yOffsetPercent: 12,
+  yOffsetPercent: 10,
   rubyDisplay: 'above',
 };
 
@@ -155,6 +156,8 @@ interface StyledTextOptions {
   lineHeight?: number;
   /** Per-character reveal/hide animation (YMM4 character display). */
   reveal?: TextRevealTiming;
+  /** Scaling factor relative to 1080p reference height. */
+  resolutionScale?: number;
 }
 
 /**
@@ -353,7 +356,17 @@ function drawVerticalStyledText(
 }
 
 function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOptions) {
-  const style = { ...FALLBACK_STYLE, ...options.style };
+  const resScale = options.resolutionScale ?? 1;
+  const rawStyle = { ...FALLBACK_STYLE, ...options.style };
+  const style: SubtitleStyle = {
+    ...rawStyle,
+    fontSize: Math.round((rawStyle.fontSize || 60) * resScale),
+    strokeWidth: Math.round((rawStyle.strokeWidth || 10) * resScale),
+    outerStrokeWidth: Math.round((rawStyle.outerStrokeWidth || 18) * resScale),
+    shadowBlur: Math.round((rawStyle.shadowBlur ?? 14) * resScale),
+    shadowOffsetY: Math.round((rawStyle.shadowOffsetY ?? 6) * resScale),
+    letterSpacing: Math.round((rawStyle.letterSpacing ?? 2) * resScale),
+  };
   if (style.vertical) {
     drawVerticalStyledText(ctx, options, style);
     return;
@@ -365,7 +378,7 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
   const centerX = options.centerX + (options.offsetX ?? 0);
   const centerY = options.centerY + (options.offsetY ?? 0);
 
-  const font = `${fontPrefix(style)} ${style.fontSize || 48}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
+  const font = `${fontPrefix(style)} ${style.fontSize || 60}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
   ctx.save();
   ctx.globalAlpha = options.opacity ?? 1;
   ctx.font = font;
@@ -1157,6 +1170,7 @@ function drawTextItem(
     offsetX: motion.offsetX,
     offsetY: motion.offsetY,
     scale: motion.scale * transform.scale,
+    resolutionScale: Math.max(0.5, frameHeight / 1080),
     reveal:
       (item.displayInterval ?? 0) > 0 || (item.hideInterval ?? 0) > 0
         ? {
@@ -1324,17 +1338,19 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
         ctx.save();
         const filter = buildCanvasFilter(activeVoice.effects);
         if (filter !== 'none') ctx.filter = filter;
+        const resScale = Math.max(0.5, height / 1080);
         drawStyledText(ctx, {
           text: subtitleText,
           style,
           centerX: ((style.xOffsetPercent ?? 50) / 100) * width,
-          centerY: ((100 - (style.yOffsetPercent ?? 12)) / 100) * height,
-          maxWidth: width * 0.88,
+          centerY: ((100 - (style.yOffsetPercent ?? 10)) / 100) * height,
+          maxWidth: width * 0.90,
           align: style.align || 'center',
           opacity: motion.alpha,
           offsetX: motion.offsetX,
           offsetY: motion.offsetY,
           scale: motion.scale,
+          resolutionScale: resScale,
         });
         ctx.restore();
       }

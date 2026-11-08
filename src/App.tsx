@@ -174,6 +174,13 @@ function mergeCharacter(c: Character): Character {
     subtitleStyle: {
       ...def.subtitleStyle,
       ...c.subtitleStyle,
+      fontSize: Math.max(c.subtitleStyle?.fontSize ?? 0, def.subtitleStyle?.fontSize ?? 60),
+      strokeWidth: Math.max(c.subtitleStyle?.strokeWidth ?? 0, def.subtitleStyle?.strokeWidth ?? 10),
+      outerStrokeWidth: Math.max(c.subtitleStyle?.outerStrokeWidth ?? 0, def.subtitleStyle?.outerStrokeWidth ?? 18),
+      shadowBlur: Math.max(c.subtitleStyle?.shadowBlur ?? 0, def.subtitleStyle?.shadowBlur ?? 14),
+      shadowOffsetY: Math.max(c.subtitleStyle?.shadowOffsetY ?? 0, def.subtitleStyle?.shadowOffsetY ?? 6),
+      letterSpacing: Math.max(c.subtitleStyle?.letterSpacing ?? 0, def.subtitleStyle?.letterSpacing ?? 2),
+      fontFamily: c.subtitleStyle?.fontFamily || def.subtitleStyle.fontFamily,
     },
   };
 }
@@ -847,6 +854,7 @@ export function App() {
   /* ------------------------------------------------------------------ */
 
   const playedItemIdsRef = useRef<Set<string>>(new Set());
+  const playedSeIdsRef = useRef<Set<string>>(new Set());
   const playTimerRef = useRef<number | null>(null);
   const lastPlayTimestampRef = useRef<number>(0);
 
@@ -856,6 +864,7 @@ export function App() {
       currentTimeRef.current = clamped;
       setCurrentTime(clamped);
       playedItemIdsRef.current.clear();
+      playedSeIdsRef.current.clear();
       stopAllAudio();
     },
     [stopAllAudio]
@@ -867,6 +876,7 @@ export function App() {
         handleSeek(0);
       }
       playedItemIdsRef.current.clear();
+      playedSeIdsRef.current.clear();
       stopAllAudio();
     }
     const next = !isPlayingRef.current;
@@ -909,14 +919,22 @@ export function App() {
 
       for (const item of currentProject.items) {
         if (item.type !== 'voice') continue;
+
+        // 1. SE trigger decoupled from voice speech start (respects item.seOffset)
+        if (item.se && !voiceMuted && !playedSeIdsRef.current.has(item.id)) {
+          const seTriggerTime = item.startTime + (item.seOffset ?? 0);
+          if (nextTime >= seTriggerTime && nextTime < item.startTime + item.duration + 2.0) {
+            playedSeIdsRef.current.add(item.id);
+            soundEffectManager.play(item.se);
+          }
+        }
+
+        // 2. Voice speech trigger
         const end = item.startTime + item.duration;
         if (nextTime < item.startTime || nextTime >= end) continue;
         if (playedItemIdsRef.current.has(item.id)) continue;
         playedItemIdsRef.current.add(item.id);
 
-        if (item.se && !voiceMuted) {
-          soundEffectManager.play(item.se);
-        }
         if (voiceMuted) continue;
 
         const offset = Math.max(0, currentTimeRef.current - item.startTime);
@@ -2452,6 +2470,7 @@ export function App() {
             phonemes: result.phonemes,
             isSynthesizing: false,
             se: line.se,
+            seOffset: typeof line.seOffset === 'number' ? line.seOffset : 0,
             anim: line.anim,
             terminal: line.terminal,
           });

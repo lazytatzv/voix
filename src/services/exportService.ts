@@ -320,12 +320,13 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
                 : 0,
           });
 
-          if (item.se && item.startTime >= exportStart - 0.5 && item.startTime <= exportEnd) {
+          const seTime = item.startTime + (item.seOffset ?? 0);
+          if (item.se && seTime >= exportStart - 0.5 && seTime <= exportEnd) {
             try {
               const seBlob = await soundEffectManager.renderWavBlob(item.se, item.volumeScale ?? 1);
               if (seBlob) {
                 const sePath = await writeJobAudio(jobDir, `se_${i}.wav`, await blobToBase64(seBlob));
-                const seStart = Math.max(0, item.startTime - exportStart);
+                const seStart = Math.max(0, seTime - exportStart);
                 audioClips.push({
                   path: sePath,
                   start: seStart,

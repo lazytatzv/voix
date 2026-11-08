@@ -239,6 +239,8 @@ export interface VoiceItem extends BaseTimelineItem {
     output?: string;
   };
   se?: string;
+  /** Seconds relative to startTime when SE is triggered. Negative = before speech, positive = during/after speech. Defaults to 0. */
+  seOffset?: number;
   anim?: 'bounce' | 'pop' | 'slide' | 'fade' | 'shake' | 'nod' | 'none' | string;
   flipH?: boolean;
   scale?: number;
