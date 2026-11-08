@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
   Trash2,
   Volume2,
@@ -210,6 +210,59 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
 
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const [listScrollTop, setListScrollTop] = useState(0);
+  const [listHeight, setListHeight] = useState(600);
+
+  useEffect(() => {
+    const el = listContainerRef.current;
+    if (!el) return;
+    const update = () => {
+      setListHeight(el.clientHeight);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setListScrollTop((e.currentTarget as HTMLDivElement).scrollTop);
+  }, []);
+
+  const CARD_APPROX_HEIGHT = 92;
+  const isVirtualizable = items.length > 25;
+  const startIndex = isVirtualizable
+    ? Math.max(0, Math.floor(listScrollTop / CARD_APPROX_HEIGHT) - 6)
+    : 0;
+  const endIndex = isVirtualizable
+    ? Math.min(items.length, Math.ceil((listScrollTop + listHeight) / CARD_APPROX_HEIGHT) + 6)
+    : items.length;
+  const visibleCards = items.slice(startIndex, endIndex);
+  const topSpacer = startIndex * CARD_APPROX_HEIGHT;
+  const bottomSpacer = (items.length - endIndex) * CARD_APPROX_HEIGHT;
+
+  const characterOptions = useMemo(
+    () =>
+      characters.map((c) => ({
+        value: c.id,
+        label: c.name,
+        icon: c.avatar.idle,
+      })),
+    [characters]
+  );
+
+  const expressionOptions = useMemo(
+    () => [
+      { value: 'default', label: 'Default' },
+      { value: 'smile', label: 'Smile' },
+      { value: 'shock', label: 'Shock' },
+      { value: 'trouble', label: 'Troubled' },
+      { value: 'angry', label: 'Angry' },
+    ],
+    []
+  );
+
   // 再生中または選択中のアクティブなセリフアイテムを特定
   const activeVoiceItem = items.find(
     (it) => currentTime >= it.startTime && currentTime <= it.startTime + it.duration
@@ -240,9 +293,10 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const scrollToTargetItem = useCallback(
     (itemId: string) => {
       if (tab === 'cards') {
-        const el = document.getElementById(`dialogue-card-${itemId}`);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const itemIdx = itemsRef.current.findIndex((it) => it.id === itemId);
+        if (itemIdx >= 0 && listContainerRef.current) {
+          const targetScroll = Math.max(0, itemIdx * CARD_APPROX_HEIGHT - listHeight / 2);
+          listContainerRef.current.scrollTo({ top: targetScroll, behavior: 'smooth' });
         }
       } else if (tab === 'yaml') {
         const textarea = yamlTextareaRef.current;
@@ -261,7 +315,7 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         }
       }
     },
-    [tab]
+    [tab, listHeight]
   );
 
   // タイムラインの吹き出しタップ時やタブ切替時に該当箇所へスムーズスクロール
@@ -273,10 +327,9 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     return () => clearTimeout(timer);
   }, [selectedItemId, tab, scrollToTargetItem]);
 
-
-  // Cards -> YAML 自動同期: Cards編集時、YAMLテキストを自動更新
+  // Cards -> YAML 自動同期: YAMLタブ切り替え時に最新同期
   useEffect(() => {
-    if (tab === 'cards' && !isEditingYamlRef.current) {
+    if (tab === 'yaml' && !isEditingYamlRef.current) {
       const next = itemsToRawText(items, characters);
       setYamlText(next);
       lastSyncedYamlRef.current = next;
@@ -701,7 +754,11 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         </div>
       ) : (
         /* Main Content: Dialogue Cards List */
-        <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5">
+        <div
+          ref={listContainerRef}
+          onScroll={handleListScroll}
+          className="flex-1 overflow-y-auto p-3.5 space-y-2.5"
+        >
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#8e918f]">
                 <p className="text-sm font-medium text-[#c4c7c5]">No dialogue clips yet</p>
@@ -710,59 +767,51 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                 </p>
               </div>
             ) : (
-              items.map((item) => {
-                const isActive =
-                  currentTime >= item.startTime && currentTime <= item.startTime + item.duration;
-                const isSelected = selectedItemId === item.id;
-                const isExpanded = expandedItemId === item.id;
+              <div style={{ paddingTop: topSpacer, paddingBottom: bottomSpacer }}>
+                <div className="space-y-2.5">
+                  {visibleCards.map((item) => {
+                    const isActive =
+                      currentTime >= item.startTime && currentTime <= item.startTime + item.duration;
+                    const isSelected = selectedItemId === item.id;
+                    const isExpanded = expandedItemId === item.id;
 
-                return (
-                  <div
-                    key={item.id}
-                    id={`dialogue-card-${item.id}`}
-                    onClick={() => onSelectItem?.(item.id)}
-                    className={`p-3 rounded-sm border transition-all duration-150 flex flex-col gap-2 relative cursor-pointer ${
-                      isSelected
-                        ? 'bg-[#1f2124] border-[#4a4f56]'
-                        : isActive
-                        ? 'bg-[#1b1d20] border-[#3a3f46]'
-                        : 'bg-[#151619] border-[#26282c] hover:border-[#383b40]'
-                    }`}
-                  >
-                    {/* Selected Indicator Bar */}
-                    {isSelected && (
-                      <div className="absolute left-0 top-2 bottom-2 w-1 bg-[#c4c7c5] rounded-none" />
-                    )}
+                    return (
+                      <div
+                        key={item.id}
+                        id={`dialogue-card-${item.id}`}
+                        onClick={() => onSelectItem?.(item.id)}
+                        className={`p-3 rounded-sm border transition-all duration-150 flex flex-col gap-2 relative cursor-pointer ${
+                          isSelected
+                            ? 'bg-[#1f2124] border-[#4a4f56]'
+                            : isActive
+                            ? 'bg-[#1b1d20] border-[#3a3f46]'
+                            : 'bg-[#151619] border-[#26282c] hover:border-[#383b40]'
+                        }`}
+                      >
+                        {/* Selected Indicator Bar */}
+                        {isSelected && (
+                          <div className="absolute left-0 top-2 bottom-2 w-1 bg-[#c4c7c5] rounded-none" />
+                        )}
 
-                    {/* Row Header */}
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <CustomSelect
-                          value={item.characterId}
-                          options={characters.map((c) => ({
-                            value: c.id,
-                            label: c.name,
-                            icon: c.avatar.idle,
-                          }))}
-                          onChange={(newCharId) => {
-                            onUpdateItem(item.id, { characterId: newCharId });
-                            setTimeout(() => onSynthesizeItem(item.id), 50);
-                          }}
-                        />
+                        {/* Row Header */}
+                        <div className="flex items-center justify-between text-xs">
+                          <div className="flex items-center gap-2">
+                            <CustomSelect
+                              value={item.characterId}
+                              options={characterOptions}
+                              onChange={(newCharId) => {
+                                onUpdateItem(item.id, { characterId: newCharId });
+                                setTimeout(() => onSynthesizeItem(item.id), 50);
+                              }}
+                            />
 
-                        {/* Expression Selector */}
-                        <CustomSelect
-                          size="sm"
-                          value={item.expression || 'default'}
-                          options={[
-                            { value: 'default', label: 'Default' },
-                            { value: 'smile', label: 'Smile' },
-                            { value: 'shock', label: 'Shock' },
-                            { value: 'trouble', label: 'Troubled' },
-                            { value: 'angry', label: 'Angry' },
-                          ]}
-                          onChange={(expr) => onUpdateItem(item.id, { expression: expr })}
-                        />
+                            {/* Expression Selector */}
+                            <CustomSelect
+                              size="sm"
+                              value={item.expression || 'default'}
+                              options={expressionOptions}
+                              onChange={(expr) => onUpdateItem(item.id, { expression: expr })}
+                            />
 
                         {/* SE Badge if set */}
                         {item.se && (
@@ -927,7 +976,9 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                     )}
                   </div>
                 );
-              })
+              })}
+              </div>
+            </div>
             )}
           </div>
       )}

@@ -456,14 +456,14 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (item.type === 'shape') label = item.name || `${item.shape} shape`;
 
     const waveform =
-      item.type === 'voice' && item.audioBlob ? (
+      width >= 36 && item.type === 'voice' && item.audioBlob ? (
         <Waveform
           cacheKey={item.audioKey || item.audioBlobUrl || item.id}
           src={item.audioBlobUrl || ''}
           blob={item.audioBlob}
           color="#e0f2fe"
         />
-      ) : item.type === 'audio' && item.src ? (
+      ) : width >= 36 && item.type === 'audio' && item.src ? (
         <Waveform
           cacheKey={item.audioKey || item.src}
           src={item.src}
