@@ -561,8 +561,8 @@ fn base64_decode_simple(data: &str) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 fn extract_video_keyframes(video_path: String, count: Option<u32>) -> Result<Vec<String>, String> {
-    let num_frames = count.unwrap_or(6).clamp(2, 12);
-    let temp_dir = std::env::temp_dir().join("voix_keyframes");
+    let num_frames = count.unwrap_or(8).clamp(2, 16);
+    let temp_dir = std::env::temp_dir().join(format!("voix_kf_{}_{}", std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis()).unwrap_or(0)));
     let _ = fs::create_dir_all(&temp_dir);
 
     // 動画の総尺を取得
@@ -577,40 +577,89 @@ fn extract_video_keyframes(video_path: String, count: Option<u32>) -> Result<Vec
             &video_path,
         ])
         .output()
-        .map_err(|e| format!("ffprobeエラー: {}", e))?;
+        .map_err(|e| format!("ffprobe error: {}", e))?;
 
     let dur_str = String::from_utf8_lossy(&dur_out.stdout);
-    let total_sec: f64 = dur_str.trim().parse().unwrap_or(30.0);
+    let total_sec: f64 = dur_str.trim().parse().unwrap_or(10.0);
+    let total_sec = if total_sec <= 0.05 { 10.0 } else { total_sec };
+
+    let target_fps = (num_frames as f64) / total_sec;
+    let out_pattern = temp_dir.join("kf_%03d.jpg");
+
+    // 1 pass で全フレームを確実に等間隔抽出
+    let status = Command::new("ffmpeg")
+        .args([
+            "-y",
+            "-i",
+            &video_path,
+            "-vf",
+            &format!("fps={:.4},scale='min(960,iw)':-2", target_fps),
+            "-q:v",
+            "3",
+            "-vframes",
+            &format!("{}", num_frames),
+            out_pattern.to_str().unwrap(),
+        ])
+        .output();
 
     let mut base64_frames = Vec::new();
 
-    for i in 1..=num_frames {
-        let timestamp = (total_sec / (num_frames as f64 + 1.0)) * (i as f64);
-        let out_img = temp_dir.join(format!("kf_{}.jpg", i));
+    if let Ok(_) = status {
+        if let Ok(entries) = fs::read_dir(&temp_dir) {
+            let mut paths: Vec<_> = entries
+                .filter_map(|e| e.ok())
+                .map(|e| e.path())
+                .filter(|p| p.extension().map_or(false, |ext| ext == "jpg"))
+                .collect();
+            paths.sort();
 
-        let _ = Command::new("ffmpeg")
-            .args([
-                "-y",
-                "-ss",
-                &format!("{:.2}", timestamp),
-                "-i",
-                &video_path,
-                "-vframes",
-                "1",
-                "-vf",
-                "scale=960:-2",
-                "-q:v",
-                "3",
-                out_img.to_str().unwrap(),
-            ])
-            .output();
-
-        if let Ok(bytes) = fs::read(&out_img) {
             use base64::Engine;
-            let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
-            base64_frames.push(format!("data:image/jpeg;base64,{}", b64));
-            let _ = fs::remove_file(&out_img);
+            for p in paths {
+                if let Ok(bytes) = fs::read(&p) {
+                    let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                    base64_frames.push(format!("data:image/jpeg;base64,{}", b64));
+                }
+                let _ = fs::remove_file(&p);
+            }
         }
+    }
+
+    // フォールバック: 個別シーク抽出（-i の後に -ss を配置してインターフレームエラーを防止）
+    if base64_frames.is_empty() {
+        for i in 1..=num_frames {
+            let timestamp = (total_sec / (num_frames as f64 + 1.0)) * (i as f64);
+            let out_img = temp_dir.join(format!("fallback_kf_{}.jpg", i));
+
+            let _ = Command::new("ffmpeg")
+                .args([
+                    "-y",
+                    "-i",
+                    &video_path,
+                    "-ss",
+                    &format!("{:.2}", timestamp),
+                    "-vframes",
+                    "1",
+                    "-vf",
+                    "scale='min(960,iw)':-2",
+                    "-q:v",
+                    "3",
+                    out_img.to_str().unwrap(),
+                ])
+                .output();
+
+            if let Ok(bytes) = fs::read(&out_img) {
+                use base64::Engine;
+                let b64 = base64::engine::general_purpose::STANDARD.encode(&bytes);
+                base64_frames.push(format!("data:image/jpeg;base64,{}", b64));
+                let _ = fs::remove_file(&out_img);
+            }
+        }
+    }
+
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    if base64_frames.is_empty() {
+        return Err("No video frames could be extracted from the video file.".to_string());
     }
 
     Ok(base64_frames)

@@ -26,9 +26,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   rawVideoPath,
   hasVideo,
 }) => {
-  const [generatorMode, setGeneratorMode] = useState<'new' | 'brush_up'>(() =>
-    existingVoiceItems && existingVoiceItems.length > 0 ? 'brush_up' : 'new'
-  );
+  const [generatorMode, setGeneratorMode] = useState<'new' | 'brush_up'>('new');
   const [topic, setTopic] = useState('');
   const [autoLineCount, setAutoLineCount] = useState<boolean>(true);
   const [lineCount, setLineCount] = useState<number>(6);
@@ -66,11 +64,10 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   if (!isOpen) return null;
 
   const quickTopics = [
-    { label: 'Auto (Video Vision)', text: '' },
-    { label: 'Gaming Reactions', text: 'ゲーム実況で画面のハプニングや好プレイにリアルタイムで驚くリアクション' },
-    { label: 'Educational / Commentary', text: '画面で何が行われているかを視聴者に分かりやすく説明・ツッコミする解説動画' },
-    { label: 'Comedy Banter', text: '映像の出来事にクスッと笑えるツッコミやボケを入れる掛け合い' },
-    { label: 'Tech & Linux', text: '画面内の操作やターミナルコマンド、設定の解説' },
+    { label: 'Auto (Analyze Screen)', text: '' },
+    { label: 'Commentary & Reactions', text: '画面の出来事や操作にリアルタイムで反応する解説・リアクション' },
+    { label: 'Casual Banter', text: '画面を見ながらテンポよくツッコミやボケを入れる実況' },
+    { label: 'Tutorial / How-to', text: '画面内の操作手順や機能の使い方を分かりやすく解説' },
   ];
 
   const handleToggleChar = (id: string) => {
@@ -93,15 +90,25 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
       });
 
       let keyframes: string[] = [];
-      if (useVideoVision && rawVideoPath) {
-        setStatusMessage('Extracting video frames (analyzing visual context)...');
+      if (useVideoVision) {
+        if (!rawVideoPath) {
+          setStatusMessage('Error: No video file loaded. Please load a video on the timeline first.');
+          return;
+        }
+        setStatusMessage('Extracting video frames with FFmpeg...');
         try {
           keyframes = await invoke<string[]>('extract_video_keyframes', {
             videoPath: rawVideoPath,
             count: 8,
           });
-        } catch (e) {
-          console.warn('Keyframe extraction warning:', e);
+          if (!keyframes || keyframes.length === 0) {
+            throw new Error('No frames could be extracted from this video file.');
+          }
+        } catch (e: unknown) {
+          const errMsg = typeof e === 'string' ? e : (e as { message?: string })?.message || 'Failed to extract video frames';
+          console.error('Keyframe extraction warning:', e);
+          setStatusMessage(`Video Analysis Error: ${errMsg}`);
+          return;
         }
       }
 
@@ -347,11 +354,11 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                   <div className="text-xs font-semibold text-[#e3e3e3] flex items-center gap-1.5">
                     Use Loaded Video as Context
                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-[#3b82f6]/20 text-[#60a5fa] font-mono">
-                      Frames
+                      8 Frames
                     </span>
                   </div>
-                  <div className="text-[10px] text-[#8e918f]">
-                    Samples video frames so commentary stays in sync with the scene
+                  <div className="text-[10px] text-[#8e918f] truncate max-w-[280px]">
+                    {rawVideoPath.split('/').pop()}
                   </div>
                 </div>
               </div>
@@ -385,8 +392,8 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
               onChange={(e) => setTopic(e.target.value)}
               placeholder={
                 generatorMode === 'brush_up'
-                  ? '（空欄でOK：動画と既存セリフから自動でテンポ・掛け合い・カタカナ読みを磨き上げます。「ツッコミを鋭く」「オチを派手に」等の指示も可能です）'
-                  : '（空欄でOK：動画の画面・文字・出来事をAIがじっくり観察して自動実況・解説します。特定のシチュエーションや追加の指示があれば入力してください）'
+                  ? 'Optional: Leave empty for AI to automatically polish timing, expressions & readings based on the video, or enter refinement requests.'
+                  : 'Optional: Leave empty for AI to deeply observe on-screen apps, text & actions to draft realistic commentary, or enter specific focus.'
               }
               className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg p-3 text-xs text-[#e3e3e3] outline-none transition resize-none font-normal"
             />
