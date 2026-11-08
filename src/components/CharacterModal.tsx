@@ -31,6 +31,7 @@ import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
 import { SafeAvatarImg } from './SafeAvatarImg';
 import { defaultCharacters } from '../utils/defaultCharacters';
 import { VOICEVOX_CATALOG } from '../utils/voicevoxCatalog';
+import { VOICE_TONE_PRESETS } from '../utils/voiceTonePresets';
 
 interface ProviderVoices {
   providerId: string;
@@ -458,6 +459,18 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     }
   };
 
+  const handleDuplicatePersona = () => {
+    if (!char) return;
+    const newId = `${char.id}_${Date.now().toString(36).slice(-4)}`;
+    const newChar: Character = {
+      ...char,
+      id: newId,
+      name: `${char.name} (Persona)`,
+    };
+    onAddCharacter(newChar);
+    setSelectedCharId(newId);
+  };
+
   return (
     <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4 select-none">
       <div className="bg-[#121315] border border-[#2a2c30] rounded-none w-full max-w-3xl overflow-hidden flex flex-col max-h-[90vh]">
@@ -550,6 +563,18 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
               <Plus className="w-3.5 h-3.5" />
               Add Speaker
             </button>
+
+            {char && (
+              <button
+                type="button"
+                onClick={handleDuplicatePersona}
+                className="mt-2 w-full py-2 px-3 rounded-xl bg-[#1e232b] hover:bg-[#28303d] text-[#8ab4f8] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#2b394c] transition cursor-pointer"
+                title="Duplicate current character to create another voice style / persona variant"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                Duplicate Persona
+              </button>
+            )}
 
             {onOpenTachieImport && (
               <button
@@ -832,6 +857,104 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                 </div>
               </div>
 
+              {/* Voice Calibration & Speaking Style */}
+              <div className="space-y-3 bg-[#16171a] border border-[#282b30] rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-[#e3e3e3] flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                    Voice Calibration &amp; Speaking Style
+                  </label>
+                  <span className="text-[10px] font-mono text-[#808388]">
+                    Defaults for this character
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f] block mb-1.5">
+                    Speaking Tone Preset
+                  </span>
+                  <div className="flex flex-wrap gap-1">
+                    {Object.entries(VOICE_TONE_PRESETS).map(([key, preset]) => {
+                      const isActive =
+                        Math.abs((char.speedScale ?? 1) - preset.speedScale) < 0.05 &&
+                        Math.abs((char.pitchScale ?? 0) - preset.pitchScale) < 0.03;
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          onClick={() => {
+                            onUpdateCharacter(char.id, {
+                              speedScale: preset.speedScale,
+                              pitchScale: preset.pitchScale,
+                              intonationScale: preset.intonationScale,
+                              voiceTone: key,
+                            });
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-mono transition border ${
+                            isActive
+                              ? 'bg-blue-600/20 border-blue-500/50 text-blue-300 font-semibold shadow-xs'
+                              : 'bg-[#1b1c20] border-[#2c2f35] text-[#8e918f] hover:text-[#e3e3e3] hover:border-[#3e424c]'
+                          }`}
+                          title={preset.description}
+                        >
+                          {preset.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="text-[#8e918f]">Speed</span>
+                      <span className="font-mono text-[#c4c7c5]">{(char.speedScale ?? 1).toFixed(2)}x</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={2.0}
+                      step={0.05}
+                      value={char.speedScale ?? 1}
+                      onChange={(e) => onUpdateCharacter(char.id, { speedScale: parseFloat(e.target.value) })}
+                      className="w-full accent-[#8ab4f8] cursor-ew-resize"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="text-[#8e918f]">Pitch</span>
+                      <span className="font-mono text-[#c4c7c5]">
+                        {(char.pitchScale ?? 0) > 0 ? `+${(char.pitchScale ?? 0).toFixed(2)}` : (char.pitchScale ?? 0).toFixed(2)}
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={-0.3}
+                      max={0.3}
+                      step={0.01}
+                      value={char.pitchScale ?? 0}
+                      onChange={(e) => onUpdateCharacter(char.id, { pitchScale: parseFloat(e.target.value) })}
+                      className="w-full accent-[#8ab4f8] cursor-ew-resize"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between text-[11px] mb-1">
+                      <span className="text-[#8e918f]">Intonation</span>
+                      <span className="font-mono text-[#c4c7c5]">{(char.intonationScale ?? 1).toFixed(2)}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.0}
+                      max={2.0}
+                      step={0.05}
+                      value={char.intonationScale ?? 1}
+                      onChange={(e) => onUpdateCharacter(char.id, { intonationScale: parseFloat(e.target.value) })}
+                      className="w-full accent-[#8ab4f8] cursor-ew-resize"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Screen Position */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
@@ -883,6 +1006,37 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                       Reset custom position
                     </button>
                   )}
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <span className="text-[10px] font-mono text-[#8e918f] block mb-1">Custom X (px)</span>
+                    <input
+                      type="number"
+                      value={char.customX ?? ''}
+                      onChange={(e) =>
+                        onUpdateCharacter(char.id, {
+                          customX: e.target.value === '' ? undefined : Number(e.target.value),
+                        })
+                      }
+                      placeholder="Auto (aligns with preset)"
+                      className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg px-2.5 py-1 text-xs text-[#e3e3e3] font-mono outline-none"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[10px] font-mono text-[#8e918f] block mb-1">Custom Y (px)</span>
+                    <input
+                      type="number"
+                      value={char.customY ?? ''}
+                      onChange={(e) =>
+                        onUpdateCharacter(char.id, {
+                          customY: e.target.value === '' ? undefined : Number(e.target.value),
+                        })
+                      }
+                      placeholder="Auto (aligns with bottom)"
+                      className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg px-2.5 py-1 text-xs text-[#e3e3e3] font-mono outline-none"
+                    />
+                  </div>
                 </div>
 
                 {/* Character Size */}

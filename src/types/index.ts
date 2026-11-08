@@ -196,6 +196,14 @@ export interface Character {
   flipX?: boolean;
   /** Base volume for this speaker's voice, 0.0 - 2.0 */
   voiceVolume?: number;
+  /** Default speech speed multiplier (e.g. 1.0, 1.15) */
+  speedScale?: number;
+  /** Default voice pitch offset */
+  pitchScale?: number;
+  /** Default intonation scale (0.0 - 2.0) */
+  intonationScale?: number;
+  /** Default speaking style preset or tone tag */
+  voiceTone?: string;
   /** Draw order relative to other characters (higher = in front). */
   zIndex?: number;
 }

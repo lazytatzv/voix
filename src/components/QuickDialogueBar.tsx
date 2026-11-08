@@ -14,6 +14,7 @@ import { SOUND_EFFECT_PRESETS, soundEffectManager } from '../utils/soundEffects'
 import { SafeAvatarImg } from './SafeAvatarImg';
 import { formatSpeechWithPersona, processAiAction } from '../services/aiService';
 import { autoAnnotatePronunciations } from '../utils/pronunciation';
+import { tuneVoiceWithAI } from '../utils/voiceTonePresets';
 
 interface QuickDialogueBarProps {
   characters: Character[];
@@ -21,7 +22,14 @@ interface QuickDialogueBarProps {
   onAddVoiceLine: (
     characterId: string,
     text: string,
-    options?: { expression?: string; se?: string; anim?: string }
+    options?: {
+      expression?: string;
+      se?: string;
+      anim?: string;
+      speedScale?: number;
+      pitchScale?: number;
+      intonationScale?: number;
+    }
   ) => Promise<number | void>;
   onSeek: (time: number) => void;
   onOpenSePalette: () => void;
@@ -43,6 +51,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const [isAiProcessing, setIsAiProcessing] = useState(false);
+  const [lastTuneNote, setLastTuneNote] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const aiMenuRef = useRef<HTMLDivElement | null>(null);
 
@@ -80,6 +89,16 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
     },
     [characters, charIndex]
   );
+
+  const handleAiAutoTune = () => {
+    if (!text.trim()) return;
+    const tuned = tuneVoiceWithAI(text);
+    if (tuned.expression) setExpression(tuned.expression);
+    if (tuned.anim) setAnim(tuned.anim);
+    if (tuned.se) setSe(tuned.se);
+    setLastTuneNote(tuned.explanation);
+    setTimeout(() => setLastTuneNote(null), 3000);
+  };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -154,16 +173,16 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
   };
 
   return (
-    <div className="bg-[#121316] border-y border-[#26282c] px-3 py-2 flex items-center gap-2.5 select-none shadow-md">
+    <div className="bg-[#0e0f12] border-y border-[#202227] px-3 py-2 flex items-center gap-2.5 select-none shadow-md">
       {/* Speaker Selector & Avatar */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
         <button
           type="button"
           onClick={() => cycleCharacter(1)}
-          className="flex items-center gap-2 bg-[#1b1d22] hover:bg-[#23262c] border border-[#2e3137] hover:border-[#404650] rounded px-2.5 py-1 text-xs text-[#e3e3e3] transition shadow-xs group"
+          className="flex items-center gap-2 bg-[#16171b] hover:bg-[#1f2127] border border-[#272a30] hover:border-[#383d47] rounded-lg px-2.5 py-1 text-xs text-[#e3e3e3] transition shadow-xs group"
           title="Click or press [Tab] to switch speaker"
         >
-          <div className="w-6 h-6 rounded-full overflow-hidden bg-[#2b2e35] border border-[#3e434c] flex-shrink-0 flex items-center justify-center">
+          <div className="w-6 h-6 rounded-full overflow-hidden bg-[#24272e] border border-[#32363e] flex-shrink-0 flex items-center justify-center">
             {activeChar?.avatar?.idle ? (
               <SafeAvatarImg
                 src={activeChar.avatar.idle}
@@ -171,13 +190,15 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
                 className="w-full h-full object-cover"
               />
             ) : (
-              <span className="text-xs">👤</span>
+              <span className="text-[10px] font-mono text-zinc-400">
+                {activeChar?.name?.slice(0, 2) || 'SP'}
+              </span>
             )}
           </div>
           <span className="font-semibold truncate max-w-[85px] text-[11px]">
             {activeChar?.name || 'Speaker'}
           </span>
-          <span className="text-[10px] font-mono px-1 py-0.2 bg-[#282b33] text-[#8ab4f8] rounded border border-[#383d47] opacity-80 group-hover:opacity-100">
+          <span className="text-[9px] font-mono px-1 py-0.2 bg-[#22252c] text-[#8ab4f8] rounded border border-[#30343f] opacity-80 group-hover:opacity-100">
             Tab
           </span>
         </button>
@@ -192,7 +213,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
               type="button"
               onClick={() => setIsAiMenuOpen(!isAiMenuOpen)}
               disabled={isAiProcessing}
-              className="p-1 rounded bg-[#22242a] hover:bg-[#2c2f36] text-[#8ab4f8] hover:text-[#b4d0fc] border border-[#363a44] transition flex items-center justify-center"
+              className="p-1 rounded-md bg-[#181a1f] hover:bg-[#23262e] text-[#8ab4f8] hover:text-[#b4d0fc] border border-[#2a2e37] transition flex items-center justify-center"
               title="AI Dialogue Assistant (Tone conversion, generation, summarization)"
             >
               {isAiProcessing ? (
@@ -204,14 +225,14 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
 
             {/* AI Menu Popover */}
             {isAiMenuOpen && (
-              <div className="absolute bottom-9 left-0 w-64 bg-[#141518] border border-[#2e3137] rounded-md p-1.5 space-y-1 shadow-2xl z-50 select-none animate-in fade-in duration-100">
-                <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2 py-0.5 block tracking-wider">
+              <div className="absolute bottom-9 left-0 w-64 bg-[#111215] border border-[#282b32] rounded-lg p-1.5 space-y-1 shadow-2xl z-50 select-none animate-in fade-in duration-100">
+                <span className="text-[10px] font-mono text-[#808388] uppercase px-2 py-0.5 block tracking-wider">
                   AI Persona & Tone
                 </span>
                 <button
                   type="button"
                   onClick={() => applyPersonaTone(activeChar?.name || 'zundamon')}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1f2228] transition text-left"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1a1d23] transition text-left"
                 >
                   <Sparkles className="w-3.5 h-3.5 text-amber-300" />
                   <span>Convert to {activeChar?.name || 'Speaker'}&apos;s tone</span>
@@ -220,41 +241,45 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
                   <button
                     type="button"
                     onClick={() => applyPersonaTone('reimu')}
-                    className="px-2 py-1 rounded text-[11px] text-[#e3e3e3] bg-[#22181a] hover:bg-[#2d1f22] border border-[#442327] text-left"
+                    className="px-2 py-1.5 rounded text-[11px] text-[#e3e3e3] bg-[#1a1416] hover:bg-[#231a1d] border border-[#381d22] flex items-center gap-1.5 transition text-left"
                   >
-                    🔴 Reimu tone
+                    <span className="w-2 h-2 rounded-full bg-rose-400 flex-shrink-0" />
+                    Reimu Tone
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPersonaTone('marisa')}
-                    className="px-2 py-1 rounded text-[11px] text-[#e3e3e3] bg-[#242116] hover:bg-[#302b1c] border border-[#443c22] text-left"
+                    className="px-2 py-1.5 rounded text-[11px] text-[#e3e3e3] bg-[#1c1913] hover:bg-[#262218] border border-[#38311e] flex items-center gap-1.5 transition text-left"
                   >
-                    🟡 Marisa tone
+                    <span className="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0" />
+                    Marisa Tone
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPersonaTone('zundamon')}
-                    className="px-2 py-1 rounded text-[11px] text-[#e3e3e3] bg-[#16221a] hover:bg-[#1d2d22] border border-[#243e2c] text-left"
+                    className="px-2 py-1.5 rounded text-[11px] text-[#e3e3e3] bg-[#131b15] hover:bg-[#19241c] border border-[#1e3423] flex items-center gap-1.5 transition text-left"
                   >
-                    🥑 Zundamon tone
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 flex-shrink-0" />
+                    Zundamon Tone
                   </button>
                   <button
                     type="button"
                     onClick={() => applyPersonaTone('metan')}
-                    className="px-2 py-1 rounded text-[11px] text-[#e3e3e3] bg-[#241720] hover:bg-[#301e2b] border border-[#44263b] text-left"
+                    className="px-2 py-1.5 rounded text-[11px] text-[#e3e3e3] bg-[#1c141a] hover:bg-[#251922] border border-[#3a1f33] flex items-center gap-1.5 transition text-left"
                   >
-                    🌸 Metan tone
+                    <span className="w-2 h-2 rounded-full bg-pink-400 flex-shrink-0" />
+                    Metan Tone
                   </button>
                 </div>
 
-                <div className="border-t border-[#26282c] my-1" />
-                <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2 py-0.5 block tracking-wider">
+                <div className="border-t border-[#1e2025] my-1" />
+                <span className="text-[10px] font-mono text-[#808388] uppercase px-2 py-0.5 block tracking-wider">
                   AI Tools & Assist
                 </span>
                 <button
                   type="button"
                   onClick={() => handleTriggerAi('reaction')}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1f2228] transition text-left"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1a1d23] transition text-left"
                 >
                   <Wand2 className="w-3.5 h-3.5 text-amber-400" />
                   <span>Generate reaction / reply</span>
@@ -262,7 +287,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleTriggerAi('shorten')}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1f2228] transition text-left"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1a1d23] transition text-left"
                 >
                   <Scissors className="w-3.5 h-3.5 text-rose-400" />
                   <span>Summarize / shorten</span>
@@ -270,7 +295,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
                 <button
                   type="button"
                   onClick={() => handleTriggerAi('translate_ja')}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1f2228] transition text-left"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1a1d23] transition text-left"
                 >
                   <Languages className="w-3.5 h-3.5 text-[#8ab4f8]" />
                   <span>Polish text naturally</span>
@@ -284,7 +309,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
                     setIsAiMenuOpen(false);
                     inputRef.current?.focus();
                   }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1f2228] transition text-left"
+                  className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded text-xs text-[#e3e3e3] hover:bg-[#1a1d23] transition text-left"
                 >
                   <Tag className="w-3.5 h-3.5 text-emerald-400" />
                   <span>Auto-annotate pronunciation</span>
@@ -301,8 +326,28 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={`Type line & press Enter to add (Tab to switch speaker, **bold** to highlight)...`}
-            className="w-full bg-[#181a1e] border border-[#2e3137] focus:border-[#8ab4f8] rounded pl-8 pr-3 py-1.5 text-xs text-[#e3e3e3] placeholder-[#6e7279] focus:outline-none transition shadow-inner font-sans"
+            className="w-full bg-[#131518] border border-[#24272d] focus:border-[#8ab4f8] rounded-lg pl-8 pr-3 py-1.5 text-xs text-[#e3e3e3] placeholder-[#656970] focus:outline-none transition shadow-inner font-sans"
           />
+
+          {lastTuneNote && (
+            <span className="absolute right-2 text-[10px] font-mono text-cyan-300 bg-cyan-950/80 border border-cyan-800/80 px-2 py-0.5 rounded pointer-events-none">
+              {lastTuneNote}
+            </span>
+          )}
+        </div>
+
+        {/* AI Tune Button */}
+        <div className="flex-shrink-0">
+          <button
+            type="button"
+            onClick={handleAiAutoTune}
+            disabled={!text.trim()}
+            className="px-2 py-1.5 bg-[#141d27] hover:bg-[#1b2735] disabled:opacity-30 border border-[#23384f] text-cyan-300 hover:text-cyan-200 rounded-lg text-xs font-mono flex items-center gap-1 transition"
+            title="AI Voice Auto-Tuner: analyze dialogue sentiment to auto-calibrate emotion, animation, and SE"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="text-[11px] font-medium hidden lg:inline">AI Tune</span>
+          </button>
         </div>
 
         {/* Expression Dropdown */}
@@ -310,14 +355,14 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
           <select
             value={expression}
             onChange={(e) => setExpression(e.target.value)}
-            className="bg-[#1b1d22] border border-[#2e3137] text-xs text-[#c4c7c5] rounded px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer"
+            className="bg-[#15171b] border border-[#272a31] text-xs text-[#c4c7c5] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer"
             title="Facial Expression"
           >
-            <option value="default">Default 🙂</option>
-            <option value="smile">Smile 😊</option>
-            <option value="shock">Shock 😱</option>
-            <option value="trouble">Troubled 💦</option>
-            <option value="angry">Angry 💢</option>
+            <option value="default">Default</option>
+            <option value="smile">Smile</option>
+            <option value="shock">Shock</option>
+            <option value="trouble">Troubled</option>
+            <option value="angry">Angry</option>
           </select>
         </div>
 
@@ -330,13 +375,13 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
               setSe(val);
               if (val) soundEffectManager.play(val);
             }}
-            className="bg-[#1b1d22] border border-[#2e3137] text-xs text-[#c4c7c5] rounded px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer max-w-[130px]"
+            className="bg-[#15171b] border border-[#272a31] text-xs text-[#c4c7c5] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer max-w-[130px]"
             title="Sound Effect (SE) on dialogue"
           >
             <option value="">SE: None</option>
             {SOUND_EFFECT_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.icon} {p.name}
+                {p.name}
               </option>
             ))}
           </select>
@@ -347,15 +392,15 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
           <select
             value={anim}
             onChange={(e) => setAnim(e.target.value)}
-            className="bg-[#1b1d22] border border-[#2e3137] text-xs text-[#c4c7c5] rounded px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer"
+            className="bg-[#15171b] border border-[#272a31] text-xs text-[#c4c7c5] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer"
             title="Animation effect"
           >
-            <option value="bounce">Bounce 🦘</option>
-            <option value="screen-shake">Screen Shake 📳</option>
-            <option value="flash">White Flash ⚡</option>
-            <option value="punch">Punch-in Zoom 🔍</option>
-            <option value="pop">Pop 🎈</option>
-            <option value="shake">Char Shake 💢</option>
+            <option value="bounce">Bounce</option>
+            <option value="screen-shake">Screen Shake</option>
+            <option value="flash">White Flash</option>
+            <option value="punch">Punch-in Zoom</option>
+            <option value="pop">Pop</option>
+            <option value="shake">Char Shake</option>
             <option value="none">None</option>
           </select>
         </div>
@@ -364,7 +409,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
         <button
           type="submit"
           disabled={!text.trim() || isSubmitting}
-          className="px-3 py-1.5 bg-[#1b3a57] hover:bg-[#234b70] disabled:bg-[#1a1c20] text-[#8ab4f8] disabled:text-[#5f6368] border border-[#2b517a] disabled:border-[#2a2c30] rounded text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow-xs cursor-pointer disabled:cursor-not-allowed"
+          className="px-3 py-1.5 bg-[#1b3a57] hover:bg-[#234b70] disabled:bg-[#16181b] text-[#8ab4f8] disabled:text-[#5f6368] border border-[#2b517a] disabled:border-[#24272c] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition flex-shrink-0 shadow-xs cursor-pointer disabled:cursor-not-allowed"
           title="Add dialogue line (Enter)"
         >
           <Send className="w-3.5 h-3.5" />
@@ -373,13 +418,13 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
       </form>
 
       {/* Auxiliary Buttons */}
-      <div className="flex items-center gap-1.5 pl-1 border-l border-[#26282c] flex-shrink-0">
+      <div className="flex items-center gap-1.5 pl-1 border-l border-[#202227] flex-shrink-0">
         {/* Open Soundboard */}
         <button
           type="button"
           onClick={onOpenSePalette}
-          className="px-2 py-1.5 bg-[#191b1f] hover:bg-[#23272e] border border-[#2e3137] text-[#c4c7c5] hover:text-[#8ab4f8] rounded text-xs flex items-center gap-1 transition"
-          title="Open Sound Effect Palette (18 presets)"
+          className="px-2 py-1.5 bg-[#14161a] hover:bg-[#1d2026] border border-[#272a31] text-[#c4c7c5] hover:text-[#8ab4f8] rounded-lg text-xs flex items-center gap-1 transition"
+          title="Open Sound Effect Palette"
         >
           <Bell className="w-3.5 h-3.5 text-amber-300" />
           <span className="text-[11px] font-mono hidden sm:inline">SE</span>
@@ -387,7 +432,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
 
         {/* Auto advance toggle */}
         <label
-          className="flex items-center gap-1 text-[11px] font-mono text-[#8e918f] hover:text-[#c4c7c5] cursor-pointer ml-1 select-none"
+          className="flex items-center gap-1 text-[11px] font-mono text-[#808388] hover:text-[#c4c7c5] cursor-pointer ml-1 select-none"
           title="Auto-advance playhead to end of line when added"
         >
           <input

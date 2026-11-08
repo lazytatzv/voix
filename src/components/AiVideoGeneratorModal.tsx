@@ -61,11 +61,11 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   if (!isOpen) return null;
 
   const quickTopics = [
-    { label: '🐧 Linux: Arch & Fastfetch', text: 'Arch Linuxの爆速化設定とおすすめCLIツール解説' },
-    { label: '💡 Tech: AI Tools', text: '最新AI技術と動画編集ソフトVoixの便利な使い方解説' },
-    { label: '🥑 Comedy: Zundamon & Metan', text: 'ずんだもんと四国めたんのクスッと笑える日常コント掛け合い' },
-    { label: '🎮 Gaming: Epic Moments', text: '白熱したゲーム実況とハプニング・神プレイのリアクション' },
-    { label: '⚡ Dev: Terminal Hacks', text: '現役エンジニアの9割が知らないターミナル便利ショートカット裏技' },
+    { label: 'Terminal: Arch & Fastfetch', text: 'Arch Linuxの爆速化設定とおすすめCLIツール解説' },
+    { label: 'Tech: AI Studio Tools', text: '最新AI技術と動画編集ソフトVoixの便利な使い方解説' },
+    { label: 'Comedy: Zundamon & Metan', text: 'ずんだもんと四国めたんのクスッと笑える日常コント掛け合い' },
+    { label: 'Gaming: Epic Highlights', text: '白熱したゲーム実況とハプニング・神プレイのリアクション' },
+    { label: 'Dev: Terminal Hacks', text: '現役エンジニアの9割が知らないターミナル便利ショートカット裏技' },
   ];
 
   const handleToggleChar = (id: string) => {
@@ -356,11 +356,11 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
               </label>
               <div className="grid grid-cols-2 gap-1.5">
                 {[
-                  { id: 'linux_tech', label: '🐧 Linux & Code' },
-                  { id: 'tech_review', label: '💡 Tech / Explainer' },
-                  { id: 'comedy_banter', label: '🥑 Comedy / Banter' },
-                  { id: 'gaming', label: '🎮 Gaming' },
-                  { id: 'shorts_hook', label: '⚡ Shorts' },
+                  { id: 'linux_tech', label: 'Linux & Code' },
+                  { id: 'tech_review', label: 'Tech & Explainer' },
+                  { id: 'comedy_banter', label: 'Comedy & Banter' },
+                  { id: 'gaming', label: 'Gaming Highlights' },
+                  { id: 'shorts_hook', label: 'Shorts Hook' },
                 ].map((s) => (
                   <button
                     key={s.id}

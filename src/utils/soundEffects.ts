@@ -11,41 +11,41 @@ export interface SoundEffectPreset {
 }
 
 export const SOUND_EFFECT_PRESETS: SoundEffectPreset[] = [
-  // 定番テロップ・YouTube決定音
-  { id: 'deden', name: 'デデン！ (重大発表)', category: 'impact', icon: '📢', description: 'YouTube定番のタイトルコールや重大発表の2連打音', duration: 0.6 },
-  { id: 'pop', name: 'ポンッ (登場)', category: 'telop', icon: '✨', description: 'テロップや画像の出現に最適な軽快なポップ音', duration: 0.2 },
-  { id: 'piki', name: 'ピキーン (ひらめき)', category: 'emotion', icon: '💡', description: 'ひらめき・気付き・覚醒の鋭い高音閃光サウンド', duration: 0.45 },
-  { id: 'shakin', name: 'シャキーン (登場)', category: 'impact', icon: '⚔️', description: '抜刀・キリッとした登場・強調の金属音', duration: 0.35 },
-  { id: 'pinpon', name: 'ピンポン (正解)', category: 'telop', icon: '⭕', description: 'クイズ正解や通知の明るい2和音チャイム', duration: 0.55 },
-  { id: 'chime', name: 'ピロリン (決定)', category: 'telop', icon: '🔔', description: '正解・ひらめき・決定の明るいチャイム', duration: 0.45 },
-  { id: 'kira', name: 'キラリン (輝き)', category: 'telop', icon: '⭐', description: '星やひらめきのきらめくサウンド', duration: 0.4 },
-  { id: 'click', name: 'カチッ (選択)', category: 'telop', icon: '🖱️', description: 'ボタン選択やクリックスナップ', duration: 0.08 },
-  { id: 'keyboard', name: 'カタカタ (タイピング)', category: 'telop', icon: '⌨️', description: 'プログラミングや検索のキーボード打鍵音', duration: 0.35 },
-  { id: 'laser', name: 'ピシューン (強調)', category: 'telop', icon: '⚡', description: 'レーザーや鋭い強調のビーム音', duration: 0.25 },
+  // Stings & Announcements
+  { id: 'deden', name: 'Deden (Announcement)', category: 'impact', icon: 'sting', description: 'Classic punchy double-hit YouTube title sting', duration: 0.6 },
+  { id: 'pop', name: 'Pop (Spawn)', category: 'telop', icon: 'pop', description: 'Light pop sound for telop or image appearances', duration: 0.2 },
+  { id: 'piki', name: 'Piki (Insight)', category: 'emotion', icon: 'insight', description: 'Sharp high-frequency chime for sudden realization or discovery', duration: 0.45 },
+  { id: 'shakin', name: 'Shakin (Entrance)', category: 'impact', icon: 'blade', description: 'Crisp metallic sword draw / sharp focus sting', duration: 0.35 },
+  { id: 'pinpon', name: 'Chime (Correct)', category: 'telop', icon: 'check', description: 'Bright dual-tone chime for success or quiz results', duration: 0.55 },
+  { id: 'chime', name: 'Bell (Notice)', category: 'telop', icon: 'bell', description: 'Clean bell notification tone', duration: 0.45 },
+  { id: 'kira', name: 'Sparkle (Glint)', category: 'telop', icon: 'glint', description: 'Glinting sound for shine or inspiration', duration: 0.4 },
+  { id: 'click', name: 'Click (Snap)', category: 'telop', icon: 'click', description: 'Crisp tactile button click snap', duration: 0.08 },
+  { id: 'keyboard', name: 'Keyboard (Typing)', category: 'telop', icon: 'key', description: 'Mechanical keyboard typing sound for terminal / code', duration: 0.35 },
+  { id: 'laser', name: 'Laser (Beam)', category: 'telop', icon: 'beam', description: 'Punchy laser beam sweep for emphasis', duration: 0.25 },
 
-  // ツッコミ・衝撃・YouTubeオチ
-  { id: 'punch', name: 'ドーン (ツッコミ)', category: 'impact', icon: '💥', description: 'ツッコミや画面揺れの定番インパクト音', duration: 0.3 },
-  { id: 'bomb', name: 'ドカーン (爆発)', category: 'impact', icon: '💣', description: '派手な爆発・大失敗・オチの重低音', duration: 0.75 },
-  { id: 'shock', name: 'ガーン (絶望)', category: 'impact', icon: '😱', description: 'ショック・不穏・絶望の不協和音', duration: 0.55 },
-  { id: 'slash', name: 'シュパッ (斬撃)', category: 'impact', icon: '🗡️', description: '鋭い切り替えやツッコミのスラッシュ音', duration: 0.25 },
-  { id: 'bleep', name: 'ピー音 (自主規制)', category: 'scene', icon: '🚫', description: '1000Hz純音の放送禁止・モザイク用規制音', duration: 0.45 },
+  // Impacts & Reactions
+  { id: 'punch', name: 'Punch (Impact)', category: 'impact', icon: 'hit', description: 'Classic comic punch / screen shake sound', duration: 0.3 },
+  { id: 'bomb', name: 'Bomb (Explosion)', category: 'impact', icon: 'boom', description: 'Deep bass explosion for catastrophic failure', duration: 0.75 },
+  { id: 'shock', name: 'Shock (Dissonance)', category: 'impact', icon: 'shock', description: 'Dissonant metallic chord for panic or shock', duration: 0.55 },
+  { id: 'slash', name: 'Slash (Swish)', category: 'impact', icon: 'slash', description: 'Swift clean slash sting for transitions', duration: 0.25 },
+  { id: 'bleep', name: 'Bleep (Censor)', category: 'scene', icon: 'censor', description: '1000 Hz pure sine wave censorship tone', duration: 0.45 },
 
-  // 感情・リアクション・ギャグ
-  { id: 'dondon', name: 'ドンドンパフパフ', category: 'emotion', icon: '🎺', description: 'お祝い・登場の太鼓2発＆ラッパの宴会芸音', duration: 0.75 },
-  { id: 'zukoo', name: 'ズコーッ (ずっこけ)', category: 'emotion', icon: '🤸', description: 'ボケやずっこけの定番下降スライド音', duration: 0.45 },
-  { id: 'question', name: 'ピャッ？ (はてな)', category: 'emotion', icon: '❓', description: '疑問・首かしげ・ボケに対するはてな音', duration: 0.2 },
-  { id: 'error', name: 'ブブー (不正解)', category: 'emotion', icon: '❌', description: '間違い・NG・失敗時の低音ブザー音', duration: 0.4 },
-  { id: 'jajaan', name: 'ジャジャーン (お披露目)', category: 'emotion', icon: '🎺', description: '華やかな登場や完成のお披露目ファンファーレ', duration: 0.6 },
-  { id: 'success', name: 'ファンファーレ', category: 'emotion', icon: '🎉', description: '成功・レベルアップ・解決時のメロディ', duration: 0.45 },
-  { id: 'spring', name: 'ボヨ〜ン (バネ)', category: 'emotion', icon: '🌀', description: '跳躍やギャグのコミカルなバネ音', duration: 0.35 },
-  { id: 'applause', name: '歓声・拍手', category: 'emotion', icon: '👏', description: '喝采・歓声・拍手の盛り上がり音', duration: 0.8 },
+  // Emotions & Comedic Cues
+  { id: 'dondon', name: 'Dondon (Fanfare)', category: 'emotion', icon: 'fanfare', description: 'Taiko drums duo with celebratory brass horns', duration: 0.75 },
+  { id: 'zukoo', name: 'Zukoo (Comedic Slip)', category: 'emotion', icon: 'slip', description: 'Sliding pitch dive with comedic spring for punchlines', duration: 0.45 },
+  { id: 'question', name: 'Question (Chirp)', category: 'emotion', icon: 'question', description: 'Quirky rising chirp for confusion or doubt', duration: 0.2 },
+  { id: 'error', name: 'Buzzer (Wrong)', category: 'emotion', icon: 'error', description: 'Low dual-tone error buzzer for wrong answers', duration: 0.4 },
+  { id: 'jajaan', name: 'Jajaan (Reveal)', category: 'emotion', icon: 'reveal', description: 'Grand brass fanfare for reveals and intros', duration: 0.6 },
+  { id: 'success', name: 'Success (Triumph)', category: 'emotion', icon: 'triumph', description: 'Level-up triumph melody', duration: 0.45 },
+  { id: 'spring', name: 'Spring (Boing)', category: 'emotion', icon: 'spring', description: 'Comedic spring boing sound', duration: 0.35 },
+  { id: 'applause', name: 'Applause (Cheers)', category: 'emotion', icon: 'cheer', description: 'Audience cheering and clapping', duration: 0.8 },
 
-  // 場面・オチ
-  { id: 'cymbal', name: 'チーン (オチ・仏壇)', category: 'scene', icon: '🛎️', description: '哀愁・シュールな沈黙・オチの仏壇ベル', duration: 0.9 },
-  { id: 'scratch', name: 'ギュッ (レコード停止)', category: 'scene', icon: '🛑', description: 'レコード停止・突然の沈黙・え？の瞬間', duration: 0.28 },
-  { id: 'whistle', name: 'ピピーッ (ホイッスル)', category: 'scene', icon: '📢', description: '審判ホイッスル・一時停止・物言い', duration: 0.35 },
-  { id: 'drumroll', name: 'ドラムロール', category: 'scene', icon: '🥁', description: '結果発表前の緊迫ドラムロール＆シンバル', duration: 0.85 },
-  { id: 'heartbeat', name: 'ドクン (緊迫心拍)', category: 'scene', icon: '💓', description: 'ピンチ・ホラー・緊迫場面の心拍音', duration: 0.65 },
+  // Scene & Punchlines
+  { id: 'cymbal', name: 'Ting (Punchline)', category: 'scene', icon: 'ting', description: 'Temple bell tone for comedic silence and punchlines', duration: 0.9 },
+  { id: 'scratch', name: 'Scratch (Stop)', category: 'scene', icon: 'scratch', description: 'Sudden vinyl record stop for awkward pauses', duration: 0.28 },
+  { id: 'whistle', name: 'Whistle (Referee)', category: 'scene', icon: 'whistle', description: 'Referee whistle blow', duration: 0.35 },
+  { id: 'drumroll', name: 'Drumroll (Tension)', category: 'scene', icon: 'drum', description: 'Snare drum roll building tension followed by cymbal crash', duration: 0.85 },
+  { id: 'heartbeat', name: 'Heartbeat (Pulse)', category: 'scene', icon: 'pulse', description: 'Deep resonant double heartbeat for horror or suspense', duration: 0.65 },
 ];
 
 /**

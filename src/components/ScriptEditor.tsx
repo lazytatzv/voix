@@ -10,6 +10,7 @@ import {
   Plus,
   ChevronDown,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 import { Character, Marker, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
@@ -125,15 +126,15 @@ const YAML_INSERT_GROUPS: { label: string; items: YamlInsertItem[] }[] = [
   {
     label: 'Dialogue',
     items: [
-      { id: 'zundamon', label: 'Zundamon', icon: '🥑', hint: '- z:', snippet: '\n- z: ' },
-      { id: 'metan', label: 'Metan', icon: '🌸', hint: '- m:', snippet: '\n- m: ' },
+      { id: 'zundamon', label: 'Zundamon', icon: 'Z', hint: '- z:', snippet: '\n- z: ' },
+      { id: 'metan', label: 'Metan', icon: 'M', hint: '- m:', snippet: '\n- m: ' },
     ],
   },
   {
     label: 'Expression',
     items: [
-      { id: 'smile', label: 'Smile', icon: '🙂', hint: '(smile)', snippet: '(smile)' },
-      { id: 'shock', label: 'Shock', icon: '😱', hint: '(shock)', snippet: '(shock)' },
+      { id: 'smile', label: 'Smile', icon: 'S', hint: '(smile)', snippet: '(smile)' },
+      { id: 'shock', label: 'Shock', icon: '!', hint: '(shock)', snippet: '(shock)' },
     ],
   },
   {
@@ -142,13 +143,13 @@ const YAML_INSERT_GROUPS: { label: string; items: YamlInsertItem[] }[] = [
       {
         id: 'pause',
         label: 'Pause 0.8s',
-        icon: '⏱️',
+        icon: 'T',
         hint: '- pause: 0.8',
         snippet: '\n- pause: 0.8\n',
       },
-      { id: 'bounce', label: 'Bounce', icon: '✨', hint: ', anim=bounce', snippet: ', anim=bounce' },
-      { id: 'se-pop', label: 'SE: pop', icon: '🔔', hint: ', se=pop', snippet: ', se=pop' },
-      { id: 'se-chime', label: 'SE: chime', icon: '🔔', hint: ', se=chime', snippet: ', se=chime' },
+      { id: 'bounce', label: 'Bounce', icon: 'B', hint: ', anim=bounce', snippet: ', anim=bounce' },
+      { id: 'se-pop', label: 'SE: pop', icon: 'SE', hint: ', se=pop', snippet: ', se=pop' },
+      { id: 'se-chime', label: 'SE: chime', icon: 'SE', hint: ', se=chime', snippet: ', se=chime' },
     ],
   },
   {
@@ -157,7 +158,7 @@ const YAML_INSERT_GROUPS: { label: string; items: YamlInsertItem[] }[] = [
       {
         id: 'terminal',
         label: 'Terminal',
-        icon: '💻',
+        icon: 'CLI',
         hint: 'Terminal overlay block',
         snippet:
           '\n- z:\n    text: コマンドを実行するのだ！\n    cmd: "pnpm dev"\n    output: "Vite ready in 150ms"\n    se: chime\n    anim: bounce\n',
@@ -165,7 +166,7 @@ const YAML_INSERT_GROUPS: { label: string; items: YamlInsertItem[] }[] = [
       {
         id: 'config',
         label: 'Config',
-        icon: '⚙️',
+        icon: 'CFG',
         hint: 'Prepend YAML config header',
         action: 'config',
       },
@@ -815,16 +816,16 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
 
                         {/* SE Badge if set */}
                         {item.se && (
-                          <span className="font-mono text-[10px] px-1.5 py-0.5 bg-[#251838] text-[#d8b4fe] border border-[#6b21a8] rounded-xs flex items-center gap-0.5">
-                            <span>🔔</span>
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 bg-[#251838] text-[#d8b4fe] border border-[#6b21a8] rounded-xs flex items-center gap-1">
+                            <Volume2 className="w-2.5 h-2.5" />
                             <span>{item.se}</span>
                           </span>
                         )}
 
                         {/* Anim Badge if set */}
                         {item.anim && item.anim !== 'none' && (
-                          <span className="font-mono text-[10px] px-1.5 py-0.5 bg-[#312008] text-[#fde047] border border-[#854d0e] rounded-xs flex items-center gap-0.5">
-                            <span>✨</span>
+                          <span className="font-mono text-[10px] px-1.5 py-0.5 bg-[#312008] text-[#fde047] border border-[#854d0e] rounded-xs flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" />
                             <span>{item.anim}</span>
                           </span>
                         )}

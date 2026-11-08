@@ -46,6 +46,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
   const [targetDir, setTargetDir] = useState('');
   const [projectName, setProjectName] = useState(project.name || 'my_video');
   const [format, setFormat] = useState<'js' | 'yaml'>('js');
+  const [jsStyle, setJsStyle] = useState<'fluent' | 'screenplay' | 'classic'>('fluent');
   const [includeSnippets, setIncludeSnippets] = useState(true);
   const [enableWatch, setEnableWatch] = useState(true);
   const [initGit, setInitGit] = useState(true);
@@ -68,11 +69,11 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
     if (isOpen) {
       const snippet =
         format === 'js'
-          ? generateJavaScriptScript(project)
+          ? generateJavaScriptScript(project, { style: jsStyle })
           : generateStructuredCodebaseScript(project);
       setPreviewSnippet(snippet);
     }
-  }, [isOpen, format, project]);
+  }, [isOpen, format, jsStyle, project]);
 
   const handlePickDirectory = async () => {
     try {
@@ -95,10 +96,10 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
     try {
       const isJs = format === 'js';
       const scriptCode = isJs
-        ? generateJavaScriptScript(project)
+        ? generateJavaScriptScript(project, { style: jsStyle })
         : generateStructuredCodebaseScript(project);
       const typeDef = isJs ? generateTypeDefinition(project) : undefined;
-      const voixLib = isJs ? generateVoixJsLibrary() : undefined;
+      const voixLib = isJs ? generateVoixJsLibrary(project) : undefined;
 
       const generatedPath = await generateCodeProject(
         targetDir.trim(),
@@ -236,6 +237,32 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
                   </span>
                 </button>
               </div>
+
+              {format === 'js' && (
+                <div className="mt-2.5 p-2 rounded-lg bg-[#111215] border border-[#23262d] flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-mono uppercase text-[#808388]">Script Syntax:</span>
+                  <div className="flex gap-1">
+                    {[
+                      { id: 'fluent', label: 'Fluent API (Named methods)' },
+                      { id: 'screenplay', label: 'Screenplay DSL (dialogue`...`)' },
+                      { id: 'classic', label: 'Classic (z/m calls)' },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setJsStyle(s.id as any)}
+                        className={`px-2 py-1 rounded text-[10px] font-mono transition border ${
+                          jsStyle === s.id
+                            ? 'bg-blue-600/20 text-blue-300 border-blue-500/50'
+                            : 'bg-[#16171b] text-[#808388] border-transparent hover:border-[#2d3038] hover:text-[#c4c7c5]'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>
@@ -259,6 +286,32 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
                   Browse...
                 </button>
               </div>
+
+              {format === 'js' && (
+                <div className="mt-2.5 p-2 rounded-lg bg-[#111215] border border-[#23262d] flex items-center justify-between gap-2">
+                  <span className="text-[10px] font-mono uppercase text-[#808388]">Script Syntax:</span>
+                  <div className="flex gap-1">
+                    {[
+                      { id: 'fluent', label: 'Fluent API (Named methods)' },
+                      { id: 'screenplay', label: 'Screenplay DSL (dialogue`...`)' },
+                      { id: 'classic', label: 'Classic (z/m calls)' },
+                    ].map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => setJsStyle(s.id as any)}
+                        className={`px-2 py-1 rounded text-[10px] font-mono transition border ${
+                          jsStyle === s.id
+                            ? 'bg-blue-600/20 text-blue-300 border-blue-500/50'
+                            : 'bg-[#16171b] text-[#808388] border-transparent hover:border-[#2d3038] hover:text-[#c4c7c5]'
+                        }`}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div>

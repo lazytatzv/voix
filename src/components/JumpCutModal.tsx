@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Flag, MessageSquare, Check } from 'lucide-react';
+import { X, Loader2, Flag, MessageSquare, Check, Scissors } from 'lucide-react';
 import { detectSpeechFromVideo } from '../services/exportService';
 
 interface JumpCutModalProps {
@@ -71,7 +71,7 @@ export const JumpCutModal: React.FC<JumpCutModalProps> = ({
         {/* Header */}
         <div className="px-5 py-3.5 border-b border-[#25282c] flex items-center justify-between bg-[#191b1f]">
           <div className="flex items-center gap-2">
-            <span className="text-lg">✂️</span>
+            <Scissors className="w-4 h-4 text-[#8ab4f8]" />
             <h2 className="text-sm font-semibold text-[#e3e3e3]">
               Auto Silence Cut & Speech Detection (Jump Cut Assistant)
             </h2>

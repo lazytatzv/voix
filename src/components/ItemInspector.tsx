@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Diamond,
   Plus,
+  Sparkles,
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import {
@@ -43,6 +44,7 @@ import {
 import { normalizeItemEffects } from '../render/itemEffects';
 import { BLEND_MODES } from '../render/blendModes';
 import { SOUND_EFFECT_PRESETS, soundEffectManager } from '../utils/soundEffects';
+import { tuneVoiceWithAI, VOICE_TONE_PRESETS } from '../utils/voiceTonePresets';
 
 interface ItemInspectorProps {
   isOpen: boolean;
@@ -738,6 +740,64 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                       <option value="none">None</option>
                     </select>
                   </Field>
+                  <div className="col-span-2 pt-1 pb-1">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[10px] font-mono text-[#808388] uppercase tracking-wider">
+                        Speaking Tone &amp; Calibration
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const tuned = tuneVoiceWithAI(voice.text);
+                          patch({
+                            speedScale: tuned.speedScale,
+                            pitchScale: tuned.pitchScale,
+                            intonationScale: tuned.intonationScale,
+                            volumeScale: tuned.volumeScale,
+                            expression: tuned.expression,
+                            anim: tuned.anim,
+                            se: tuned.se || voice.se,
+                          } as Partial<TimelineItem>);
+                        }}
+                        className="px-2 py-0.5 rounded-md bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/30 text-blue-300 text-[10px] font-mono flex items-center gap-1 transition"
+                        title="AI Voice Auto-Tuner: analyze dialogue sentiment to calibrate tone, speed, pitch & expression"
+                      >
+                        <Sparkles className="w-3 h-3 text-blue-400" />
+                        AI Auto-Tune
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      {Object.entries(VOICE_TONE_PRESETS).map(([key, preset]) => {
+                        const isActive =
+                          Math.abs((voice.speedScale ?? 1) - preset.speedScale) < 0.05 &&
+                          Math.abs((voice.pitchScale ?? 0) - preset.pitchScale) < 0.03;
+                        return (
+                          <button
+                            key={key}
+                            type="button"
+                            onClick={() => {
+                              patch({
+                                speedScale: preset.speedScale,
+                                pitchScale: preset.pitchScale,
+                                intonationScale: preset.intonationScale,
+                                volumeScale: preset.volumeScale,
+                                expression: preset.expression,
+                                anim: preset.anim !== 'none' ? preset.anim : voice.anim,
+                              } as Partial<TimelineItem>);
+                            }}
+                            className={`px-2 py-1 rounded-md text-[10px] font-mono transition border ${
+                              isActive
+                                ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                                : 'bg-[#14161a] border-[#22252a] text-[#808388] hover:text-[#c4c7c5] hover:border-[#32363e]'
+                            }`}
+                            title={preset.description}
+                          >
+                            {preset.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <SliderField
                     label="Speed"
                     value={voice.speedScale ?? 1}
@@ -830,7 +890,7 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                         <option value="">(None)</option>
                         {SOUND_EFFECT_PRESETS.map((se) => (
                           <option key={se.id} value={se.id}>
-                            {se.icon} {se.name}
+                            {se.name} ({se.duration}s)
                           </option>
                         ))}
                       </select>
