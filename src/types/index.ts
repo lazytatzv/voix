@@ -41,6 +41,9 @@ export interface BaseTimelineItem {
 
 export type KeyframeEasing = 'linear' | 'ease-in' | 'ease-out' | 'ease-in-out' | 'hold';
 
+/** Per-character reveal order for text items. */
+export type TextRevealDirection = 'from-first' | 'from-last';
+
 /**
  * Canvas filter effects for one timeline item. Values mirror CSS filter
  * functions, so the inspector, preview and export share one interpretation.
@@ -229,6 +232,14 @@ export interface TextItem extends BaseTimelineItem {
   align?: 'left' | 'center' | 'right';
   rotation?: number;
   opacity?: number;
+  /** Seconds between characters appearing (0 = instant, YMM4 DisplayInterval). */
+  displayInterval?: number;
+  /** Character reveal order (YMM4 DisplayDirection). */
+  displayDirection?: TextRevealDirection;
+  /** Seconds between characters disappearing at the item end. */
+  hideInterval?: number;
+  /** Character hide order (YMM4 HideDirection). */
+  hideDirection?: TextRevealDirection;
 }
 
 export interface ImageItem extends BaseTimelineItem {

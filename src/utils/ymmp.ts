@@ -3,6 +3,7 @@ import {
   Character,
   ImageItem,
   TextItem,
+  TextRevealDirection,
   TimelineItem,
   TrackState,
   VoiceItem,
@@ -255,6 +256,19 @@ function normalizeNewlines(value: unknown): string {
   return String(value ?? '').replace(/\r\n?/g, '\n');
 }
 
+function normalizeRevealDirection(value: unknown): TextRevealDirection | undefined {
+  switch (String(value ?? '').toLowerCase()) {
+    case 'fromfirst':
+    case 'from-first':
+      return 'from-first';
+    case 'fromlast':
+    case 'from-last':
+      return 'from-last';
+    default:
+      return undefined;
+  }
+}
+
 function toTextItem(
   raw: Rec,
   index: number,
@@ -330,6 +344,10 @@ function toTextItem(
     align: horizontal.includes('left') ? 'left' : horizontal.includes('right') ? 'right' : 'center',
     rotation,
     opacity,
+    displayInterval: Math.max(0, asNumber(raw.DisplayInterval, 0)),
+    displayDirection: normalizeRevealDirection(raw.DisplayDirection),
+    hideInterval: Math.max(0, asNumber(raw.HideInterval, 0)),
+    hideDirection: normalizeRevealDirection(raw.HideDirection),
   };
 }
 

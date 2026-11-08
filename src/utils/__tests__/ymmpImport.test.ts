@@ -66,6 +66,10 @@ function makeYmmp() {
             Style: 'Outline',
             Bold: true,
             Italic: true,
+            DisplayInterval: 0.05,
+            DisplayDirection: 'FromLast',
+            HideInterval: 0.08,
+            HideDirection: 'FromFirst',
             Layer: 5,
             FadeIn: 0.2,
             FadeOut: 0.3,
@@ -178,6 +182,10 @@ describe('parseYmmpProject', () => {
       expect(text.style.letterSpacing).toBe(64);
       expect(text.style.italic).toBe(true);
       expect(text.style.wordWrap).toBe(false);
+      expect(text.displayInterval).toBe(0.05);
+      expect(text.displayDirection).toBe('from-last');
+      expect(text.hideInterval).toBe(0.08);
+      expect(text.hideDirection).toBe('from-first');
       expect(text.xPercent).toBeGreaterThan(0);
       expect(text.xPercent).toBeLessThan(15);
       expect(text.yPercent).toBeLessThan(10);

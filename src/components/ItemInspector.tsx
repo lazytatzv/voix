@@ -972,6 +972,60 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                       </select>
                     </Field>
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumberField
+                      label="Reveal (s/char)"
+                      value={text.displayInterval ?? 0}
+                      step={0.01}
+                      min={0}
+                      max={10}
+                      onChange={(value) =>
+                        patch({ displayInterval: Math.max(0, value) } as Partial<TimelineItem>)
+                      }
+                    />
+                    <Field label="Reveal direction">
+                      <select
+                        value={text.displayDirection || 'from-first'}
+                        onChange={(e) =>
+                          patch({
+                            displayDirection: e.target.value as TextItem['displayDirection'],
+                          } as Partial<TimelineItem>)
+                        }
+                        className={inputClass}
+                      >
+                        <option value="from-first">from first</option>
+                        <option value="from-last">from last</option>
+                      </select>
+                    </Field>
+                    <NumberField
+                      label="Hide (s/char)"
+                      value={text.hideInterval ?? 0}
+                      step={0.01}
+                      min={0}
+                      max={10}
+                      onChange={(value) =>
+                        patch({ hideInterval: Math.max(0, value) } as Partial<TimelineItem>)
+                      }
+                    />
+                    <Field label="Hide direction">
+                      <select
+                        value={text.hideDirection || 'from-first'}
+                        onChange={(e) =>
+                          patch({
+                            hideDirection: e.target.value as TextItem['hideDirection'],
+                          } as Partial<TimelineItem>)
+                        }
+                        className={inputClass}
+                      >
+                        <option value="from-first">from first</option>
+                        <option value="from-last">from last</option>
+                      </select>
+                    </Field>
+                  </div>
+                  <p className="text-[10px] text-[#6f7276] font-mono">
+                    Character reveal / hide animation. 0 shows or hides instantly; 0.05 is a
+                    readable typewriter pace. Hide runs backwards from the item end.
+                  </p>
                   <p className="text-[10px] text-[#6f7276] font-mono">
                     Fade duration drives the enter/exit motion. Preview and export share this timing.
                   </p>

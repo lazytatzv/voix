@@ -4,6 +4,8 @@ import { computeItemMotion } from './itemMotion';
 import { resolveItemTransform } from './keyframes';
 import { buildCanvasFilter } from './itemEffects';
 import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } from '../utils/pronunciation';
+import { computeTextRevealRange, textRevealCharacterCount } from '../utils/textReveal';
+import type { TextRevealTiming } from '../utils/textReveal';
 
 export interface OverlayRenderOptions {
   width: number;
@@ -146,6 +148,8 @@ interface StyledTextOptions {
   scale?: number;
   /** Default line height multiplier. */
   lineHeight?: number;
+  /** Per-character reveal/hide animation (YMM4 character display). */
+  reveal?: TextRevealTiming;
 }
 
 /**
@@ -164,6 +168,11 @@ function drawVerticalStyledText(
   if (rubyMode === 'hidden') displayText = getSubtitleDisplayText(displayText);
   const centerX = options.centerX + (options.offsetX ?? 0);
   const centerY = options.centerY + (options.offsetY ?? 0);
+  const revealRange = options.reveal
+    ? computeTextRevealRange(textRevealCharacterCount(displayText), options.reveal)
+    : null;
+  const isRevealed = (index: number) =>
+    !revealRange || (index >= revealRange.start && index < revealRange.end);
   const fontSize = style.fontSize || 48;
   const font = `${fontPrefix(style)} ${fontSize}px ${style.fontFamily || FALLBACK_STYLE.fontFamily}`;
   const columnGap = fontSize * (style.lineHeight ?? 1.32);
@@ -189,6 +198,8 @@ function drawVerticalStyledText(
     char: string;
     row: number;
     x: number;
+    /** Global character index used by reveal/hide animation. */
+    index: number;
     reading?: string;
   }
 
@@ -206,6 +217,7 @@ function drawVerticalStyledText(
           char,
           row,
           x: columnX,
+          index: glyphs.length,
           reading: charIndex === 0 ? token.reading : undefined,
         });
         row += 1;
@@ -270,6 +282,7 @@ function drawVerticalStyledText(
     ctx.font = font;
     ctx.textAlign = 'center';
     glyphs.forEach((glyph) => {
+      if (!isRevealed(glyph.index)) return;
       const y = blockTop + glyph.row * charAdvance;
       if (mode === 'outerStroke') {
         ctx.lineWidth = style.outerStrokeWidth || 0;
@@ -307,7 +320,7 @@ function drawVerticalStyledText(
     ctx.fillStyle = style.textColor || '#ffffff';
     ctx.textAlign = 'center';
     glyphs.forEach((glyph) => {
-      if (!glyph.reading) return;
+      if (!glyph.reading || !isRevealed(glyph.index)) return;
       const y = blockTop + glyph.row * charAdvance;
       const chars = Array.from(glyph.reading);
       const startY = y - ((chars.length - 1) * rubyAdvance) / 2;
@@ -356,6 +369,21 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
   const totalHeight = (lines.length - 1) * lineHeight;
   const blockTop = centerY - totalHeight / 2;
 
+  const lineTokens: PronunciationToken[][] = lines.map((lineText) =>
+    rubyMode === 'above' || rubyMode === 'inline'
+      ? parsePronunciationTokens(lineText)
+      : [{ text: lineText }]
+  );
+  const totalRevealChars = lineTokens.reduce(
+    (sum, tokens) =>
+      sum + tokens.reduce((lineSum, token) => lineSum + Array.from(token.text).length, 0),
+    0
+  );
+  const revealRange = options.reveal
+    ? computeTextRevealRange(totalRevealChars, options.reveal)
+    : null;
+  let globalCharIndex = 0;
+
   const scale = options.scale ?? 1;
   if (options.rotation || scale !== 1) {
     ctx.translate(centerX, centerY);
@@ -364,12 +392,14 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
     ctx.translate(-centerX, -centerY);
   }
 
-  lines.forEach((lineText, lineIndex) => {
+  lines.forEach((_lineText, lineIndex) => {
     const lineY = blockTop + lineIndex * lineHeight;
-    const tokens: PronunciationToken[] =
-      rubyMode === 'above' || rubyMode === 'inline'
-        ? parsePronunciationTokens(lineText)
-        : [{ text: lineText }];
+    const tokens: PronunciationToken[] = lineTokens[lineIndex];
+    const lineStartIndex = globalCharIndex;
+    globalCharIndex += tokens.reduce(
+      (sum, token) => sum + Array.from(token.text).length,
+      0
+    );
     const hasRuby = tokens.some((t) => Boolean(t.reading));
 
     ctx.font = font;
@@ -430,24 +460,57 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
 
     const drawLayer = (mode: 'outerStroke' | 'innerStroke' | 'fill') => {
       let cursor = leftX;
+      let tokenStart = lineStartIndex;
       ctx.textAlign = 'left';
       tokens.forEach((token, i) => {
+        const tokenChars = Array.from(token.text);
+        const tokenLength = tokenChars.length;
         const tokenWidth = tokenWidths[i];
-        ctx.font = font;
-        if (mode === 'outerStroke') {
-          ctx.lineWidth = style.outerStrokeWidth || 0;
-          ctx.strokeStyle = style.outerStrokeColor || 'transparent';
-          if (ctx.lineWidth > 0) ctx.strokeText(token.text, cursor, lineY);
-        } else if (mode === 'innerStroke') {
-          ctx.lineWidth = style.strokeWidth || 0;
-          ctx.strokeStyle = style.strokeColor || 'transparent';
-          if (ctx.lineWidth > 0) ctx.strokeText(token.text, cursor, lineY);
-        } else {
-          ctx.fillStyle = style.textColor || '#ffffff';
-          ctx.fillText(token.text, cursor, lineY);
+        let drawText = token.text;
+        let prefixWidth = 0;
+
+        if (revealRange) {
+          const visibleStart = Math.max(tokenStart, revealRange.start);
+          const visibleEnd = Math.min(tokenStart + tokenLength, revealRange.end);
+          if (visibleEnd <= visibleStart) {
+            drawText = '';
+          } else {
+            const startOffset = visibleStart - tokenStart;
+            const endOffset = visibleEnd - tokenStart;
+            drawText = tokenChars.slice(startOffset, endOffset).join('');
+            // Keep later characters at their final positions while the first
+            // characters of a token are hidden by the from-first hide phase.
+            if (startOffset > 0) {
+              prefixWidth = ctx.measureText(
+                tokenChars.slice(0, startOffset).join('')
+              ).width;
+            }
+          }
         }
 
-        if (token.reading && rubyMode === 'above') {
+        const tokenFullyVisible =
+          !revealRange ||
+          (tokenStart >= revealRange.start &&
+            tokenStart + tokenLength <= revealRange.end);
+        const drawX = cursor + prefixWidth;
+
+        ctx.font = font;
+        if (drawText) {
+          if (mode === 'outerStroke') {
+            ctx.lineWidth = style.outerStrokeWidth || 0;
+            ctx.strokeStyle = style.outerStrokeColor || 'transparent';
+            if (ctx.lineWidth > 0) ctx.strokeText(drawText, drawX, lineY);
+          } else if (mode === 'innerStroke') {
+            ctx.lineWidth = style.strokeWidth || 0;
+            ctx.strokeStyle = style.strokeColor || 'transparent';
+            if (ctx.lineWidth > 0) ctx.strokeText(drawText, drawX, lineY);
+          } else {
+            ctx.fillStyle = style.textColor || '#ffffff';
+            ctx.fillText(drawText, drawX, lineY);
+          }
+        }
+
+        if (token.reading && rubyMode === 'above' && tokenFullyVisible) {
           ctx.font = rubyFont;
           const rubyX = cursor + tokenWidth / 2;
           if (mode === 'outerStroke') {
@@ -471,6 +534,7 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
           ctx.font = font;
         }
         cursor += tokenWidth + letterSpacing;
+        tokenStart += tokenLength;
       });
     };
 
@@ -957,6 +1021,17 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
         offsetX: motion.offsetX,
         offsetY: motion.offsetY,
         scale: motion.scale * transform.scale,
+        reveal:
+          (item.displayInterval ?? 0) > 0 || (item.hideInterval ?? 0) > 0
+            ? {
+                elapsed: time - item.startTime,
+                duration: item.duration,
+                displayInterval: item.displayInterval,
+                displayDirection: item.displayDirection,
+                hideInterval: item.hideInterval,
+                hideDirection: item.hideDirection,
+              }
+            : undefined,
       });
       ctx.restore();
     });

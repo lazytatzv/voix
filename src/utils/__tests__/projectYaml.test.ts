@@ -70,6 +70,10 @@ function makeProject(): VoixProject {
       align: 'left',
       rotation: 3,
       opacity: 0.9,
+      displayInterval: 0.04,
+      displayDirection: 'from-last',
+      hideInterval: 0.06,
+      hideDirection: 'from-first',
       keyframes: [
         { id: 'kf_text_a', time: 0, x: 42, y: 30, opacity: 0, easing: 'ease-out' },
         { id: 'kf_text_b', time: 2.5, x: 60, y: 20, scale: 1.2 },
@@ -159,6 +163,10 @@ describe('project YAML roundtrip', () => {
     expect(text?.type === 'text' && text.style.italic).toBe(true);
     expect(text?.type === 'text' && text.style.wordWrap).toBe(false);
     expect(text?.type === 'text' && text.style.vertical).toBe(true);
+    expect(text?.type === 'text' && text.displayInterval).toBe(0.04);
+    expect(text?.type === 'text' && text.displayDirection).toBe('from-last');
+    expect(text?.type === 'text' && text.hideInterval).toBe(0.06);
+    expect(text?.type === 'text' && text.hideDirection).toBe('from-first');
     expect(text?.type === 'text' && text.align).toBe('left');
     expect(text?.effects).toEqual({ blur: 3, brightness: 1.1, hueRotate: -15 });
     expect(text?.keyframes).toEqual([

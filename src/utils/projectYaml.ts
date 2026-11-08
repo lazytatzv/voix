@@ -309,6 +309,26 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
       align: (rec.align as TextItem['align']) || 'center',
       rotation: rec.rotation !== undefined ? Number(rec.rotation) : 0,
       opacity: rec.opacity !== undefined ? Number(rec.opacity) : 1,
+      displayInterval:
+        rec.displayInterval !== undefined && Number.isFinite(Number(rec.displayInterval))
+          ? Math.max(0, Math.min(10, Number(rec.displayInterval)))
+          : undefined,
+      displayDirection:
+        rec.displayDirection === 'from-last'
+          ? 'from-last'
+          : rec.displayDirection === 'from-first'
+            ? 'from-first'
+            : undefined,
+      hideInterval:
+        rec.hideInterval !== undefined && Number.isFinite(Number(rec.hideInterval))
+          ? Math.max(0, Math.min(10, Number(rec.hideInterval)))
+          : undefined,
+      hideDirection:
+        rec.hideDirection === 'from-last'
+          ? 'from-last'
+          : rec.hideDirection === 'from-first'
+            ? 'from-first'
+            : undefined,
     };
   }
 
