@@ -378,10 +378,17 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   // Reset video error on new source.
   useEffect(() => {
     setVideoError(null);
-    setIsMetadataReady(false);
+    setIsMetadataReady(Boolean(videoRef.current && videoRef.current.readyState >= 1));
     setIsBuffering(false);
     pendingSeekTimeRef.current = null;
   }, [videoSrc, reloadKey]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (video && video.readyState >= 1 && !isMetadataReady) {
+      setIsMetadataReady(true);
+    }
+  }, [videoSrc, videoInfo, isMetadataReady]);
 
   // Match the project's background-video level; the dedicated mute button
   // silences all preview audio without discarding the configured volume.

@@ -402,9 +402,12 @@ enum RangeSpec {
     Unsatisfiable,
 }
 
-/// 1回のRangeリクエストで転送する最大チャンクサイズ (8 MB)。
+/// 1回のRangeリクエストで転送する最大チャンクサイズ (16 MB)。
 /// 開放型Range (bytes=0-) で巨大ファイル全体を一度に読み込んでUIをフリーズさせるのを防ぐ。
-const MAX_RANGE_CHUNK: u64 = 8 * 1024 * 1024;
+const MAX_RANGE_CHUNK: u64 = 16 * 1024 * 1024;
+/// MP4等のメタデータ（moov atom）が末尾にある場合の読み込み閾値 (64 MB)。
+/// 90分以上の動画でもmoov atomが途中で切れてデマルチプレクサが停止するのを防ぐ。
+const TAIL_INDEX_THRESHOLD: u64 = 64 * 1024 * 1024;
 
 fn parse_range(header_value: Option<&str>, file_len: u64) -> RangeSpec {
     if file_len == 0 {
@@ -451,7 +454,12 @@ fn parse_range(header_value: Option<&str>, file_len: u64) -> RangeSpec {
     }
 
     let end = if end_raw.is_empty() {
-        (start + MAX_RANGE_CHUNK - 1).min(file_len - 1)
+        let remaining = file_len.saturating_sub(start);
+        if remaining <= TAIL_INDEX_THRESHOLD {
+            file_len - 1
+        } else {
+            (start + MAX_RANGE_CHUNK - 1).min(file_len - 1)
+        }
     } else {
         let Ok(end) = end_raw.parse::<u64>() else {
             return RangeSpec::Full;

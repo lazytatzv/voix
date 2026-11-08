@@ -352,6 +352,9 @@ fn detect_speech_segments(video_path: String) -> Result<Vec<SpeechSegment>, Stri
 
     if has_audio {
         let output = Command::new("ffmpeg")
+            .arg("-vn")
+            .arg("-sn")
+            .arg("-dn")
             .arg("-i")
             .arg(&video_path)
             .arg("-af")

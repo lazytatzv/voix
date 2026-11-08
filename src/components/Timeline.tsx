@@ -98,8 +98,10 @@ function snapTime(time: number, enabled: boolean, markers: Marker[] = []): numbe
 }
 
 function rulerStep(pxPerSecond: number): number {
-  const candidates = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300];
-  return candidates.find((step) => step * pxPerSecond >= 62) || 600;
+  const candidates = [
+    0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
+  ];
+  return candidates.find((step) => step * pxPerSecond >= 62) || 3600;
 }
 
 interface WaveformProps {
@@ -185,7 +187,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   onOpenSePalette,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(() =>
+    duration > 60 ? Math.max(0.0001, Math.min(1, 1000 / (duration * 50))) : 1
+  );
+  const prevDurationRef = useRef<number>(duration);
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [snapGuideTime, setSnapGuideTime] = useState<number | null>(null);
@@ -210,8 +215,29 @@ export const Timeline: React.FC<TimelineProps> = ({
   }, []);
 
   const totalDuration = Math.max(duration, 10);
+  // Cap max timeline width to 32,000px to prevent Cairo 16-bit integer overflow (32,767px limit)
+  // which causes WebKitGTK ThreadedCompositor to allocate 80GB+ virtual memory and lock up.
+  const MAX_TIMELINE_WIDTH = 32000;
+  const maxZoom = Math.min(8, Math.max(0.01, (MAX_TIMELINE_WIDTH - 100) / (totalDuration * 50)));
+  const minZoom = Math.max(0.0001, (viewportWidth - HEADER_WIDTH - 40) / (totalDuration * 50 * 5));
   const pxPerSecond = 50 * zoom;
-  const timelineWidth = Math.max(totalDuration * pxPerSecond + 40, 900);
+  const timelineWidth = Math.min(
+    MAX_TIMELINE_WIDTH,
+    Math.max(totalDuration * pxPerSecond + 40, 900)
+  );
+
+  // Automatically fit or scale zoom when video duration changes significantly (e.g. 90-min video loaded)
+  useEffect(() => {
+    if (duration > 0 && Math.abs(duration - prevDurationRef.current) > 2) {
+      prevDurationRef.current = duration;
+      const width = scrollRef.current?.clientWidth || viewportWidth || 1000;
+      const availableWidth = Math.max(300, width - HEADER_WIDTH - 40);
+      const fitZoom = availableWidth / (Math.max(duration, 10) * 50);
+      if (duration > 60) {
+        setZoom(Math.max(0.0001, Math.min(1, fitZoom)));
+      }
+    }
+  }, [duration, viewportWidth]);
   const step = rulerStep(pxPerSecond);
   const totalRowsHeight = ROWS.reduce((sum, row) => sum + row.height, 0);
 
@@ -371,8 +397,9 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   const fitToWindow = () => {
-    const width = scrollRef.current?.clientWidth || 1000;
-    setZoom(Math.max(0.01, Math.min(8, (width - 180) / Math.max(totalDuration, 1) / 50)));
+    const width = scrollRef.current?.clientWidth || viewportWidth || 1000;
+    const availableWidth = Math.max(300, width - HEADER_WIDTH - 40);
+    setZoom(Math.max(0.0001, Math.min(maxZoom, availableWidth / (Math.max(totalDuration, 1) * 50))));
   };
 
   useEffect(() => {
@@ -397,7 +424,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       const timeAtPointer = Math.max(0, pointerX / pxPerSecond);
       const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
       setZoom((previous) => {
-        const next = Math.max(0.01, Math.min(8, previous * factor));
+        const next = Math.max(minZoom, Math.min(maxZoom, previous * factor));
         const nextPx = 50 * next;
         requestAnimationFrame(() => {
           container.scrollLeft = Math.max(
@@ -410,7 +437,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     };
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [pxPerSecond]);
+  }, [pxPerSecond, minZoom, maxZoom]);
 
   const renderItem = (item: TimelineItem, rowKind: TrackKind) => {
     const left = timeToX(item.startTime);
@@ -691,17 +718,17 @@ export const Timeline: React.FC<TimelineProps> = ({
 
         <div className="flex items-center gap-1.5 bg-[#0e0f11] px-2 py-0.5 rounded-sm border border-[#242629]">
           <button
-            onClick={() => setZoom((z) => Math.max(0.01, z > 0.3 ? z - 0.15 : z * 0.7))}
+            onClick={() => setZoom((z) => Math.max(minZoom, z < 0.1 ? z / 1.4 : z > 0.3 ? z - 0.15 : z * 0.7))}
             className="p-1 rounded-sm hover:bg-[#202226] text-[#8e918f] hover:text-white transition"
             title="Zoom Out"
           >
             <ZoomOut className="w-3.5 h-3.5" />
           </button>
-          <span className="text-[10px] font-mono text-[#c4c7c5] w-9 text-center">
-            {Math.round(zoom * 100)}%
+          <span className="text-[10px] font-mono text-[#c4c7c5] min-w-9 text-center">
+            {zoom < 0.1 ? `${(zoom * 100).toFixed(1)}%` : `${Math.round(zoom * 100)}%`}
           </span>
           <button
-            onClick={() => setZoom((z) => Math.min(8, z + 0.15))}
+            onClick={() => setZoom((z) => Math.min(maxZoom, z < 0.1 ? z * 1.4 : z + 0.15))}
             className="p-1 rounded-sm hover:bg-[#202226] text-[#8e918f] hover:text-white transition"
             title="Zoom In"
           >
@@ -829,9 +856,11 @@ export const Timeline: React.FC<TimelineProps> = ({
                     style={{ left: timeToX(time) }}
                   >
                     <span className="text-[9px] font-mono text-[#8e918f] leading-3">
-                      {time >= 60
-                        ? `${Math.floor(time / 60)}:${String(Math.floor(time % 60)).padStart(2, '0')}`
-                        : `${time.toFixed(step < 1 ? 1 : 0)}s`}
+                      {time >= 3600
+                        ? `${Math.floor(time / 3600)}:${String(Math.floor((time % 3600) / 60)).padStart(2, '0')}:${String(Math.floor(time % 60)).padStart(2, '0')}`
+                        : time >= 60
+                          ? `${Math.floor(time / 60)}:${String(Math.floor(time % 60)).padStart(2, '0')}`
+                          : `${time.toFixed(step < 1 ? 1 : 0)}s`}
                     </span>
                     <div className="h-1.5 w-0.5 bg-[#444746]" />
                   </div>
