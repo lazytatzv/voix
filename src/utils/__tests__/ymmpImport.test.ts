@@ -105,6 +105,9 @@ function makeYmmp() {
             Frame: 0,
             Length: 60,
             FilePath: 'video/background.mp4',
+            Volume: 40,
+            PlaybackRate: 150,
+            ContentOffset: '00:00:02.5000000',
           },
           {
             $type: 'YukkuriMovieMaker.Project.Items.TachieItem, YukkuriMovieMaker',
@@ -237,6 +240,9 @@ describe('parseYmmpProject', () => {
     });
 
     expect(result.project.timeline.videoPath).toBe('/projects/demo/video/background.mp4');
+    expect(result.project.timeline.videoVolume).toBe(0.4);
+    expect(result.project.timeline.videoSpeed).toBe(1.5);
+    expect(result.project.timeline.videoOffset).toBe(2.5);
     expect(result.project.notes).toContain('3 unsupported item(s) skipped');
     // Voice length (4s) ends before the text (2s) and audio (10s), so the
     // timeline duration follows the longest item.
@@ -273,6 +279,37 @@ describe('parseYmmpProject', () => {
     // The bogus 1-frame timeline length must not shrink the project.
     expect(result.project.timeline.duration).toBeGreaterThanOrEqual(3.4);
     expect(result.project.timeline.fps).toBe(30);
+  });
+
+  it('imports background video volume, speed, offset and span', () => {
+    const content = JSON.stringify({
+      Timeline: {
+        Name: 'Video',
+        Length: 0,
+        VideoInfo: { FPS: 30, Width: 1920, Height: 1080 },
+        Items: [
+          {
+            $type: 'YukkuriMovieMaker.Project.Items.VideoItem, YukkuriMovieMaker',
+            Frame: 0,
+            Length: 300,
+            FilePath: 'clip.mp4',
+            Volume: 25,
+            PlaybackRate: 200,
+            ContentOffset: '00:00:01.2500000',
+          },
+        ],
+      },
+    });
+    const result = parseYmmpProject(content, { assetBaseDir: '/videos' });
+    expect(result.project.timeline).toMatchObject({
+      videoPath: '/videos/clip.mp4',
+      videoVolume: 0.25,
+      videoSpeed: 2,
+      videoOffset: 1.25,
+    });
+    // The background video is not a timeline item, but its span must still
+    // keep the project long enough for the whole recording.
+    expect(result.project.timeline.duration).toBeGreaterThanOrEqual(10);
   });
 
   it('creates characters from YMM4 names and colours', () => {

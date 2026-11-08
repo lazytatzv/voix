@@ -404,6 +404,16 @@ function toVoiceItem(
   };
 }
 
+function normalizeYmmpVolume(value: unknown, fallback = 1): number {
+  const raw = asNumber(value, fallback * 100);
+  return Math.max(0, Math.min(2, raw > 4 ? raw / 100 : raw));
+}
+
+function normalizeYmmpSpeed(value: unknown, fallback = 1): number {
+  const raw = asNumber(value, fallback * 100);
+  return Math.max(0.25, Math.min(4, raw > 4 ? raw / 100 : raw));
+}
+
 function toAudioItem(
   raw: Rec,
   index: number,
@@ -413,8 +423,6 @@ function toAudioItem(
   const src = resolveAssetPath(raw.FilePath, baseDir);
   if (!src) return null;
   const duration = Math.max(0.05, asNumber(raw.Length) / fps);
-  const volume = valueOf(raw.Volume, 100);
-  const speed = valueOf(raw.PlaybackRate, 100);
   return {
     id: `ymmp_audio_${index}`,
     type: 'audio',
@@ -425,8 +433,8 @@ function toAudioItem(
     hidden: Boolean(raw.IsHidden),
     locked: Boolean(raw.IsLocked),
     src,
-    volume: Math.max(0, Math.min(2, volume > 4 ? volume / 100 : volume)),
-    speed: Math.max(0.25, Math.min(4, speed > 4 ? speed / 100 : speed)),
+    volume: normalizeYmmpVolume(raw.Volume),
+    speed: normalizeYmmpSpeed(raw.PlaybackRate),
     offset: parseYmmpTime(raw.ContentOffset, 0),
     isBgm: duration >= 8,
     loop: Boolean(raw.IsLooped),
@@ -518,6 +526,10 @@ export function parseYmmpProject(content: string, options: YmmpImportOptions = {
   let videos = 0;
   let skipped = 0;
   let videoPath: string | undefined;
+  let videoVolume = 1;
+  let videoSpeed = 1;
+  let videoOffset = 0;
+  let videoEnd = 0;
 
   rawItems.forEach((raw, index) => {
     const type = String(raw.$type ?? '').split(',')[0].split('.').pop() || '';
@@ -554,6 +566,11 @@ export function parseYmmpProject(content: string, options: YmmpImportOptions = {
       const src = resolveAssetPath(raw.FilePath, options.assetBaseDir);
       if (src && !videoPath) {
         videoPath = src;
+        videoVolume = normalizeYmmpVolume(raw.Volume);
+        videoSpeed = normalizeYmmpSpeed(raw.PlaybackRate);
+        videoOffset = parseYmmpTime(raw.ContentOffset, 0);
+        videoEnd =
+          asNumber(raw.Frame, 0) / fps + Math.max(0.05, asNumber(raw.Length) / fps);
       } else {
         skipped += 1;
       }
@@ -589,7 +606,8 @@ export function parseYmmpProject(content: string, options: YmmpImportOptions = {
     timeline: {
       duration: Math.max(
         computeProjectDuration(items),
-        Number((asNumber(timeline.Length) / fps).toFixed(2))
+        Number((asNumber(timeline.Length) / fps).toFixed(2)),
+        Number(videoEnd.toFixed(2))
       ),
       fps: fps >= 50 ? 60 : 30,
       width,
@@ -597,9 +615,9 @@ export function parseYmmpProject(content: string, options: YmmpImportOptions = {
       backgroundColor: '#101114',
       overlayFps: 15,
       videoPath,
-      videoVolume: 1,
-      videoSpeed: 1,
-      videoOffset: 0,
+      videoVolume,
+      videoSpeed,
+      videoOffset,
       videoFit: 'contain',
     },
     characters,

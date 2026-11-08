@@ -245,7 +245,7 @@ keyframes:
 | TextItem | `text`。文字色・縁色・フォント・サイズ・位置・回転・不透明度に加え、行間（`LineHeight2`）・文字間隔（`LetterSpacing2`）・太字/斜体/下線/取り消し線・`WordWrap`・一文字ずつの表示/非表示（`DisplayInterval` / `HideInterval`）を変換します |
 | AudioItem | `audio`。音量・再生速度・頭出し・ループを引き継ぎます |
 | ImageItem | `image`。元画像の自然サイズとZoomから表示サイズを計算し、フレーム中心基準のX/Yを配置に変換します |
-| VideoItem（最初の1件） | プロジェクトの背景動画 |
+| VideoItem（最初の1件） | プロジェクトの背景動画。音量・再生速度・`ContentOffset`（頭出し）も引き継ぎます |
 | TachieItem / ShapeItem / GroupItem など | 未対応として件数のみ表示し、スキップします |
 
 - 相対パスの素材は `.ymmp` と同じディレクトリを基準に解決します。絶対パスはそのまま保存されます。
