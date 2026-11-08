@@ -226,15 +226,15 @@ export function App() {
   const [project, setProject] = useState<VoixProject>(loadInitialProject);
   const projectRef = useRef<VoixProject>(project);
 
-  // Ensure all default characters (Maker Girl, Tech Girl) are available in the active project state
+  // Ensure all default characters (Maker Girl, Tech Girl) are available and updated to high-res assets
   useEffect(() => {
     setProject((prev) => {
       const existingIds = new Set(prev.characters.map((c) => c.id));
       const missing = defaultCharacters.filter((d) => !existingIds.has(d.id));
-      if (missing.length === 0) return prev;
+      const updatedExisting = prev.characters.map(mergeCharacter);
       return {
         ...prev,
-        characters: [...missing, ...prev.characters],
+        characters: [...missing, ...updatedExisting],
       };
     });
   }, []);
