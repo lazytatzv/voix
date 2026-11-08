@@ -825,17 +825,13 @@ function computeCharacterLayout(
   let alpha = 1;
   if (withAnimation && isSpeaking && isPlaying && charVoice) {
     const progress = time - charVoice.startTime;
-    const anim = charVoice.anim || 'bounce';
-    if (anim === 'bounce' && progress < 0.26) {
-      animOffsetY = -Math.sin((progress / 0.26) * Math.PI) * 12;
+    const anim = charVoice.anim || 'none';
+    if (anim === 'bounce' || anim === 'none') {
+      animOffsetY = 0;
     } else if ((anim === 'pop' || anim === 'punch' || anim === 'zoom') && progress < 0.24) {
       animScale = 1 + Math.sin((progress / 0.24) * Math.PI) * 0.12;
     } else if ((anim === 'shake' || anim === 'screen-shake' || anim === 'impact') && progress < 0.35) {
       animOffsetX = Math.sin(progress * 50) * 10 * (1 - progress / 0.35);
-    } else if (anim === 'flash' && progress < 0.25) {
-      animOffsetY = -Math.sin((progress / 0.25) * Math.PI) * 12;
-    } else if (anim === 'nod' && progress < 0.24) {
-      animOffsetY = Math.sin((progress / 0.24) * Math.PI) * 12;
     } else if (anim === 'slide' && progress < 0.3) {
       animOffsetX = -(1 - progress / 0.3) * 60;
     } else if (anim === 'fade' && progress < 0.3) {

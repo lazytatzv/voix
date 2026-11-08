@@ -47,7 +47,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
   const [text, setText] = useState('');
   const [expression, setExpression] = useState('default');
   const [se, setSe] = useState('');
-  const [anim, setAnim] = useState('bounce');
+  const [anim, setAnim] = useState('none');
   const [autoAdvance, setAutoAdvance] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
@@ -111,7 +111,7 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
       const estimatedDuration = await onAddVoiceLine(activeChar.id, trimmed, {
         expression: expression !== 'default' ? expression : undefined,
         se: se || undefined,
-        anim: anim !== 'bounce' ? anim : undefined,
+        anim: anim !== 'none' ? anim : undefined,
       });
 
       setText('');

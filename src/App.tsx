@@ -1694,7 +1694,7 @@ export function App() {
         text,
         expression: options?.expression || 'default',
         se: options?.se,
-        anim: options?.anim || 'bounce',
+        anim: options?.anim || 'none',
         startTime: Number(currentTimeRef.current.toFixed(2)),
         duration: 1.5,
         speedScale: 1,
@@ -1784,7 +1784,7 @@ export function App() {
           speedScale: 1,
           pitchScale: 0,
           volumeScale: 1,
-          anim: 'bounce',
+          anim: 'none',
         };
       });
       commitProject((previous) => ({

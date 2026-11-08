@@ -462,7 +462,7 @@ export function evaluateJavaScriptScript(
         ...options,
         cmd: command,
         se: options.se || 'keyboard',
-        anim: options.anim || 'bounce',
+        anim: options.anim || 'none',
       });
     },
   };

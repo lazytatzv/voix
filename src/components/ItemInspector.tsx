@@ -724,20 +724,19 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                   </Field>
                   <Field label="Animation">
                     <select
-                      value={voice.anim || 'bounce'}
+                      value={voice.anim || 'none'}
                       onChange={(e) => patch({ anim: e.target.value } as Partial<TimelineItem>)}
                       className={inputClass}
                     >
-                      <option value="bounce">Bounce</option>
+                      <option value="none">None (Default)</option>
+                      <option value="bounce">Bounce (Off)</option>
                       <option value="screen-shake">Screen Shake</option>
                       <option value="flash">White Flash</option>
                       <option value="punch">Punch-in Zoom</option>
                       <option value="pop">Pop</option>
                       <option value="shake">Char Shake</option>
-                      <option value="nod">Nod</option>
                       <option value="slide">Slide In</option>
                       <option value="fade">Fade</option>
-                      <option value="none">None</option>
                     </select>
                   </Field>
                   <div className="col-span-2 pt-1 pb-1">
