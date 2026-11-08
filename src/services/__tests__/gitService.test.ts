@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { getGitStatus, getGitHistory, commitSnapshot, initRepository, pushRemote } from '../gitService';
+import {
+  getGitStatus,
+  getGitHistory,
+  commitSnapshot,
+  initRepository,
+  setRemoteUrl,
+  pushRemote,
+} from '../gitService';
 
 describe('gitService in test / non-tauri mode', () => {
   it('returns default status in mock environment', async () => {
@@ -19,6 +26,9 @@ describe('gitService in test / non-tauri mode', () => {
 
     const initRes = await initRepository('.');
     expect(initRes).toContain('initialized');
+
+    const remoteRes = await setRemoteUrl('.', 'https://github.com/test/repo.git');
+    expect(remoteRes).toContain('Mock');
 
     const pushRes = await pushRemote('.');
     expect(pushRes).toContain('Mock push');

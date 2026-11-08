@@ -13,9 +13,13 @@ import {
   Trash2,
   Check,
   FileText,
+  Copy,
+  Download,
+  Code2,
 } from 'lucide-react';
 import { TimelineItem, TrackKind, TrackState, VoixProject, DuckingSettings } from '../types';
 import { DEFAULT_DUCKING } from '../utils/audioDucking';
+import { projectToYaml } from '../utils/projectYaml';
 import {
   BACKGROUND_MOTION_PRESETS,
   DEFAULT_BACKGROUND_MOTION_AMOUNT,
@@ -125,6 +129,8 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   const [tracks, setTracks] = useState<TrackState[]>(project.tracks || []);
   const [scaleContent, setScaleContent] = useState(true);
   const [notes, setNotes] = useState(project.notes || '');
+  const [activeTab, setActiveTab] = useState<'settings' | 'dump'>('settings');
+  const [copiedDump, setCopiedDump] = useState(false);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -133,7 +139,91 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
     setTracks(project.tracks || []);
     setNotes(project.notes || '');
     setScaleContent(true);
+    setActiveTab('settings');
+    setCopiedDump(false);
   }, [isOpen, project]);
+
+  const projectDump = useMemo(() => {
+    return {
+      format: project.formatVersion || 'voix-project 1.1.0',
+      exportedAt: new Date().toISOString(),
+      name: name,
+      timeline: {
+        width: timeline.width,
+        height: timeline.height,
+        fps: timeline.fps,
+        overlayFps: timeline.overlayFps,
+        durationSeconds: computedDuration,
+        backgroundColor: timeline.backgroundColor,
+        videoPath: timeline.videoPath || null,
+        videoVolume: timeline.videoVolume ?? 1,
+        videoSpeed: timeline.videoSpeed ?? 1,
+        videoFit: timeline.videoFit || 'contain',
+        ducking: timeline.ducking ?? DEFAULT_DUCKING,
+      },
+      tracks: tracks.map((t) => ({
+        id: t.id,
+        name: t.name,
+        visible: t.visible,
+        muted: t.muted,
+        locked: t.locked,
+      })),
+      characters: project.characters.map((c) => ({
+        id: c.id,
+        name: c.name,
+        ttsProviderId: c.ttsProviderId,
+        speakerId: c.speakerId,
+        styleId: c.styleId,
+        position: c.position,
+        scale: c.scale ?? 1,
+        voiceVolume: c.voiceVolume ?? 1,
+        subtitleStyle: c.subtitleStyle,
+      })),
+      itemStats: {
+        total: project.items.length,
+        voices: project.items.filter((i) => i.type === 'voice').length,
+        videos: project.items.filter((i) => i.type === 'video').length,
+        audios: project.items.filter((i) => i.type === 'audio').length,
+        texts: project.items.filter((i) => i.type === 'text').length,
+        images: project.items.filter((i) => i.type === 'image').length,
+        shapes: project.items.filter((i) => i.type === 'shape').length,
+      },
+      items: project.items.map((it) => {
+        const { audioBlob: _b, audioBlobUrl: _u, ...clean } = it as any;
+        return clean;
+      }),
+      notes: notes || undefined,
+    };
+  }, [name, timeline, computedDuration, tracks, project.characters, project.items, notes, project.formatVersion]);
+
+  const handleCopyDump = async (format: 'json' | 'yaml') => {
+    try {
+      const text =
+        format === 'json'
+          ? JSON.stringify(projectDump, null, 2)
+          : projectToYaml(project);
+      await navigator.clipboard.writeText(text);
+      setCopiedDump(true);
+      setTimeout(() => setCopiedDump(false), 2000);
+    } catch (err) {
+      console.warn('Copy dump failed:', err);
+    }
+  };
+
+  const handleDownloadDump = () => {
+    try {
+      const json = JSON.stringify(projectDump, null, 2);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${name.replace(/[^\w-]/g, '_')}_settings_dump.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.warn('Download dump failed:', err);
+    }
+  };
 
   const resolutionIndex = useMemo(
     () => RESOLUTIONS.findIndex((r) => r.width === timeline.width && r.height === timeline.height),
@@ -201,13 +291,37 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-4">
       <div className="w-full max-w-3xl max-h-[92vh] overflow-hidden bg-[#141517] border border-[#2c2e32] rounded-none flex flex-col">
-        <div className="px-4 py-3 border-b border-[#242629] flex items-center justify-between flex-shrink-0">
-          <div className="flex items-center gap-2">
-            <Settings2 className="w-4 h-4 text-[#8ab4f8]" />
-            <h2 className="text-sm font-semibold text-[#e3e3e3] bg-[#141517]">Project Settings</h2>
-            <span className="text-[10px] font-mono text-[#8e918f] border border-[#2e3135] rounded px-1.5 py-0.5">
-              {timeline.width} × {timeline.height} · {timeline.fps} fps
-            </span>
+        <div className="px-4 py-2.5 border-b border-[#242629] flex items-center justify-between flex-shrink-0 bg-[#16171a]">
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-1.5">
+              <Settings2 className="w-4 h-4 text-[#8ab4f8]" />
+              <h2 className="text-xs font-semibold text-[#e3e3e3]">Project Settings</h2>
+            </div>
+            <div className="flex items-center gap-1 bg-[#101113] p-0.5 rounded border border-[#26282c]">
+              <button
+                type="button"
+                onClick={() => setActiveTab('settings')}
+                className={`px-2.5 py-1 text-[11px] font-mono rounded transition cursor-pointer ${
+                  activeTab === 'settings'
+                    ? 'bg-[#212429] text-[#8ab4f8] font-semibold shadow-xs'
+                    : 'text-[#8e918f] hover:text-[#e3e3e3]'
+                }`}
+              >
+                Configuration
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('dump')}
+                className={`px-2.5 py-1 text-[11px] font-mono rounded transition flex items-center gap-1.5 cursor-pointer ${
+                  activeTab === 'dump'
+                    ? 'bg-[#212429] text-[#8ab4f8] font-semibold shadow-xs'
+                    : 'text-[#8e918f] hover:text-[#e3e3e3]'
+                }`}
+              >
+                <Code2 className="w-3 h-3 text-[#34d399]" />
+                Dump & Diagnostics
+              </button>
+            </div>
           </div>
           <button
             type="button"
@@ -218,7 +332,76 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-5">
+        {activeTab === 'dump' ? (
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Quick Diagnostic Summary Cards */}
+            <div className="grid grid-cols-4 gap-2">
+              <div className="bg-[#101113] border border-[#242629] rounded p-2.5 space-y-0.5">
+                <span className="text-[10px] font-mono text-[#8e918f]">Canvas & Rate</span>
+                <p className="text-xs font-mono font-semibold text-white">
+                  {timeline.width}×{timeline.height} @ {timeline.fps}fps
+                </p>
+              </div>
+              <div className="bg-[#101113] border border-[#242629] rounded p-2.5 space-y-0.5">
+                <span className="text-[10px] font-mono text-[#8e918f]">Project Duration</span>
+                <p className="text-xs font-mono font-semibold text-[#8ab4f8]">
+                  {computedDuration.toFixed(2)}s
+                </p>
+              </div>
+              <div className="bg-[#101113] border border-[#242629] rounded p-2.5 space-y-0.5">
+                <span className="text-[10px] font-mono text-[#8e918f]">Timeline Items</span>
+                <p className="text-xs font-mono font-semibold text-emerald-400">
+                  {project.items.length} items ({projectDump.itemStats.voices} lines)
+                </p>
+              </div>
+              <div className="bg-[#101113] border border-[#242629] rounded p-2.5 space-y-0.5">
+                <span className="text-[10px] font-mono text-[#8e918f]">Characters</span>
+                <p className="text-xs font-mono font-semibold text-purple-400">
+                  {project.characters.length} registered
+                </p>
+              </div>
+            </div>
+
+            {/* Actions Bar */}
+            <div className="flex items-center justify-between gap-2 p-2.5 bg-[#121417] border border-[#22252a] rounded">
+              <span className="text-xs text-[#c4c7c5] font-mono">
+                Full YMM4-Class Project Configuration Dump (JSON)
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopyDump('json')}
+                  className="px-2.5 py-1 bg-[#1a2330] hover:bg-[#223042] border border-[#2d4057] text-[#8ab4f8] rounded text-xs font-mono inline-flex items-center gap-1 transition cursor-pointer"
+                >
+                  <Copy className="w-3 h-3" />
+                  {copiedDump ? 'Copied!' : 'Copy JSON'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyDump('yaml')}
+                  className="px-2.5 py-1 bg-[#1a2330] hover:bg-[#223042] border border-[#2d4057] text-[#8ab4f8] rounded text-xs font-mono inline-flex items-center gap-1 transition cursor-pointer"
+                >
+                  <Copy className="w-3 h-3" />
+                  Copy YAML
+                </button>
+                <button
+                  type="button"
+                  onClick={handleDownloadDump}
+                  className="px-2.5 py-1 bg-[#16291e] hover:bg-[#1f3b2a] border border-[#264b34] text-emerald-300 rounded text-xs font-mono inline-flex items-center gap-1 transition cursor-pointer"
+                >
+                  <Download className="w-3 h-3" />
+                  Download .json
+                </button>
+              </div>
+            </div>
+
+            {/* Monospace JSON Dump View */}
+            <pre className="bg-[#0b0c0e] border border-[#202226] rounded p-3 text-[11px] font-mono text-[#a8b1bd] max-h-96 overflow-y-auto leading-relaxed select-text">
+              {JSON.stringify(projectDump, null, 2)}
+            </pre>
+          </div>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-4 space-y-5">
           <section className="grid grid-cols-2 gap-3">
             <label className="space-y-1 col-span-2">
               <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">Project name</span>
@@ -627,6 +810,7 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
             </label>
           </section>
         </div>
+      )}
 
         <div className="px-4 py-3 border-t border-[#242629] flex items-center justify-end gap-2 flex-shrink-0">
           <button

@@ -37,6 +37,7 @@ export class VoiceAudioPlayer {
   private activeVoices = new Map<string, ActiveVoice>();
   private bufferCache = new Map<string, AudioBuffer>();
   private isMuted = false;
+  private playbackSessionId = 0;
 
   private getContext(): AudioContext {
     if (!this.ctx || this.ctx.state === 'closed') {
@@ -99,8 +100,13 @@ export class VoiceAudioPlayer {
       await ctx.resume();
     }
 
+    const currentSession = this.playbackSessionId;
     const buffer = await this.getAudioBuffer(source, cacheKey);
     if (!buffer) return false;
+    // Check if stopAll() or playback change occurred while decoding
+    if (this.playbackSessionId !== currentSession) {
+      return false;
+    }
 
     const playOffset = Math.max(0, offset);
     if (playOffset >= buffer.duration - 0.03) {
@@ -136,6 +142,7 @@ export class VoiceAudioPlayer {
     const gainNode = ctx.createGain();
     const requestedVolume = Math.max(0, Math.min(2, volume));
     const targetVolume = this.isMuted ? 0 : requestedVolume;
+
     gainNode.gain.setValueAtTime(fadeIn > 0 ? 0 : targetVolume, now);
     if (fadeIn > 0) {
       gainNode.gain.linearRampToValueAtTime(targetVolume, now + fadeIn);
@@ -210,6 +217,7 @@ export class VoiceAudioPlayer {
    * Stop all active voices immediately (on seek, toggle play/pause, or timeline loop).
    */
   public stopAll(): void {
+    this.playbackSessionId++;
     if (this.activeVoices.size === 0) return;
     const voices = Array.from(this.activeVoices.values());
     this.activeVoices.clear();

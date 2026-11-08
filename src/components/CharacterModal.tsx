@@ -19,6 +19,7 @@ import {
   Search,
   ListMusic,
   Scaling,
+  Sparkles,
 } from 'lucide-react';
 import { Character, Speaker, SpeakerStyle } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
@@ -29,6 +30,7 @@ import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
 import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
 import { SafeAvatarImg } from './SafeAvatarImg';
 import { defaultCharacters } from '../utils/defaultCharacters';
+import { VOICEVOX_CATALOG } from '../utils/voicevoxCatalog';
 
 interface ProviderVoices {
   providerId: string;
@@ -69,6 +71,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     phase: 'loading' | 'playing';
   } | null>(null);
   const [auditionAll, setAuditionAll] = useState(false);
+  const [isPresetPickerOpen, setIsPresetPickerOpen] = useState(false);
   const auditionTokenRef = useRef(0);
   const auditionTimerRef = useRef<number | null>(null);
   const auditionWaitResolveRef = useRef<(() => void) | null>(null);
@@ -327,6 +330,31 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     setSelectedCharId(newId);
   };
 
+  const handleAddFromVoicevoxCatalog = (preset: (typeof VOICEVOX_CATALOG)[0]) => {
+    stopAudition();
+    const newId = `char_${Date.now()}`;
+    const newChar: Character = {
+      id: newId,
+      name: preset.name,
+      ttsProviderId: 'voicevox',
+      speakerId: preset.defaultSpeakerId,
+      styleId: preset.defaultSpeakerId,
+      avatar: {
+        idle: '/characters/zundamon.png',
+        speaking: '/characters/zundamon.png',
+        blinking: '/characters/zundamon.png',
+      },
+      subtitleStyle: {
+        ...SUBTITLE_PRESETS[0].style,
+        outerStrokeColor: preset.color,
+      },
+      position: characters.length % 2 === 0 ? 'left' : 'right',
+    };
+    onAddCharacter(newChar);
+    setSelectedCharId(newId);
+    setIsPresetPickerOpen(false);
+  };
+
   const positions: Array<{ id: 'left' | 'right' | 'center' | 'hidden'; label: string }> = [
     { id: 'left', label: 'Left' },
     { id: 'center', label: 'Center' },
@@ -351,7 +379,11 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     const speaker = speakers.find((entry) => entry.id === speakerId);
     const firstStyle = speaker?.styles[0];
     if (!firstStyle) return;
-    onUpdateCharacter(char.id, { speakerId: firstStyle.id, styleId: firstStyle.id });
+    onUpdateCharacter(char.id, {
+      name: speaker.name,
+      speakerId: firstStyle.id,
+      styleId: firstStyle.id,
+    });
   };
 
   const handleStyleChange = (styleId: string) => {
@@ -365,7 +397,9 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   const handleUseStyle = (style: SpeakerStyle) => {
     if (!char || !activeProvider) return;
     stopAudition();
+    const speaker = findSpeakerStyle(speakers, style.id)?.speaker;
     onUpdateCharacter(char.id, {
+      ...(speaker ? { name: speaker.name } : {}),
       ttsProviderId: activeProvider.providerId,
       speakerId: style.id,
       styleId: style.id,
@@ -471,9 +505,47 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
               ))}
             </div>
 
+            <div className="relative mt-2">
+              <button
+                type="button"
+                onClick={() => setIsPresetPickerOpen((prev) => !prev)}
+                className="w-full py-2 px-3 rounded-xl bg-[#1b2b3a] hover:bg-[#253d54] text-[#8ab4f8] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#2b4d6e] transition cursor-pointer"
+                title="Add character from VOICEVOX 33+ character catalog"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                VOICEVOX ({VOICEVOX_CATALOG.length})
+              </button>
+              {isPresetPickerOpen && (
+                <div className="absolute left-0 bottom-full mb-1 w-60 max-h-72 overflow-y-auto bg-[#181a1d] border border-[#2e3137] rounded-xl shadow-2xl p-2 z-50 space-y-1">
+                  <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2 mb-1 block">
+                    Pick Character
+                  </span>
+                  {VOICEVOX_CATALOG.map((p) => (
+                    <button
+                      key={p.uuid}
+                      type="button"
+                      onClick={() => handleAddFromVoicevoxCatalog(p)}
+                      className="w-full text-left p-1.5 rounded hover:bg-[#24272d] transition flex items-center justify-between text-xs cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                          style={{ backgroundColor: p.color }}
+                        />
+                        <span className="text-[#e3e3e3] truncate">{p.name}</span>
+                      </div>
+                      <span className="text-[10px] font-mono text-[#6f7377] flex-shrink-0">
+                        ID {p.defaultSpeakerId}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <button
               onClick={handleAddNewCharacter}
-              className="mt-3 w-full py-2 px-3 rounded-xl bg-[#282a2c] hover:bg-[#333538] text-[#c4c7c5] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#3c4043] transition"
+              className="mt-2 w-full py-2 px-3 rounded-xl bg-[#282a2c] hover:bg-[#333538] text-[#c4c7c5] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#3c4043] transition cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               Add Speaker

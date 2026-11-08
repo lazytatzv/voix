@@ -2,6 +2,7 @@ import { Speaker, PhonemeTiming } from '../../types';
 import { containsEnglish, convertEnglishToVoicevox } from '../../utils/englishToVoicevox';
 import { getTtsSpokenText } from '../../utils/pronunciation';
 import { parseSpeakerList } from './speakerUtils';
+import { VOICEVOX_CATALOG_SPEAKERS } from '../../utils/voicevoxCatalog';
 
 export interface TTSOptions {
   speedScale?: number;
@@ -85,13 +86,15 @@ export class VoicevoxProvider implements TTSProvider {
       const res = await fetch(`${this.endpoint}/speakers`, {
         signal: AbortSignal.timeout(4000),
       });
-      if (!res.ok) throw new Error(`HTTP error ${res.status}`);
-      const data = await res.json();
-      return parseSpeakerList(data);
+      if (res.ok) {
+        const data = await res.json();
+        const list = parseSpeakerList(data);
+        if (list.length > 0) return list;
+      }
     } catch (e) {
-      console.warn('Failed to fetch VOICEVOX speakers:', e);
-      return [];
+      console.warn('Failed to fetch live VOICEVOX speakers, using catalog fallback:', e);
     }
+    return VOICEVOX_CATALOG_SPEAKERS;
   }
 
   async synthesize(

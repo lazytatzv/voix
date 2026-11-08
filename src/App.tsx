@@ -114,19 +114,13 @@ function fileExtension(path: string): string {
 }
 
 function mergeCharacter(c: Character): Character {
-  const isZunda =
-    c.id === 'zundamon' ||
-    (c.speakerId === 3 && (c.name.includes('ずんだ') || c.name.toLowerCase().includes('zunda')));
-  const isMetan =
-    c.id === 'metan' ||
-    (c.speakerId === 2 && (c.name.includes('めたん') || c.name.toLowerCase().includes('metan')));
-  const isReimu =
-    c.id === 'reimu' || c.name.includes('霊夢') || c.name.toLowerCase().includes('reimu');
-  const isMarisa =
-    c.id === 'marisa' || c.name.includes('魔理沙') || c.name.toLowerCase().includes('marisa');
+  const isZunda = c.id === 'zundamon';
+  const isMetan = c.id === 'metan';
+  const isReimu = c.id === 'reimu';
+  const isMarisa = c.id === 'marisa';
   const id = isZunda ? 'zundamon' : isMetan ? 'metan' : isReimu ? 'reimu' : isMarisa ? 'marisa' : c.id;
   const def = defaultCharacters.find((d) => d.id === id);
-  if (!def) return { ...c, id };
+  if (!def) return { ...c };
   const idleIsLargeBase64 = c.avatar?.idle?.startsWith('data:') && c.avatar.idle.length > 500;
   const isDefaultAsset = (p?: string) => !p || p.startsWith('/characters/');
   const idle = isDefaultAsset(c.avatar?.idle) ? def.avatar.idle : (idleIsLargeBase64 ? def.avatar.idle : c.avatar?.idle || def.avatar.idle);
@@ -896,6 +890,7 @@ export function App() {
         } else {
           void ensureVoiceAudio(item.id).then((url) => {
             if (!url) return;
+            if (!isPlayingRef.current) return;
             if (
               currentTimeRef.current >= item.startTime &&
               currentTimeRef.current < item.startTime + item.duration
@@ -2022,6 +2017,7 @@ export function App() {
   );
 
   const handlePlaySingle = async (item: VoiceItem) => {
+    stopAllAudio();
     const url = await ensureVoiceAudio(item.id);
     if (url) playVoiceAudio(item.id, url, item.volumeScale ?? 1);
   };
@@ -3047,24 +3043,15 @@ export function App() {
       {!isTimelineCollapsed ? (
         <div
           style={{ height: `${timelineHeight}px` }}
-          className="px-4 pb-4 flex-shrink-0 overflow-hidden relative group"
+          className="px-4 pb-4 flex-shrink-0 overflow-hidden relative"
         >
-          <div className="absolute right-6 top-1 z-20 opacity-0 group-hover:opacity-100 transition">
-            <button
-              type="button"
-              onClick={handleToggleTimelineCollapsed}
-              className="px-1.5 py-0.5 rounded text-[10px] bg-[#1a1c1e] text-[#8e918f] hover:text-[#c4c7c5] border border-[#2e3135]"
-              title="Collapse timeline"
-            >
-              ▼ Collapse
-            </button>
-          </div>
           <Timeline
             items={project.items}
             characters={characters}
             currentTime={currentTime}
             duration={totalDuration}
             isPlaying={isPlaying}
+            onToggleCollapse={handleToggleTimelineCollapsed}
             selectedItemId={selectedItemId}
             selectedItemIds={selectedItemIds}
             tracks={tracks}

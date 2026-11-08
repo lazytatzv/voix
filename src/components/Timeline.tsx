@@ -23,6 +23,7 @@ import {
   Copy,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   ArrowLeftToLine,
   Bell,
 } from 'lucide-react';
@@ -62,6 +63,7 @@ interface TimelineProps {
   onDeleteMarker?: (id: string) => void;
   onOpenJumpCut?: () => void;
   onOpenSePalette?: () => void;
+  onToggleCollapse?: () => void;
 }
 
 interface RowDef {
@@ -185,6 +187,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onDeleteMarker,
   onOpenJumpCut,
   onOpenSePalette,
+  onToggleCollapse,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(() =>
@@ -741,6 +744,15 @@ export const Timeline: React.FC<TimelineProps> = ({
           >
             <Maximize2 className="w-3.5 h-3.5" />
           </button>
+          {onToggleCollapse && (
+            <button
+              onClick={onToggleCollapse}
+              className="p-1 rounded-sm hover:bg-[#202226] text-[#8e918f] hover:text-white transition ml-0.5 border-l border-[#2e3135] pl-1"
+              title="Collapse timeline"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 

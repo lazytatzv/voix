@@ -54,6 +54,11 @@ export async function initRepository(path: string): Promise<string> {
   return invoke<string>('git_init_repository', { path });
 }
 
+export async function setRemoteUrl(path: string, remoteUrl: string): Promise<string> {
+  if (!isTauriRuntime()) return 'Mock remote set';
+  return invoke<string>('git_set_remote_url', { path, remoteUrl });
+}
+
 export async function pushRemote(path = '.'): Promise<string> {
   if (!isTauriRuntime()) return 'Mock push succeeded';
   return invoke<string>('git_push_remote', { path });

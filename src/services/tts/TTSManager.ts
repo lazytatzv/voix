@@ -55,12 +55,13 @@ export class TTSManager {
       Array.from(this.providers.values()).map(async (provider) => {
         try {
           const available = await provider.isAvailable();
-          if (!available) return null;
+          // For primary provider, provide offline catalog speakers even if engine is offline
+          if (!available && provider.id !== 'voicevox') return null;
           const speakers = await provider.getSpeakers();
           if (speakers.length === 0) return null;
           return {
             providerId: provider.id,
-            providerName: provider.name,
+            providerName: available ? provider.name : `${provider.name} (offline catalog)`,
             speakers,
           };
         } catch (err) {

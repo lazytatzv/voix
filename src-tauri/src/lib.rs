@@ -1663,6 +1663,7 @@ pub fn run() {
             git_service::git_get_history,
             git_service::git_commit_snapshot,
             git_service::git_init_repository,
+            git_service::git_set_remote_url,
             git_service::git_push_remote,
             git_service::git_read_file_at_commit,
             code_generator::open_in_external_editor,

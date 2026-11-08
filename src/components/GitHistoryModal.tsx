@@ -17,6 +17,7 @@ import {
   getGitHistory,
   commitSnapshot,
   initRepository,
+  setRemoteUrl,
   pushRemote,
   readFileAtCommit,
   GitRepoStatus,
@@ -53,8 +54,27 @@ export const GitHistoryModal: React.FC<GitHistoryModalProps> = ({
   const [isInitializing, setIsInitializing] = useState(false);
   const [restoringHash, setRestoringHash] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [remoteInput, setRemoteInput] = useState('');
+  const [isSettingRemote, setIsSettingRemote] = useState(false);
 
   const targetPath = projectPath || '.';
+
+  const handleSetRemote = async () => {
+    if (!remoteInput.trim()) return;
+    setIsSettingRemote(true);
+    setActionMessage(null);
+    try {
+      await setRemoteUrl(targetPath, remoteInput.trim());
+      setActionMessage('Configured remote repository');
+      if (onShowToast) onShowToast('GitHub remote linked');
+      setRemoteInput('');
+      await refreshGit();
+    } catch (err) {
+      setActionMessage(`Could not set remote: ${String(err)}`);
+    } finally {
+      setIsSettingRemote(false);
+    }
+  };
 
   const refreshGit = useCallback(async () => {
     setLoading(true);
@@ -337,6 +357,28 @@ export const GitHistoryModal: React.FC<GitHistoryModalProps> = ({
                       Push
                     </button>
                   )}
+                </div>
+
+                {/* Remote GitHub Repository Linking */}
+                <div className="pt-2 border-t border-[#26282d] flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-[#8e918f] whitespace-nowrap">
+                    GitHub Remote:
+                  </span>
+                  <input
+                    type="text"
+                    value={remoteInput}
+                    onChange={(e) => setRemoteInput(e.target.value)}
+                    placeholder={status.remote_url || 'https://github.com/user/my-video.git'}
+                    className="flex-1 bg-[#121316] border border-[#2e3137] rounded px-2.5 py-1 text-xs text-[#e3e3e3] font-mono placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleSetRemote}
+                    disabled={isSettingRemote || !remoteInput.trim()}
+                    className="px-2.5 py-1 bg-[#1c2836] hover:bg-[#25374a] disabled:bg-[#15171a] border border-[#2b517a] disabled:border-[#22252a] text-[#8ab4f8] disabled:text-[#5f6368] rounded text-xs font-mono transition cursor-pointer disabled:cursor-not-allowed"
+                  >
+                    {isSettingRemote ? 'Linking...' : status.remote_url ? 'Update Remote' : 'Link GitHub'}
+                  </button>
                 </div>
               </div>
 

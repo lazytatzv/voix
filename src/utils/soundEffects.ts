@@ -11,31 +11,41 @@ export interface SoundEffectPreset {
 }
 
 export const SOUND_EFFECT_PRESETS: SoundEffectPreset[] = [
-  // 定番テロップ・決定
+  // 定番テロップ・YouTube決定音
+  { id: 'deden', name: 'デデン！ (重大発表)', category: 'impact', icon: '📢', description: 'YouTube定番のタイトルコールや重大発表の2連打音', duration: 0.6 },
   { id: 'pop', name: 'ポンッ (登場)', category: 'telop', icon: '✨', description: 'テロップや画像の出現に最適な軽快なポップ音', duration: 0.2 },
+  { id: 'piki', name: 'ピキーン (ひらめき)', category: 'emotion', icon: '💡', description: 'ひらめき・気付き・覚醒の鋭い高音閃光サウンド', duration: 0.45 },
+  { id: 'shakin', name: 'シャキーン (登場)', category: 'impact', icon: '⚔️', description: '抜刀・キリッとした登場・強調の金属音', duration: 0.35 },
+  { id: 'pinpon', name: 'ピンポン (正解)', category: 'telop', icon: '⭕', description: 'クイズ正解や通知の明るい2和音チャイム', duration: 0.55 },
   { id: 'chime', name: 'ピロリン (決定)', category: 'telop', icon: '🔔', description: '正解・ひらめき・決定の明るいチャイム', duration: 0.45 },
   { id: 'kira', name: 'キラリン (輝き)', category: 'telop', icon: '⭐', description: '星やひらめきのきらめくサウンド', duration: 0.4 },
-  { id: 'click', name: 'カチッ (選択)', category: 'telop', icon: '🖱️', description: 'ボタン選択やタイピングのクリックスナップ', duration: 0.08 },
+  { id: 'click', name: 'カチッ (選択)', category: 'telop', icon: '🖱️', description: 'ボタン選択やクリックスナップ', duration: 0.08 },
+  { id: 'keyboard', name: 'カタカタ (タイピング)', category: 'telop', icon: '⌨️', description: 'プログラミングや検索のキーボード打鍵音', duration: 0.35 },
   { id: 'laser', name: 'ピシューン (強調)', category: 'telop', icon: '⚡', description: 'レーザーや鋭い強調のビーム音', duration: 0.25 },
 
-  // ツッコミ・衝撃
+  // ツッコミ・衝撃・YouTubeオチ
   { id: 'punch', name: 'ドーン (ツッコミ)', category: 'impact', icon: '💥', description: 'ツッコミや画面揺れの定番インパクト音', duration: 0.3 },
-  { id: 'slash', name: 'シュパッ (斬撃)', category: 'impact', icon: '⚔️', description: '鋭い切り替えやツッコミのスラッシュ音', duration: 0.25 },
   { id: 'bomb', name: 'ドカーン (爆発)', category: 'impact', icon: '💣', description: '派手な爆発・大失敗・オチの重低音', duration: 0.75 },
   { id: 'shock', name: 'ガーン (絶望)', category: 'impact', icon: '😱', description: 'ショック・不穏・絶望の不協和音', duration: 0.55 },
+  { id: 'slash', name: 'シュパッ (斬撃)', category: 'impact', icon: '🗡️', description: '鋭い切り替えやツッコミのスラッシュ音', duration: 0.25 },
+  { id: 'bleep', name: 'ピー音 (自主規制)', category: 'scene', icon: '🚫', description: '1000Hz純音の放送禁止・モザイク用規制音', duration: 0.45 },
 
-  // 感情・リアクション
+  // 感情・リアクション・ギャグ
+  { id: 'dondon', name: 'ドンドンパフパフ', category: 'emotion', icon: '🎺', description: 'お祝い・登場の太鼓2発＆ラッパの宴会芸音', duration: 0.75 },
+  { id: 'zukoo', name: 'ズコーッ (ずっこけ)', category: 'emotion', icon: '🤸', description: 'ボケやずっこけの定番下降スライド音', duration: 0.45 },
   { id: 'question', name: 'ピャッ？ (はてな)', category: 'emotion', icon: '❓', description: '疑問・首かしげ・ボケに対するはてな音', duration: 0.2 },
-  { id: 'error', name: 'ブブー (不正解)', category: 'emotion', icon: '❌', description: '間違い・NG・失敗時のブザー音', duration: 0.4 },
+  { id: 'error', name: 'ブブー (不正解)', category: 'emotion', icon: '❌', description: '間違い・NG・失敗時の低音ブザー音', duration: 0.4 },
+  { id: 'jajaan', name: 'ジャジャーン (お披露目)', category: 'emotion', icon: '🎺', description: '華やかな登場や完成のお披露目ファンファーレ', duration: 0.6 },
   { id: 'success', name: 'ファンファーレ', category: 'emotion', icon: '🎉', description: '成功・レベルアップ・解決時のメロディ', duration: 0.45 },
-  { id: 'spring', name: 'ボヨ〜ン (ギャグ)', category: 'emotion', icon: '🌀', description: '跳躍やギャグのコミカルなバネ音', duration: 0.35 },
+  { id: 'spring', name: 'ボヨ〜ン (バネ)', category: 'emotion', icon: '🌀', description: '跳躍やギャグのコミカルなバネ音', duration: 0.35 },
+  { id: 'applause', name: '歓声・拍手', category: 'emotion', icon: '👏', description: '喝采・歓声・拍手の盛り上がり音', duration: 0.8 },
 
   // 場面・オチ
-  { id: 'cymbal', name: 'チーン (オチ)', category: 'scene', icon: '🛎️', description: '哀愁・シュールな沈黙・オチの仏壇ベル', duration: 0.9 },
-  { id: 'whistle', name: 'ピピーッ (笛)', category: 'scene', icon: '📢', description: '審判ホイッスル・一時停止・物言い', duration: 0.35 },
+  { id: 'cymbal', name: 'チーン (オチ・仏壇)', category: 'scene', icon: '🛎️', description: '哀愁・シュールな沈黙・オチの仏壇ベル', duration: 0.9 },
+  { id: 'scratch', name: 'ギュッ (レコード停止)', category: 'scene', icon: '🛑', description: 'レコード停止・突然の沈黙・え？の瞬間', duration: 0.28 },
+  { id: 'whistle', name: 'ピピーッ (ホイッスル)', category: 'scene', icon: '📢', description: '審判ホイッスル・一時停止・物言い', duration: 0.35 },
   { id: 'drumroll', name: 'ドラムロール', category: 'scene', icon: '🥁', description: '結果発表前の緊迫ドラムロール＆シンバル', duration: 0.85 },
-  { id: 'heartbeat', name: 'ドクン (緊迫)', category: 'scene', icon: '💓', description: 'ピンチ・ホラー・緊迫場面の心拍音', duration: 0.65 },
-  { id: 'scratch', name: 'ギュッ (停止)', category: 'scene', icon: '🛑', description: 'レコード停止・突然の沈黙・え？の瞬間', duration: 0.28 },
+  { id: 'heartbeat', name: 'ドクン (緊迫心拍)', category: 'scene', icon: '💓', description: 'ピンチ・ホラー・緊迫場面の心拍音', duration: 0.65 },
 ];
 
 /**
@@ -115,14 +125,24 @@ class SoundEffectManager {
 
   public normalizeKey(name: string): string {
     const raw = (name || '').trim().toLowerCase().replace(/^se:/, '');
+    if (['deden', 'dedon', 'announce', 'taitoru', 'title'].includes(raw)) return 'deden';
+    if (['piki', 'pikin', 'hirameki', 'sparkle', 'eureka'].includes(raw)) return 'piki';
+    if (['shakin', 'blade', 'katana', 'syakin', 'draw'].includes(raw)) return 'shakin';
+    if (['bleep', 'beep', 'censor', 'pii', 'pi-'].includes(raw)) return 'bleep';
+    if (['pinpon', 'seikai', 'dingdong', 'correct_bell'].includes(raw)) return 'pinpon';
+    if (['dondon', 'pafupafu', 'dondonpafupafu', 'horn'].includes(raw)) return 'dondon';
+    if (['zukoo', 'zuko', 'koke', 'fall'].includes(raw)) return 'zukoo';
+    if (['keyboard', 'typing', 'typewriter', 'katakata'].includes(raw)) return 'keyboard';
+    if (['jajaan', 'jaja-n', 'fanfare2'].includes(raw)) return 'jajaan';
+    if (['applause', 'cheer', 'clap', 'kansen', 'hakushu'].includes(raw)) return 'applause';
     if (['pop', 'jump', 'bounce'].includes(raw)) return 'pop';
-    if (['chime', 'bell', 'correct', 'ding', 'pinpon'].includes(raw)) return 'chime';
-    if (['click', 'tap', 'typing'].includes(raw)) return 'click';
+    if (['chime', 'bell', 'correct', 'ding'].includes(raw)) return 'chime';
+    if (['click', 'tap'].includes(raw)) return 'click';
     if (['punch', 'hit', 'impact', 'don', 'tsukkomi'].includes(raw)) return 'punch';
     if (['error', 'buzzer', 'wrong', 'ng', 'bubu'].includes(raw)) return 'error';
     if (['success', 'fanfare', 'levelup', 'clear'].includes(raw)) return 'success';
     if (['laser', 'zap', 'shing', 'beam'].includes(raw)) return 'laser';
-    if (['kira', 'sparkle', 'shine', 'twinkle'].includes(raw)) return 'kira';
+    if (['kira', 'twinkle'].includes(raw)) return 'kira';
     if (['question', 'hatena', 'what', 'pya'].includes(raw)) return 'question';
     if (['whistle', 'fue', 'referee'].includes(raw)) return 'whistle';
     if (['cymbal', 'chink', 'chin', 'butsudan'].includes(raw)) return 'cymbal';
@@ -195,6 +215,237 @@ class SoundEffectManager {
     const now = ctx.currentTime;
 
     switch (key) {
+      case 'deden': {
+        // デデン！ (低音パンチ1発目 + 2発目華やかな和音スタブ)
+        // Hit 1: 弱パンチ (t = now)
+        const punch1 = ctx.createOscillator();
+        const punchGain1 = ctx.createGain();
+        punch1.type = 'triangle';
+        punch1.frequency.setValueAtTime(160, now);
+        punch1.frequency.exponentialRampToValueAtTime(45, now + 0.12);
+        punchGain1.gain.setValueAtTime(volume * 0.7, now);
+        punchGain1.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+        punch1.connect(punchGain1);
+        punchGain1.connect(dest);
+        punch1.start(now);
+        punch1.stop(now + 0.15);
+
+        // Hit 2: 強烈ブラス風メジャー和音 (t = now + 0.18)
+        const t2 = now + 0.18;
+        const freqs = [220, 277.18, 329.63, 440, 554.37]; // A major brass stack
+        freqs.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+          osc.frequency.setValueAtTime(freq, t2);
+          const chordVol = (volume * 0.75) / Math.sqrt(freqs.length);
+          gain.gain.setValueAtTime(chordVol, t2);
+          gain.gain.exponentialRampToValueAtTime(0.001, t2 + 0.4);
+          osc.connect(gain);
+          gain.connect(dest);
+          osc.start(t2);
+          osc.stop(t2 + 0.42);
+        });
+        break;
+      }
+
+      case 'piki': {
+        // ピキーン！ (高音FMひらめき・覚醒)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1600, now);
+        osc.frequency.exponentialRampToValueAtTime(3600, now + 0.12);
+        gain.gain.setValueAtTime(volume * 0.8, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.start(now);
+        osc.stop(now + 0.42);
+
+        // 倍音クリスタルベル
+        const bell = ctx.createOscillator();
+        const bellGain = ctx.createGain();
+        bell.type = 'sine';
+        bell.frequency.setValueAtTime(4800, now + 0.05);
+        bellGain.gain.setValueAtTime(volume * 0.35, now + 0.05);
+        bellGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        bell.connect(bellGain);
+        bellGain.connect(dest);
+        bell.start(now + 0.05);
+        bell.stop(now + 0.36);
+        break;
+      }
+
+      case 'shakin': {
+        // シャキーン！ (金属刃抜刀音)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(2400, now);
+        osc.frequency.exponentialRampToValueAtTime(850, now + 0.22);
+        gain.gain.setValueAtTime(volume * 0.7, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.32);
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.start(now);
+        osc.stop(now + 0.33);
+        break;
+      }
+
+      case 'bleep': {
+        // ピー音 (1000Hz自主規制音)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000, now);
+        gain.gain.setValueAtTime(volume * 0.6, now);
+        gain.gain.setValueAtTime(volume * 0.6, now + 0.38);
+        gain.gain.linearRampToValueAtTime(0.0001, now + 0.42);
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.start(now);
+        osc.stop(now + 0.43);
+        break;
+      }
+
+      case 'pinpon': {
+        // ピンポン！ (正解 2和音チャイム)
+        const t1 = now;
+        const osc1 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        osc1.type = 'sine';
+        osc1.frequency.setValueAtTime(1318.51, t1); // E6
+        gain1.gain.setValueAtTime(volume * 0.6, t1);
+        gain1.gain.exponentialRampToValueAtTime(0.001, t1 + 0.3);
+        osc1.connect(gain1);
+        gain1.connect(dest);
+        osc1.start(t1);
+        osc1.stop(t1 + 0.32);
+
+        const t2 = now + 0.18;
+        const osc2 = ctx.createOscillator();
+        const gain2 = ctx.createGain();
+        osc2.type = 'sine';
+        osc2.frequency.setValueAtTime(1661.22, t2); // G#6
+        gain2.gain.setValueAtTime(volume * 0.65, t2);
+        gain2.gain.exponentialRampToValueAtTime(0.001, t2 + 0.35);
+        osc2.connect(gain2);
+        gain2.connect(dest);
+        osc2.start(t2);
+        osc2.stop(t2 + 0.36);
+        break;
+      }
+
+      case 'dondon': {
+        // ドンドンパフパフ (太鼓2回 + ラッパ2回)
+        [0, 0.22].forEach((delay) => {
+          const t = now + delay;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(150, t);
+          osc.frequency.exponentialRampToValueAtTime(45, t + 0.14);
+          gain.gain.setValueAtTime(volume * 0.8, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+          osc.connect(gain);
+          gain.connect(dest);
+          osc.start(t);
+          osc.stop(t + 0.16);
+        });
+
+        // パフパフ (ホーンラッパ)
+        [0.44, 0.58].forEach((delay) => {
+          const t = now + delay;
+          [392, 493.88].forEach((f) => {
+            const osc = ctx.createOscillator();
+            const gain = ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(f, t);
+            gain.gain.setValueAtTime(volume * 0.35, t);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+            osc.connect(gain);
+            gain.connect(dest);
+            osc.start(t);
+            osc.stop(t + 0.13);
+          });
+        });
+        break;
+      }
+
+      case 'zukoo': {
+        // ズコーッ (下降スライド + バネ)
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(780, now);
+        osc.frequency.exponentialRampToValueAtTime(110, now + 0.28);
+        gain.gain.setValueAtTime(volume * 0.8, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+        osc.connect(gain);
+        gain.connect(dest);
+        osc.start(now);
+        osc.stop(now + 0.36);
+        break;
+      }
+
+      case 'keyboard': {
+        // カタカタ (タイピング)
+        for (let i = 0; i < 4; i++) {
+          const t = now + i * 0.08;
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(1600 + (i % 2) * 200, t);
+          osc.frequency.exponentialRampToValueAtTime(250, t + 0.035);
+          gain.gain.setValueAtTime(volume * 0.45, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
+          osc.connect(gain);
+          gain.connect(dest);
+          osc.start(t);
+          osc.stop(t + 0.04);
+        }
+        break;
+      }
+
+      case 'jajaan': {
+        // ジャジャーン！ (華やかな登場ファンファーレ)
+        const chord = [261.63, 329.63, 392.0, 523.25]; // C major
+        chord.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = idx % 2 === 0 ? 'sawtooth' : 'triangle';
+          osc.frequency.setValueAtTime(freq, now);
+          const v = (volume * 0.65) / Math.sqrt(chord.length);
+          gain.gain.setValueAtTime(v, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);
+          osc.connect(gain);
+          gain.connect(dest);
+          osc.start(now);
+          osc.stop(now + 0.58);
+        });
+        break;
+      }
+
+      case 'applause': {
+        // 拍手・歓声 (マルチクラップバースト)
+        for (let i = 0; i < 8; i++) {
+          const t = now + i * 0.09 + (Math.sin(i * 1.5) * 0.02);
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(320 + i * 40, t);
+          osc.frequency.exponentialRampToValueAtTime(80, t + 0.06);
+          gain.gain.setValueAtTime(volume * 0.35, t);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06);
+          osc.connect(gain);
+          gain.connect(dest);
+          osc.start(t);
+          osc.stop(t + 0.07);
+        }
+        break;
+      }
+
       case 'pop': {
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();

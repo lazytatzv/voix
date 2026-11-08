@@ -269,6 +269,23 @@ dist/
 }
 
 #[tauri::command]
+pub fn git_set_remote_url(path: String, remote_url: String) -> Result<String, String> {
+    let dir = resolve_dir(&path);
+    let url = remote_url.trim();
+    if url.is_empty() {
+        return Err("Remote URL cannot be empty".to_string());
+    }
+
+    // Check if origin already exists
+    let has_origin = run_git_cmd(&dir, &["remote", "get-url", "origin"]).is_ok();
+    if has_origin {
+        run_git_cmd(&dir, &["remote", "set-url", "origin", url])
+    } else {
+        run_git_cmd(&dir, &["remote", "add", "origin", url])
+    }
+}
+
+#[tauri::command]
 pub fn git_push_remote(path: String) -> Result<String, String> {
     let dir = resolve_dir(&path);
     let branch = run_git_cmd(&dir, &["rev-parse", "--abbrev-ref", "HEAD"]).unwrap_or_else(|_| "main".to_string());

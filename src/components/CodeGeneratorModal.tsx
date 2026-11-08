@@ -19,6 +19,7 @@ import {
   generateCodeProject,
   openInExternalEditor,
 } from '../services/codeGenService';
+import { initRepository, setRemoteUrl } from '../services/gitService';
 import { VoixProject } from '../types';
 
 interface CodeGeneratorModalProps {
@@ -47,6 +48,8 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
   const [format, setFormat] = useState<'js' | 'yaml'>('js');
   const [includeSnippets, setIncludeSnippets] = useState(true);
   const [enableWatch, setEnableWatch] = useState(true);
+  const [initGit, setInitGit] = useState(true);
+  const [remoteGitUrl, setRemoteGitUrl] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [generatedFilePath, setGeneratedFilePath] = useState<string | null>(null);
   const [previewSnippet, setPreviewSnippet] = useState('');
@@ -109,6 +112,17 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
       const ext = isJs ? '.js' : '.voix.yaml';
       if (onShowToast) {
         onShowToast(`Generated code project: ${projectName}${ext}`);
+      }
+
+      if (initGit) {
+        try {
+          await initRepository(targetDir.trim());
+          if (remoteGitUrl.trim()) {
+            await setRemoteUrl(targetDir.trim(), remoteGitUrl.trim());
+          }
+        } catch (gitErr) {
+          console.warn('Git init in project folder error:', gitErr);
+        }
       }
 
       if (enableWatch) {
@@ -282,6 +296,27 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
                   Enable Live Hot-Reload Watcher
                 </span>
               </label>
+            </div>
+
+            <div className="pt-2 border-t border-[#22252a] space-y-2">
+              <label className="flex items-center gap-2 cursor-pointer select-none text-[#c4c7c5]">
+                <input
+                  type="checkbox"
+                  checked={initGit}
+                  onChange={(e) => setInitGit(e.target.checked)}
+                  className="accent-[#3b82f6] rounded"
+                />
+                <span>Initialize Git Repository & Link Project</span>
+              </label>
+              {initGit && (
+                <input
+                  type="text"
+                  value={remoteGitUrl}
+                  onChange={(e) => setRemoteGitUrl(e.target.value)}
+                  placeholder="GitHub Remote URL (Optional, e.g. https://github.com/user/my-video.git)"
+                  className="w-full bg-[#121316] border border-[#2e3137] rounded px-3 py-1.5 text-xs text-[#e3e3e3] font-mono placeholder-[#5f6368] focus:outline-none focus:border-[#8ab4f8]"
+                />
+              )}
             </div>
           </div>
 
