@@ -545,3 +545,44 @@ export const defaultCharacters: Character[] = [
     position: 'right',
   },
 ];
+
+/**
+ * Formats a raw expression key like 'explain_right' into a clean label like 'Explain Right'.
+ */
+export function formatExpressionLabel(key: string): string {
+  if (!key || key === 'default') return 'Default';
+  return key
+    .split(/[-_]/)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
+/**
+ * Derives the selectable expression options for a character based on their avatar expressions.
+ */
+export function getCharacterExpressionOptions(
+  character?: Character | null,
+  currentValue?: string
+): Array<{ value: string; label: string }> {
+  const options: Array<{ value: string; label: string }> = [
+    { value: 'default', label: 'Default' },
+  ];
+  const seen = new Set<string>(['default']);
+
+  if (character?.avatar?.expressions) {
+    Object.keys(character.avatar.expressions).forEach((key) => {
+      if (!seen.has(key)) {
+        seen.add(key);
+        options.push({ value: key, label: formatExpressionLabel(key) });
+      }
+    });
+  }
+
+  // Preserve any custom or legacy value that was already selected on the item
+  if (currentValue && !seen.has(currentValue)) {
+    options.push({ value: currentValue, label: formatExpressionLabel(currentValue) });
+  }
+
+  return options;
+}
+

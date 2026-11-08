@@ -18,6 +18,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { getCharacterExpressionOptions } from '../utils/defaultCharacters';
 import {
   AudioItem,
   BlendMode,
@@ -708,19 +709,20 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     />
                   </Field>
                   <Field label="Expression">
-                    <input
-                      list="voix-expressions"
+                    <select
                       value={voice.expression || 'default'}
                       onChange={(e) => patch({ expression: e.target.value } as Partial<TimelineItem>)}
                       className={inputClass}
-                    />
-                    <datalist id="voix-expressions">
-                      <option value="default" />
-                      <option value="smile" />
-                      <option value="shock" />
-                      <option value="trouble" />
-                      <option value="angry" />
-                    </datalist>
+                    >
+                      {getCharacterExpressionOptions(
+                        characters.find((c) => c.id === voice.characterId),
+                        voice.expression
+                      ).map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </Field>
                   <Field label="Animation">
                     <select

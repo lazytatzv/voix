@@ -16,6 +16,7 @@ import { formatSpeechWithPersona, processAiAction } from '../services/aiService'
 import { autoAnnotatePronunciations } from '../utils/pronunciation';
 import { tuneVoiceWithAI } from '../utils/voiceTonePresets';
 import { DEFAULT_LINE_GAP } from '../utils/scriptParser';
+import { getCharacterExpressionOptions } from '../utils/defaultCharacters';
 
 interface QuickDialogueBarProps {
   characters: Character[];
@@ -356,14 +357,14 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
           <select
             value={expression}
             onChange={(e) => setExpression(e.target.value)}
-            className="bg-[#15171b] border border-[#272a31] text-xs text-[#c4c7c5] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer"
-            title="Facial Expression"
+            className="bg-[#15171b] border border-[#272a31] text-xs text-[#c4c7c5] rounded-lg px-2 py-1.5 focus:outline-none focus:border-[#8ab4f8] cursor-pointer max-w-[150px] truncate"
+            title="Facial Expression / Pose"
           >
-            <option value="default">Default</option>
-            <option value="smile">Smile</option>
-            <option value="shock">Shock</option>
-            <option value="trouble">Troubled</option>
-            <option value="angry">Angry</option>
+            {getCharacterExpressionOptions(activeChar, expression).map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
           </select>
         </div>
 

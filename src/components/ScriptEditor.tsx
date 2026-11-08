@@ -15,6 +15,7 @@ import {
 import { Character, Marker, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
 import { extractPronunciations } from '../utils/pronunciation';
+import { getCharacterExpressionOptions } from '../utils/defaultCharacters';
 import {
   itemsToRawText,
   parseScriptWithConfig,
@@ -251,17 +252,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
         icon: c.avatar.idle,
       })),
     [characters]
-  );
-
-  const expressionOptions = useMemo(
-    () => [
-      { value: 'default', label: 'Default' },
-      { value: 'smile', label: 'Smile' },
-      { value: 'shock', label: 'Shock' },
-      { value: 'trouble', label: 'Troubled' },
-      { value: 'angry', label: 'Angry' },
-    ],
-    []
   );
 
   // 再生中または選択中のアクティブなセリフアイテムを特定
@@ -810,7 +800,10 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
                             <CustomSelect
                               size="sm"
                               value={item.expression || 'default'}
-                              options={expressionOptions}
+                              options={getCharacterExpressionOptions(
+                                characters.find((c) => c.id === item.characterId),
+                                item.expression
+                              )}
                               onChange={(expr) => onUpdateItem(item.id, { expression: expr })}
                             />
 
