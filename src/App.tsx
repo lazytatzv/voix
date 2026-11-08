@@ -2910,6 +2910,8 @@ export function App() {
         isOpen={Boolean(inspectedItem)}
         item={inspectedItem}
         characters={characters}
+        projectWidth={project.timeline.width}
+        projectHeight={project.timeline.height}
         currentTime={currentTime}
         onClose={() => setInspectedItemId(null)}
         onUpdate={handleInspectorUpdate}

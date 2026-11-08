@@ -305,6 +305,41 @@ describe('normalization and legacy import', () => {
     expect(() => projectFromYaml('just a string')).toThrow(/does not look like a Voix project/);
     expect(() => projectFromYaml('')).toThrow(/Empty project file/);
   });
+
+  it('preserves every shape kind through a YAML roundtrip', () => {
+    const kinds = [
+      'rectangle',
+      'ellipse',
+      'triangle',
+      'arrow',
+      'line',
+      'star',
+      'speech',
+      'burst',
+    ] as const;
+
+    for (const kind of kinds) {
+      const restored = projectFromYaml(
+        projectToYaml(
+          normalizeProject({
+            name: 'Shapes',
+            items: [
+              {
+                id: `shape_${kind}`,
+                type: 'shape',
+                startTime: 0,
+                duration: 2,
+                shape: kind,
+                width: 200,
+                height: 100,
+              },
+            ],
+          })
+        )
+      );
+      expect(restored.items[0]).toMatchObject({ type: 'shape', shape: kind });
+    }
+  });
 });
 
 describe('duration helpers', () => {

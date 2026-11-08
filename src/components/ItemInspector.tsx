@@ -34,6 +34,7 @@ import {
 } from '../types';
 import { toAssetUrl } from '../utils/imageUtils';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
+import { SHAPE_PRESETS, shapePresetPatch } from '../utils/shapePresets';
 import {
   addSnapshotKeyframe,
   getItemBaseTransform,
@@ -46,6 +47,9 @@ interface ItemInspectorProps {
   isOpen: boolean;
   item: TimelineItem | null;
   characters: Character[];
+  /** Project resolution, used to size shape presets. */
+  projectWidth: number;
+  projectHeight: number;
   /** Playhead position in seconds, used by the keyframe editor. */
   currentTime: number;
   onClose: () => void;
@@ -498,6 +502,8 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
   isOpen,
   item,
   characters,
+  projectWidth,
+  projectHeight,
   currentTime,
   onClose,
   onUpdate,
@@ -1242,6 +1248,31 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
             const shape = item as ShapeItem;
             return (
               <section className="border-t border-[#242629] pt-4 space-y-3">
+                <div className="space-y-1.5">
+                  <span className={labelClass}>Shape preset</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {SHAPE_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() =>
+                          patch(
+                            shapePresetPatch(
+                              shape,
+                              preset,
+                              projectWidth,
+                              projectHeight
+                            ) as Partial<TimelineItem>
+                          )
+                        }
+                        className="px-2 py-1 text-[10px] font-mono bg-[#181a1d] border border-[#2a2c30] rounded-sm text-[#c4c7c5] hover:text-white hover:border-[#8ab4f8]/60"
+                        title={`Apply ${preset.name} shape preset`}
+                      >
+                        {preset.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
                 <Field label="Shape">
                   <select
                     value={shape.shape}
@@ -1253,6 +1284,11 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     <option value="rectangle">Rectangle</option>
                     <option value="ellipse">Ellipse</option>
                     <option value="triangle">Triangle</option>
+                    <option value="arrow">Arrow</option>
+                    <option value="line">Line</option>
+                    <option value="star">Star</option>
+                    <option value="speech">Speech bubble</option>
+                    <option value="burst">Focus burst</option>
                   </select>
                 </Field>
                 <div className="grid grid-cols-2 gap-3">

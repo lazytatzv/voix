@@ -5,7 +5,15 @@
 export type ItemType = 'voice' | 'video' | 'audio' | 'text' | 'image' | 'shape';
 
 /** Primitive shapes that can be composited on the timeline. */
-export type ShapeKind = 'rectangle' | 'ellipse' | 'triangle';
+export type ShapeKind =
+  | 'rectangle'
+  | 'ellipse'
+  | 'triangle'
+  | 'arrow'
+  | 'line'
+  | 'star'
+  | 'speech'
+  | 'burst';
 
 /** Canvas compositing modes exposed for text and image items. */
 export type BlendMode =

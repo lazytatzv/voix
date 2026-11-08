@@ -150,7 +150,16 @@ function normalizeAnimation(value: unknown): ItemAnimation | undefined {
     : undefined;
 }
 
-const SHAPE_KINDS: ShapeKind[] = ['rectangle', 'ellipse', 'triangle'];
+const SHAPE_KINDS: ShapeKind[] = [
+  'rectangle',
+  'ellipse',
+  'triangle',
+  'arrow',
+  'line',
+  'star',
+  'speech',
+  'burst',
+];
 
 function normalizeShapeKind(value: unknown): ShapeKind {
   return typeof value === 'string' && SHAPE_KINDS.includes(value as ShapeKind)

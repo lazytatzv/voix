@@ -964,31 +964,108 @@ function drawShapeItem(
   if (transform.rotation) ctx.rotate((transform.rotation * Math.PI) / 180);
   ctx.scale(motion.scale * transform.scale, motion.scale * transform.scale);
 
+  const halfWidth = width / 2;
+  const halfHeight = height / 2;
+  let strokeOnly = false;
+
   if (item.shape === 'ellipse') {
     ctx.beginPath();
-    ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2);
+    ctx.ellipse(0, 0, halfWidth, halfHeight, 0, 0, Math.PI * 2);
   } else if (item.shape === 'triangle') {
     ctx.beginPath();
-    ctx.moveTo(0, -height / 2);
-    ctx.lineTo(width / 2, height / 2);
-    ctx.lineTo(-width / 2, height / 2);
+    ctx.moveTo(0, -halfHeight);
+    ctx.lineTo(halfWidth, halfHeight);
+    ctx.lineTo(-halfWidth, halfHeight);
     ctx.closePath();
+  } else if (item.shape === 'arrow') {
+    const shaftHeight = height * 0.42;
+    const headWidth = Math.min(width * 0.42, height * 0.9);
+    ctx.beginPath();
+    ctx.moveTo(-halfWidth, -shaftHeight / 2);
+    ctx.lineTo(halfWidth - headWidth, -shaftHeight / 2);
+    ctx.lineTo(halfWidth - headWidth, -halfHeight);
+    ctx.lineTo(halfWidth, 0);
+    ctx.lineTo(halfWidth - headWidth, halfHeight);
+    ctx.lineTo(halfWidth - headWidth, shaftHeight / 2);
+    ctx.lineTo(-halfWidth, shaftHeight / 2);
+    ctx.closePath();
+  } else if (item.shape === 'line') {
+    strokeOnly = true;
+    ctx.beginPath();
+    ctx.moveTo(-halfWidth, 0);
+    ctx.lineTo(halfWidth, 0);
+  } else if (item.shape === 'star') {
+    const points = 5;
+    const innerRatio = 0.42;
+    ctx.beginPath();
+    for (let i = 0; i < points * 2; i++) {
+      const angle = -Math.PI / 2 + (i * Math.PI) / points;
+      const ratio = i % 2 === 0 ? 1 : innerRatio;
+      const x = Math.cos(angle) * halfWidth * ratio;
+      const y = Math.sin(angle) * halfHeight * ratio;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+  } else if (item.shape === 'speech') {
+    const radius = Math.min(
+      Math.max(0, item.cornerRadius ?? 24),
+      Math.min(width, height) / 2
+    );
+    const tailHeight = Math.min(height * 0.22, 56);
+    const bodyBottom = halfHeight - tailHeight;
+    const tailLeft = -halfWidth + width * 0.22;
+    const tailRight = tailLeft + width * 0.12;
+    const tailTipX = tailLeft - width * 0.02;
+    ctx.beginPath();
+    ctx.moveTo(-halfWidth + radius, -halfHeight);
+    ctx.lineTo(halfWidth - radius, -halfHeight);
+    ctx.quadraticCurveTo(halfWidth, -halfHeight, halfWidth, -halfHeight + radius);
+    ctx.lineTo(halfWidth, bodyBottom - radius);
+    ctx.quadraticCurveTo(halfWidth, bodyBottom, halfWidth - radius, bodyBottom);
+    ctx.lineTo(tailRight, bodyBottom);
+    ctx.lineTo(tailTipX, halfHeight);
+    ctx.lineTo(tailLeft, bodyBottom);
+    ctx.lineTo(-halfWidth + radius, bodyBottom);
+    ctx.quadraticCurveTo(-halfWidth, bodyBottom, -halfWidth, bodyBottom - radius);
+    ctx.lineTo(-halfWidth, -halfHeight + radius);
+    ctx.quadraticCurveTo(-halfWidth, -halfHeight, -halfWidth + radius, -halfHeight);
+    ctx.closePath();
+  } else if (item.shape === 'burst') {
+    strokeOnly = true;
+    const rays = 28;
+    const innerRatio = 0.24;
+    ctx.beginPath();
+    for (let i = 0; i < rays; i++) {
+      const angle = (i / rays) * Math.PI * 2;
+      const outerRatio = i % 2 === 0 ? 1 : 0.86;
+      ctx.moveTo(
+        Math.cos(angle) * halfWidth * innerRatio,
+        Math.sin(angle) * halfHeight * innerRatio
+      );
+      ctx.lineTo(
+        Math.cos(angle) * halfWidth * outerRatio,
+        Math.sin(angle) * halfHeight * outerRatio
+      );
+    }
   } else {
     const radius = Math.min(
       Math.max(0, item.cornerRadius ?? 0),
       Math.min(width, height) / 2
     );
-    roundRectPath(ctx, -width / 2, -height / 2, width, height, radius);
+    roundRectPath(ctx, -halfWidth, -halfHeight, width, height, radius);
   }
 
-  if (item.fillColor && item.fillColor !== 'transparent' && item.fillColor !== 'none') {
+  if (!strokeOnly && item.fillColor && item.fillColor !== 'transparent' && item.fillColor !== 'none') {
     ctx.fillStyle = item.fillColor;
     ctx.fill();
   }
-  if (strokeWidth > 0 && item.strokeColor) {
-    ctx.lineWidth = strokeWidth;
-    ctx.strokeStyle = item.strokeColor;
+  const visibleStrokeWidth = strokeOnly ? Math.max(2, strokeWidth || 6) : strokeWidth;
+  if (visibleStrokeWidth > 0 && (item.strokeColor || strokeOnly)) {
+    ctx.lineWidth = visibleStrokeWidth;
+    ctx.strokeStyle = item.strokeColor || '#ffffff';
     ctx.lineJoin = 'round';
+    ctx.lineCap = strokeOnly ? 'round' : 'butt';
     ctx.stroke();
   }
   ctx.restore();
