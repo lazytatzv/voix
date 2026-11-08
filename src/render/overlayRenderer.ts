@@ -8,6 +8,7 @@ import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } 
 import { computeTextRevealRange, textRevealCharacterCount } from '../utils/textReveal';
 import type { TextRevealTiming } from '../utils/textReveal';
 import { isTrackVisible } from '../utils/tracks';
+import { planVisualLayers, VisualLayerItem } from './visualLayers';
 
 export interface OverlayRenderOptions {
   width: number;
@@ -993,6 +994,75 @@ function drawShapeItem(
   ctx.restore();
 }
 
+function drawImageItem(
+  ctx: CanvasRenderingContext2D,
+  item: ImageItem,
+  time: number
+): void {
+  const img = getCachedImage(item.src);
+  if (!img) return;
+  const motion = computeItemMotion(item, time);
+  const transform = resolveItemTransform(item, time);
+  if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
+  ctx.save();
+  const filter = buildCanvasFilter(item.effects);
+  if (filter !== 'none') ctx.filter = filter;
+  ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
+  ctx.globalAlpha = transform.opacity * motion.alpha;
+  ctx.translate(
+    transform.x + item.width / 2 + motion.offsetX,
+    transform.y + item.height / 2 + motion.offsetY
+  );
+  if (transform.rotation) ctx.rotate((transform.rotation * Math.PI) / 180);
+  ctx.scale(
+    motion.scale * transform.scale * (item.flipH ? -1 : 1),
+    motion.scale * transform.scale
+  );
+  ctx.drawImage(img, -item.width / 2, -item.height / 2, item.width, item.height);
+  ctx.restore();
+}
+
+function drawTextItem(
+  ctx: CanvasRenderingContext2D,
+  item: TextItem,
+  time: number,
+  frameWidth: number,
+  frameHeight: number
+): void {
+  const motion = computeItemMotion(item, time);
+  const transform = resolveItemTransform(item, time);
+  if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
+  ctx.save();
+  const filter = buildCanvasFilter(item.effects);
+  if (filter !== 'none') ctx.filter = filter;
+  ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
+  drawStyledText(ctx, {
+    text: item.text,
+    style: item.style,
+    centerX: (frameWidth * transform.x) / 100,
+    centerY: (frameHeight * transform.y) / 100,
+    maxWidth: (frameWidth * (item.widthPercent ?? 80)) / 100,
+    align: item.align || item.style.align || 'center',
+    opacity: transform.opacity * motion.alpha,
+    rotation: transform.rotation,
+    offsetX: motion.offsetX,
+    offsetY: motion.offsetY,
+    scale: motion.scale * transform.scale,
+    reveal:
+      (item.displayInterval ?? 0) > 0 || (item.hideInterval ?? 0) > 0
+        ? {
+            elapsed: time - item.startTime,
+            duration: item.duration,
+            displayInterval: item.displayInterval,
+            displayDirection: item.displayDirection,
+            hideInterval: item.hideInterval,
+            hideDirection: item.hideDirection,
+          }
+        : undefined,
+  });
+  ctx.restore();
+}
+
 export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: OverlayRenderOptions): void {
   const { width, height, time, items, characters, tracks } = options;
   // Clear the whole backing store even when the caller renders with a scale
@@ -1053,81 +1123,32 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
           item.type === 'shape' && time >= item.startTime && time < item.startTime + item.duration
       )
     : [];
-  const visuals = [...images, ...shapes].sort((a, b) => a.layer - b.layer);
-  visuals.forEach((item) => {
-    if (item.type === 'shape') {
-      drawShapeItem(ctx, item, time);
-      return;
-    }
-    const img = getCachedImage(item.src);
-    if (!img) return;
-    const motion = computeItemMotion(item, time);
-    const transform = resolveItemTransform(item, time);
-    if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
-    ctx.save();
-    const filter = buildCanvasFilter(item.effects);
-    if (filter !== 'none') ctx.filter = filter;
-    ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
-    ctx.globalAlpha = transform.opacity * motion.alpha;
-    ctx.translate(
-      transform.x + item.width / 2 + motion.offsetX,
-      transform.y + item.height / 2 + motion.offsetY
-    );
-    if (transform.rotation) ctx.rotate((transform.rotation * Math.PI) / 180);
-    ctx.scale(
-      motion.scale * transform.scale * (item.flipH ? -1 : 1),
-      motion.scale * transform.scale
-    );
-    ctx.drawImage(img, -item.width / 2, -item.height / 2, item.width, item.height);
-    ctx.restore();
-  });
-
-  if (isTrackVisible(tracks, 'character') && options.showCharacters !== false) {
-    drawCharacters(ctx, options, activeVoice, voices);
-  }
-
-  if (isTrackVisible(tracks, 'text')) {
-    const texts = visibleItems
-      .filter(
+  const texts = isTrackVisible(tracks, 'text')
+    ? visibleItems.filter(
         (item): item is TextItem =>
           item.type === 'text' && time >= item.startTime && time < item.startTime + item.duration
       )
-      .sort((a, b) => a.layer - b.layer);
-    texts.forEach((item) => {
-      const motion = computeItemMotion(item, time);
-      const transform = resolveItemTransform(item, time);
-      if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
-      ctx.save();
-      const filter = buildCanvasFilter(item.effects);
-      if (filter !== 'none') ctx.filter = filter;
-      ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
-      drawStyledText(ctx, {
-        text: item.text,
-        style: item.style,
-        centerX: (width * transform.x) / 100,
-        centerY: (height * transform.y) / 100,
-        maxWidth: (width * (item.widthPercent ?? 80)) / 100,
-        align: item.align || item.style.align || 'center',
-        opacity: transform.opacity * motion.alpha,
-        rotation: transform.rotation,
-        offsetX: motion.offsetX,
-        offsetY: motion.offsetY,
-        scale: motion.scale * transform.scale,
-        reveal:
-          (item.displayInterval ?? 0) > 0 || (item.hideInterval ?? 0) > 0
-            ? {
-                elapsed: time - item.startTime,
-                duration: item.duration,
-                displayInterval: item.displayInterval,
-                displayDirection: item.displayDirection,
-                hideInterval: item.hideInterval,
-                hideDirection: item.hideDirection,
-              }
-            : undefined,
-      });
-      ctx.restore();
-    });
-  }
+    : [];
+  // Images, shapes and telops share one layer space so explicit layer values
+  // compose across item types (YMM4-style). Characters sit between the default
+  // image (3) and text (4) layers unless an item overrides them.
+  const visuals: VisualLayerItem[] = [...images, ...shapes, ...texts];
+  const charactersVisible =
+    isTrackVisible(tracks, 'character') && options.showCharacters !== false;
+  planVisualLayers(visuals).forEach((step) => {
+    if (step.kind === 'characters') {
+      if (charactersVisible) drawCharacters(ctx, options, activeVoice, voices);
+      return;
+    }
+    const item = step.item;
+    if (item.type === 'shape') {
+      drawShapeItem(ctx, item, time);
+    } else if (item.type === 'image') {
+      drawImageItem(ctx, item, time);
+    } else {
+      drawTextItem(ctx, item, time, width, height);
+    }
+  });
 
   if (options.showTerminal !== false && activeVoice?.terminal?.cmd) {
     drawTerminalWindow(ctx, width, activeVoice.terminal);
