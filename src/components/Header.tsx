@@ -18,6 +18,8 @@ import {
   FileText,
   FileJson,
   FileWarning,
+  MoreHorizontal,
+  RefreshCw,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -92,7 +94,9 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const videoInputRef = useRef<HTMLInputElement | null>(null);
   const recentMenuRef = useRef<HTMLDivElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const [isRecentOpen, setIsRecentOpen] = useState(false);
+  const [isMoreOpen, setIsMoreOpen] = useState(false);
 
   useEffect(() => {
     if (!isRecentOpen) return;
@@ -102,6 +106,15 @@ export const Header: React.FC<HeaderProps> = ({
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
   }, [isRecentOpen]);
+
+  useEffect(() => {
+    if (!isMoreOpen) return;
+    const close = (event: PointerEvent) => {
+      if (!moreMenuRef.current?.contains(event.target as Node)) setIsMoreOpen(false);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [isMoreOpen]);
 
   useEffect(() => {
     if (recentProjects.length === 0) setIsRecentOpen(false);
@@ -139,6 +152,12 @@ export const Header: React.FC<HeaderProps> = ({
   const fileName = projectPath ? projectPath.split('/').pop() : null;
   const tooltipPath = projectPath || 'Autosaved at ~/.config/voix/autosave.voix.yaml';
 
+  const handleReloadScreen = () => {
+    if (window.confirm('Reload the screen? Unsaved changes since the last autosave will be lost.')) {
+      window.location.reload();
+    }
+  };
+
   return (
     <header className="relative z-30 h-12 bg-[#101112] border-b border-[#222426] px-4 flex items-center justify-between select-none flex-shrink-0">
       {/* Left: Brand, project title, file actions */}
@@ -152,12 +171,12 @@ export const Header: React.FC<HeaderProps> = ({
 
         <span className="text-[#3c4043] font-mono text-xs">/</span>
 
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-1 min-w-0 overflow-hidden">
           <input
             type="text"
             value={projectName}
             onChange={(e) => onProjectNameChange(e.target.value)}
-            className="bg-transparent text-xs text-[#a8aaa8] hover:text-[#e3e3e3] focus:text-[#e3e3e3] rounded px-1.5 py-0.5 outline-none transition w-36 border border-transparent focus:border-[#3c4043]"
+            className="bg-transparent text-xs text-[#a8aaa8] hover:text-[#e3e3e3] focus:text-[#e3e3e3] rounded px-1.5 py-0.5 outline-none transition w-36 max-w-full min-w-0 border border-transparent focus:border-[#3c4043]"
             placeholder="Untitled"
           />
           {isDirty && (
@@ -167,7 +186,7 @@ export const Header: React.FC<HeaderProps> = ({
             />
           )}
           <span
-            className="text-[10px] font-mono text-[#5f6368] truncate max-w-[140px] hidden xl:inline"
+            className="text-[10px] font-mono text-[#5f6368] truncate max-w-[140px] hidden 2xl:inline"
             title={tooltipPath}
           >
             {fileName || 'autosave'}
@@ -196,7 +215,7 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
           {onOpenRecentProject && recentProjects.length > 0 && (
-            <div ref={recentMenuRef} className="relative">
+            <div ref={recentMenuRef} className="relative hidden lg:block">
               <button
                 type="button"
                 onClick={() => setIsRecentOpen((value) => !value)}
@@ -316,7 +335,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               type="button"
               onClick={onOpenAssets}
-              className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-[#c4c7c5] transition"
+              className="hidden xl:inline-flex items-center justify-center p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-[#c4c7c5] transition"
               title="Asset audit (find and relink missing files)"
             >
               <FileWarning className="w-3.5 h-3.5" />
@@ -345,7 +364,7 @@ export const Header: React.FC<HeaderProps> = ({
           ) : (
             <Upload className="w-3.5 h-3.5 text-[#8ab4f8]" />
           )}
-          <span>{hasVideo ? 'Change Video' : '+ Video'}</span>
+          <span className="hidden xl:inline">{hasVideo ? 'Change Video' : '+ Video'}</span>
         </button>
 
         {hasVideo && (
@@ -357,19 +376,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Auto-generate dialogue clips from detected speech"
           >
             <Layers className={`w-3.5 h-3.5 ${isTranscribing ? 'animate-spin' : ''}`} />
-            <span>{isTranscribing ? 'Transcribing...' : 'Auto Captions'}</span>
-          </button>
-        )}
-
-        {onImportYmmp && (
-          <button
-            type="button"
-            onClick={onImportYmmp}
-            className="px-2.5 py-1 bg-[#151619] hover:bg-[#1f2126] text-[#c4c7c5] hover:text-white text-xs font-mono rounded-sm border border-[#282a2e] flex items-center gap-1.5 transition active:scale-95"
-            title="Import a Yukkuri Movie Maker 4 project (.ymmp)"
-          >
-            <FileJson className="w-3.5 h-3.5 text-[#f8b26a]" />
-            <span>Import YMM4</span>
+            <span className="hidden xl:inline">{isTranscribing ? 'Transcribing...' : 'Auto Captions'}</span>
           </button>
         )}
 
@@ -380,7 +387,7 @@ export const Header: React.FC<HeaderProps> = ({
           title="Import SubRip (.srt) subtitles into the text lane"
         >
           <FileText className="w-3.5 h-3.5 text-[#8ab4f8]" />
-          <span>Import SRT</span>
+          <span className="hidden xl:inline">Import SRT</span>
         </button>
 
         {onExportSubtitles && (
@@ -391,7 +398,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Export the voice-line timing as SubRip (.srt) subtitles"
           >
             <Download className="w-3.5 h-3.5 text-[#8ab4f8]" />
-            <span>Export SRT</span>
+            <span className="hidden xl:inline">Export SRT</span>
           </button>
         )}
 
@@ -402,13 +409,68 @@ export const Header: React.FC<HeaderProps> = ({
           title="Draft a Japanese commentary script from the video"
         >
           <FileText className="w-3.5 h-3.5 text-[#a8aaa8]" />
-          <span>Script Draft</span>
+          <span className="hidden xl:inline">Script Draft</span>
         </button>
+
+        {onImportYmmp && (
+          <div ref={moreMenuRef} className="relative">
+            <button
+              type="button"
+              onClick={() => setIsMoreOpen((value) => !value)}
+              className={`p-1.5 rounded-sm border transition ${
+                isMoreOpen
+                  ? 'bg-[#222427] text-[#8ab4f8] border-[#2c2e32]'
+                  : 'bg-[#151619] text-[#8e918f] hover:text-[#c4c7c5] border-[#282a2e]'
+              }`}
+              title="More actions"
+              aria-haspopup="menu"
+              aria-expanded={isMoreOpen}
+            >
+              <MoreHorizontal className="w-3.5 h-3.5" />
+            </button>
+            {isMoreOpen && (
+              <div
+                role="menu"
+                className="absolute right-0 top-full mt-2 z-[70] w-64 bg-[#16181b] border border-[#2c2e32] rounded-sm overflow-hidden"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIsMoreOpen(false);
+                    onImportYmmp();
+                  }}
+                  className="w-full text-left px-3 py-2 hover:bg-[#202226] transition"
+                  title="Import a Yukkuri Movie Maker 4 project (.ymmp)"
+                >
+                  <span className="flex items-center gap-2 text-[11px] text-[#e3e3e3]">
+                    <FileJson className="w-3 h-3 text-[#f8b26a] flex-shrink-0" />
+                    Import YMM4 project
+                  </span>
+                  <span className="block mt-0.5 pl-[20px] text-[10px] font-mono text-[#6f7276]">
+                    .ymmp — Yukkuri Movie Maker 4
+                  </span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Right: Tools & export */}
       <div className="flex items-center gap-1.5 flex-shrink-0">
-        <span className="text-[10px] font-mono text-[#5f6368] mr-1">{itemCount} items</span>
+        <span className="text-[10px] font-mono text-[#5f6368] mr-1 hidden xl:inline">
+          {itemCount} items
+        </span>
+        <button
+          type="button"
+          onClick={handleReloadScreen}
+          className="p-1.5 rounded-sm bg-[#151619] hover:bg-[#1f2126] text-[#a8aaa8] hover:text-white border border-[#282a2e] transition"
+          title="Reload screen"
+          aria-label="Reload screen"
+        >
+          <RefreshCw className="w-3.5 h-3.5" />
+        </button>
         <button
           type="button"
           onClick={onOpenCharacterSettings}

@@ -77,8 +77,8 @@ interface VideoPreviewProps {
   loading?: boolean;
 }
 
-/** Upper bound for the preview backing store: full 4K redraws are costly in WebKitGTK. */
-const PREVIEW_MAX_DIMENSION = 2560;
+/** Upper bound for the preview backing store; 4K is enough for any project. */
+const PREVIEW_MAX_DIMENSION = 3840;
 
 /**
  * Which top corner of a tachie should carry the resize grip, and where does the
@@ -165,6 +165,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   loading = false,
 }) => {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const previewAreaRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -512,19 +513,26 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, [activeAudioUrl, isMuted]);
 
-  // Match the canvas backing store to its on-screen size (including HiDPI)
-  // instead of downscaling everything to 720p. Rendering above the project
-  // resolution adds no detail, and a dimension cap keeps 4K previews smooth.
+  // Fit the preview frame inside the available area while preserving the
+  // project aspect ratio, then match the canvas backing store to the displayed
+  // size (including HiDPI). The old code stretched the canvas to whatever
+  // shape the flex row left behind, so widening the window distorted video.
   useEffect(() => {
     const canvas = canvasRef.current;
-    const container = containerRef.current;
-    if (!canvas || !container) return;
+    const frame = containerRef.current;
+    const area = previewAreaRef.current;
+    if (!canvas || !frame || !area) return;
 
     const resize = () => {
-      const rect = container.getBoundingClientRect();
+      const rect = area.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+      const fit = Math.min(rect.width / width, rect.height / height, 1);
+      const cssWidth = Math.max(2, Math.round(width * fit));
+      const cssHeight = Math.max(2, Math.round(height * fit));
+      frame.style.width = `${cssWidth}px`;
+      frame.style.height = `${cssHeight}px`;
+
       const dpr = window.devicePixelRatio || 1;
-      const cssWidth = rect.width > 0 ? rect.width : width;
-      const cssHeight = rect.height > 0 ? rect.height : height;
       const scale = Math.min(
         dpr,
         width / Math.max(1, cssWidth),
@@ -544,7 +552,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     let observer: ResizeObserver | null = null;
     if (typeof ResizeObserver !== 'undefined') {
       observer = new ResizeObserver(resize);
-      observer.observe(container);
+      observer.observe(area);
     }
     return () => {
       window.removeEventListener('resize', resize);
@@ -1160,20 +1168,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const visualOutline = visualOutlineItem ? visualItemBoundsAt(visualOutlineItem) : null;
 
   return (
-    <div className="flex flex-col bg-[#111214] rounded-none overflow-hidden border border-[#26282c]">
+    <div className="flex flex-col bg-[#111214] rounded-none overflow-hidden border border-[#26282c] h-full min-h-0">
       <div
-        ref={containerRef}
-        className="relative w-full bg-[#0a0a0c] flex items-center justify-center overflow-hidden"
-        style={{ aspectRatio: `${width} / ${height}`, backgroundColor: backgroundColor || '#0a0a0c' }}
+        ref={previewAreaRef}
+        className="relative flex-1 min-h-0 w-full bg-[#0a0a0c] flex items-center justify-center overflow-hidden"
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
-        }}
-        onPointerLeave={() => {
-          if (!characterDragRef.current && !characterScaleDragRef.current && !visualDragRef.current) {
-            setHoveredCharacterId(null);
-            setHoveredVisualItemId(null);
-          }
         }}
         onDrop={(e) => {
           e.preventDefault();
@@ -1182,6 +1183,17 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           if (file) onVideoDrop?.(file);
         }}
       >
+        <div
+          ref={containerRef}
+          className="relative w-full max-w-full overflow-hidden"
+          style={{ aspectRatio: `${width} / ${height}`, backgroundColor: backgroundColor || '#0a0a0c' }}
+          onPointerLeave={() => {
+            if (!characterDragRef.current && !characterScaleDragRef.current && !visualDragRef.current) {
+              setHoveredCharacterId(null);
+              setHoveredVisualItemId(null);
+            }
+          }}
+        >
         {videoSrc ? (
           <>
             <video
@@ -1379,9 +1391,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             />
           </>
         )}
+        </div>
       </div>
 
-      <div className="px-3.5 py-2 bg-[#141517] flex items-center justify-between gap-3 border-t border-[#222428]">
+      <div className="flex-shrink-0 px-3.5 py-2 bg-[#141517] flex items-center justify-between gap-3 border-t border-[#222428]">
         <div className="flex items-center gap-1.5">
           <button
             onClick={onTogglePlay}
@@ -1464,7 +1477,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           <button
             onClick={() => {
-              if (containerRef.current?.requestFullscreen) containerRef.current.requestFullscreen();
+              if (previewAreaRef.current?.requestFullscreen) previewAreaRef.current.requestFullscreen();
             }}
             className="p-1.5 rounded-sm hover:bg-[#202226] text-[#9ca3af] hover:text-white border border-transparent hover:border-[#2a2c30] transition"
             title="Fullscreen"
