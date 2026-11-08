@@ -470,7 +470,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <label className="text-xs font-medium text-[#c4c7c5]">Active Inference Provider</label>
                   <div className="grid grid-cols-2 gap-2">
                     {[
-                      { id: 'gemini' as const, title: 'Cloud Gemini 2.0 Flash', desc: 'Google AI Studio (Fast, Free Key, Vision support)' },
+                      { id: 'gemini' as const, title: 'Cloud Gemini 2.5 Flash', desc: 'Google AI Studio (Fast, Free Key, Vision support)' },
                       { id: 'remote_ollama' as const, title: 'Remote Ollama (LAN Desktop)', desc: 'Offload to home desktop PC via local network' },
                       { id: 'remote_openai' as const, title: 'Remote OpenAI / vLLM', desc: 'vLLM, LocalAI, or custom OpenAI-compatible server' },
                       { id: 'local_persona' as const, title: 'Offline Rule Engine', desc: 'Zero network, deterministic template engine' },

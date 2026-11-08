@@ -210,7 +210,7 @@ async function callGeminiApi(action: AiAction, text: string, apiKey: string): Pr
       break;
   }
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
@@ -252,21 +252,27 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
   const hasVideoVision = videoKeyframes.length > 0;
 
   const baseInstructions = hasVideoVision
-    ? `添付された画像はユーザーが編集中の動画から時系列順に抽出したスクリーンショット（キーフレーム）です。
-動画で実際に何が起きているか（ゲームの進行、敵の出現、ハプニング、場面展開など）を視覚的に細かく読み取り、
-動画の展開と100%シンクロした臨場感のある実況・解説掛け合い台本を${lineCount}行作成してください！
-トピックの補足情報: ${topic || 'ゲーム実況'}
-※すべてのセリフ（text）は必ず自然な日本語で生成してください。`
-    : `以下のトピックに基づいて、キャラクター同士のテンポが良い魅力的な掛け合い台本を${lineCount}行作成してください。
+    ? `添付された画像は、ユーザーが編集中の動画から時系列順に抽出したスクリーンショット（キーフレーム）です。
+【動画の観察とAI独自の演出】
+動画の各画面で何が起きているか（ゲームの進行状況、プレイヤーや敵の動き、画面内のテキストやUI、ハプニング、ミスや好プレイ、場面展開）を深く視覚的に読み取ってください。
+「今回は〜を本気でプレイしていくよ」「神技プレイを目に焼き付けるといいよ」のような固定テンプレート・定型文は一切使わず、
+映像の内容に対してキャラクター達がリアルタイムに感情を込めて反応・ツッコミ・歓声をあげる、完全オリジナルの掛け合い台本を${lineCount}行作成してください！
+トピックの補足情報: ${topic || '実況動画'}
+※すべてのセリフ（text）は必ず自然でテンポの良い日本語で生成してください。`
+    : `以下のトピックに基づいて、キャラクター達が定型句にとらわれず、自由で生き生きとした掛け合いを行う完全オリジナルの台本を${lineCount}行作成してください。
 トピック: ${topic || '実況動画'}
-※すべてのセリフ（text）は必ず自然な日本語で生成してください。`;
+※すべてのセリフ（text）は必ず自然でテンポの良い日本語で生成してください。`;
 
-  const systemPrompt = `あなたはYouTube・ニコニコ動画の動画編集アプリ「Voix」の動画監督AIです。
+  const systemPrompt = `あなたはYouTubeやニコニコ動画で大人気の動画を演出する、クリエイティブな動画監督AIです。
 
-【最重要・言語指定】
-生成するセリフ（text）は、100%必ずすべて自然でテンポの良い「日本語」で出力してください。
-英語や他言語のセリフは絶対に出力せず、YouTube/ニコニコ動画で定番の魅力的な日本語掛け合い会話（各キャラクターの語尾や口調・ペルソナを徹底的に反映）で出力してください。
-All dialogue 'text' field values MUST be in natural Japanese only. Do NOT output English dialogue.
+【最重要・演出指針】
+1. 固定テンプレート・定型文の完全禁止:
+   「今回は話題の〇〇を本気でプレイしていくよ」「油断すると即ゲームオーバーですよ」「神技プレイを目に焼き付けるといいよ」等の、ありきたりな定型文・テンプレートは絶対に使わないでください。
+   AIならではの柔軟な発想で、映像の状況やハプニングに即座に反応する生き生きとした会話を組み立ててください。
+2. キャラクターの個性（ペルソナ）:
+   各キャラクターの口調・一人称・性格を自然にセリフに反映してください（例: ずんだもんは「ボク」「〜なのだ」「〜のだ」、四国めたんは上品なお嬢様ツッコミ「わたくし」「〜ですわ」「〜かしら」等）。
+3. すべて自然な日本語:
+   生成するセリフ（text）は、100%必ずすべて自然で魅力的な「日本語」で出力してください。
 
 ${baseInstructions}
 動画スタイル: ${style}
@@ -278,27 +284,24 @@ ${charProfiles}
 [
   {
     "speaker": "${char1.name}",
-    "text": "日本語のセリフ",
-    "expression": "smile",
+    "text": "画面の展開に即座に反応する生き生きとしたセリフ",
+    "expression": "shock",
     "se": "pop",
     "anim": "bounce"
   },
   {
     "speaker": "${char2.name}",
-    "text": "日本語のセリフ",
-    "expression": "default",
-    "cmd": "pacman -Syu",
-    "output": ":: Synchronizing package databases...",
+    "text": "それに対する自然なツッコミやリアクションのセリフ",
+    "expression": "smile",
     "se": "chime"
   }
 ]
-※ expression: "default", "smile", "shock", "trouble", "angry"
+※ expression: キャラクターに合った表情 ("default", "smile", "shock", "trouble", "angry", "explain_right", "point_up" など)
 ※ se (任意): "pop", "chime", "click", "punch", "error", "success", "laser", "kira", "question"
 ※ anim (任意): "bounce", "pop", "shake", "nod"
-※ cmd / output (技術解説時任意): 画面上に表示するLinuxターミナルコマンドとその出力
-※ 重ねて警告: セリフ(text)は必ず自然な日本語で出力してください。`;
+※ 重ねて警告: 定型文は避け、映像に合わせたオリジナルの日本語セリフを出力してください。`;
 
-  // 1. Google Gemini 2.0 Flash (マルチモーダル動画認識対応)
+  // 1. Google Gemini 2.5 Flash (マルチモーダル動画認識対応)
   if ((provider === 'gemini' || !remoteEndpoint) && apiKey?.trim()) {
     try {
       const parts: any[] = [{ text: systemPrompt }];
@@ -316,7 +319,7 @@ ${charProfiles}
         });
       }
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey.trim()}`, {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts }] }),
@@ -325,11 +328,19 @@ ${charProfiles}
       if (res.ok) {
         const data = await res.json();
         const rawJsonText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const parsed = parseScriptJson(rawJsonText, characters, char1);
+        const parsed = parseScriptJson(rawJsonText, characters, char1, true);
         if (parsed.length > 0) return parsed;
+        throw new Error('Geminiから有効な台本JSONを取得できませんでした。もう一度お試しください。');
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error?.message || `HTTP ${res.status}`;
+        throw new Error(`Gemini API エラー: ${errMsg}`);
       }
     } catch (e) {
-      console.warn('Gemini multimodal call failed, falling back:', e);
+      console.warn('Gemini multimodal call failed:', e);
+      if (provider === 'gemini') {
+        throw e;
+      }
     }
   }
 
@@ -351,11 +362,12 @@ ${charProfiles}
 
       if (res.ok) {
         const data = await res.json();
-        const parsed = parseScriptJson(data.response || '', characters, char1);
+        const parsed = parseScriptJson(data.response || '', characters, char1, true);
         if (parsed.length > 0) return parsed;
       }
     } catch (e) {
       console.warn('Remote Ollama call failed:', e);
+      throw e;
     }
   }
 
@@ -379,22 +391,24 @@ ${charProfiles}
       if (res.ok) {
         const data = await res.json();
         const content = data.choices?.[0]?.message?.content || '';
-        const parsed = parseScriptJson(content, characters, char1);
+        const parsed = parseScriptJson(content, characters, char1, true);
         if (parsed.length > 0) return parsed;
       }
     } catch (e) {
       console.warn('Remote OpenAI-compatible call failed:', e);
+      throw e;
     }
   }
 
-  // 4. オフライン・スマート動的生成 (ゼロ遅延で確実に生成)
+  // 4. オフライン・スマート動的生成 (オフライン指定時のみ)
   return generateDynamicScript(topic, characters, style, lineCount);
 }
 
 function parseScriptJson(
   rawText: string,
   characters: { id: string; name: string }[],
-  defaultChar: { id: string; name: string }
+  defaultChar: { id: string; name: string },
+  isAiGenerated: boolean = false
 ): ScriptLinePrompt[] {
   const jsonMatch = rawText.match(/\[[\s\S]*\]/);
   if (!jsonMatch) return [];
@@ -414,7 +428,8 @@ function parseScriptJson(
     return list.map((item) => {
       const matchedChar =
         characters.find((c) => c.name.includes(item.speaker) || item.speaker.includes(c.name)) || defaultChar;
-      const formatted = formatSpeechWithPersona(matchedChar.name, item.text);
+      const cleanText = (item.text || '').trim().replace(/^["']|["']$/g, '');
+      const formatted = isAiGenerated ? cleanText : formatSpeechWithPersona(matchedChar.name, cleanText);
       const expr = (item.expression as any) || inferExpressionFromText(formatted);
 
       let terminal: { cmd: string; output?: string } | undefined = undefined;

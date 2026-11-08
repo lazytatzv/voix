@@ -93,7 +93,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
         try {
           keyframes = await invoke<string[]>('extract_video_keyframes', {
             videoPath: rawVideoPath,
-            count: 5,
+            count: 6,
           });
         } catch (e) {
           console.warn('Keyframe extraction warning:', e);
@@ -106,7 +106,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           : provider === 'remote_openai'
           ? `Sending prompt to remote OpenAI server...`
           : apiKey.trim()
-          ? 'Generating Japanese script with Gemini 2.0 Flash...'
+          ? 'Generating Japanese script with Gemini 2.5 Flash...'
           : 'Generating Japanese script with the offline persona engine...'
       );
 
