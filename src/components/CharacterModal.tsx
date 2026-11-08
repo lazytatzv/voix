@@ -96,13 +96,25 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   const currentSpeaker = resolvedStyle?.speaker;
   const currentStyle = resolvedStyle?.style;
 
-  const providerOptions =
-    providers.length > 0
-      ? providers.map((provider) => ({
-          value: provider.providerId,
-          label: provider.providerName,
-        }))
-      : [{ value: char?.ttsProviderId ?? 'voicevox', label: 'VOICEVOX (offline)' }];
+  const defaultProviderOptions = [
+    { value: 'voicevox', label: 'VOICEVOX (localhost:50021)' },
+    { value: 'coeiroink', label: 'COEIROINK (localhost:50032)' },
+  ];
+
+  const providerOptions = (() => {
+    if (providers.length > 0) {
+      const opts = providers.map((provider) => ({
+        value: provider.providerId,
+        label: provider.providerName,
+      }));
+      // Always guarantee COEIROINK is selectable
+      if (!opts.some((o) => o.value === 'coeiroink')) {
+        opts.push({ value: 'coeiroink', label: 'COEIROINK (localhost:50032)' });
+      }
+      return opts;
+    }
+    return defaultProviderOptions;
+  })();
 
   const speakerOptions =
     speakers.length > 0
@@ -370,11 +382,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
       ttsProviderId: 'coeiroink',
       speakerId: preset.styles[0]?.id ?? 0,
       styleId: preset.styles[0]?.id ?? 0,
-      avatar: {
-        idle: '/characters/metan.png',
-        speaking: '/characters/metan.png',
-        blinking: '/characters/metan.png',
-      },
+      avatar: DEV_GIRL_CHARACTER.avatar,
       subtitleStyle: {
         ...SUBTITLE_PRESETS[0].style,
         outerStrokeColor: preset.color,
@@ -398,9 +406,12 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
     stopAudition();
     const provider = providers.find((entry) => entry.providerId === providerId);
     const firstStyle = provider?.speakers[0]?.styles[0];
+    const fallbackId = providerId === 'coeiroink' ? 0 : 3;
+    const targetId = firstStyle !== undefined ? firstStyle.id : fallbackId;
     onUpdateCharacter(char.id, {
       ttsProviderId: providerId,
-      ...(firstStyle ? { speakerId: firstStyle.id, styleId: firstStyle.id } : {}),
+      speakerId: targetId,
+      styleId: targetId,
     });
   };
 
@@ -615,9 +626,16 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         />
                         <span className="text-[#e3e3e3] truncate">{p.name}</span>
                       </div>
-                      <span className="text-[10px] font-mono text-[#6f7377] flex-shrink-0">
-                        {p.styles.length} styles
-                      </span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        {p.uuid === '3c37646f-3881-5374-2a83-149267990abc' && (
+                          <span className="text-[9px] px-1 py-0.2 rounded bg-[#064e3b] text-[#6ee7b7] font-mono">
+                            Installed
+                          </span>
+                        )}
+                        <span className="text-[10px] font-mono text-[#6f7377]">
+                          {p.styles.length} styles
+                        </span>
+                      </div>
                     </button>
                   ))}
                 </div>

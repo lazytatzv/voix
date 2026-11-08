@@ -2437,9 +2437,10 @@ export function App() {
             id: newId('voice'),
             type: 'voice',
             layer: 2,
-            name: `${character.name}: ${line.text.slice(0, 12)}`,
+            name: `${character.name}: ${(line.subtitleText || line.text).slice(0, 12)}`,
             characterId: character.id,
             text: line.text,
+            subtitleText: line.subtitleText || line.text,
             expression: line.expression || 'default',
             startTime: currentStart,
             duration,
@@ -3370,6 +3371,7 @@ export function App() {
         isOpen={isAiVideoModalOpen}
         onClose={() => setIsAiVideoModalOpen(false)}
         characters={characters}
+        existingVoiceItems={project.items.filter((item): item is VoiceItem => item.type === 'voice')}
         onGenerateVideo={handleGenerateFullAiVideo}
         isGenerating={isGeneratingAiVideo}
         rawVideoPath={rawVideoPath}

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Wand2, Check, Bot, Video, ExternalLink, Sparkles } from 'lucide-react';
-import { Character } from '../types';
+import { X, Loader2, Wand2, Check, Bot, Video, ExternalLink, Sparkles, MessageSquareQuote } from 'lucide-react';
+import { Character, VoiceItem } from '../types';
 import { generateFullScript, ScriptLinePrompt, AiProviderType } from '../services/aiService';
 import { loadSettingsFromConfig, saveSettingsToConfig } from '../services/configService';
 import { invoke } from '@tauri-apps/api/core';
@@ -9,6 +9,7 @@ interface AiVideoGeneratorModalProps {
   isOpen: boolean;
   onClose: () => void;
   characters: Character[];
+  existingVoiceItems?: VoiceItem[];
   onGenerateVideo: (scriptLines: ScriptLinePrompt[]) => Promise<void>;
   isGenerating: boolean;
   rawVideoPath?: string | null;
@@ -19,16 +20,20 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   isOpen,
   onClose,
   characters,
+  existingVoiceItems = [],
   onGenerateVideo,
   isGenerating,
   rawVideoPath,
   hasVideo,
 }) => {
+  const [generatorMode, setGeneratorMode] = useState<'new' | 'brush_up'>(() =>
+    existingVoiceItems && existingVoiceItems.length > 0 ? 'brush_up' : 'new'
+  );
   const [topic, setTopic] = useState('');
   const [autoLineCount, setAutoLineCount] = useState<boolean>(true);
   const [lineCount, setLineCount] = useState<number>(6);
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>(() =>
-    characters.slice(0, 2).map((c) => c.id)
+    characters.slice(0, 3).map((c) => c.id)
   );
   const [provider, setProvider] = useState<AiProviderType>(() => {
     return (localStorage.getItem('voix_ai_provider') as AiProviderType) || 'gemini';
@@ -106,7 +111,9 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           : provider === 'remote_openai'
           ? `Sending prompt to remote OpenAI server...`
           : apiKey.trim()
-          ? 'Choreographing Japanese script, expressions & pacing with Gemini 3.x Flash...'
+          ? generatorMode === 'brush_up'
+            ? 'Polishing & brushing up Japanese script with Gemini 3.x Flash...'
+            : 'Choreographing Japanese script, expressions & pacing with Gemini 3.x Flash...'
           : 'Generating Japanese script with the offline persona engine...'
       );
 
@@ -121,9 +128,29 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
         remoteEndpoint: remoteEndpoint.trim() || undefined,
         remoteModel: remoteModel.trim() || undefined,
         videoKeyframes: keyframes,
+        mode: generatorMode,
+        existingDialogue:
+          generatorMode === 'brush_up' && existingVoiceItems.length > 0
+            ? existingVoiceItems.map((item) => {
+                const char = characters.find((c) => c.id === item.characterId);
+                return {
+                  speaker: char?.name || 'Speaker',
+                  text: item.text,
+                  subtitleText: item.subtitleText,
+                  expression: item.expression,
+                };
+              })
+            : undefined,
       });
 
-      setStatusMessage(`Synthesizing ${script.length} audio clips with VOICEVOX...`);
+      const distinctEngines = Array.from(
+        new Set(
+          activeChars.map((c) => (c.ttsProviderId === 'coeiroink' ? 'COEIROINK' : 'VOICEVOX'))
+        )
+      );
+      setStatusMessage(
+        `Synthesizing ${script.length} audio clips with ${distinctEngines.join(' & ')}...`
+      );
       await onGenerateVideo(script);
       onClose();
     } catch (e: unknown) {
@@ -165,6 +192,67 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
 
         {/* Body */}
         <div className="p-5 space-y-4 overflow-y-auto">
+          {/* Mode Switcher (if existing dialogue is on timeline) */}
+          {existingVoiceItems.length > 0 && (
+            <div className="flex rounded-md bg-[#16181b] p-0.5 border border-[#26282d]">
+              <button
+                type="button"
+                onClick={() => setGeneratorMode('new')}
+                className={`flex-1 py-1 px-3 rounded text-xs font-medium transition flex items-center justify-center gap-1.5 ${
+                  generatorMode === 'new'
+                    ? 'bg-[#282a2e] text-white shadow-sm'
+                    : 'text-[#8e918f] hover:text-[#e3e3e3]'
+                }`}
+              >
+                <Wand2 className="w-3.5 h-3.5 text-[#8ab4f8]" />
+                <span>Draft New Script</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGeneratorMode('brush_up')}
+                className={`flex-1 py-1 px-3 rounded text-xs font-medium transition flex items-center justify-center gap-1.5 ${
+                  generatorMode === 'brush_up'
+                    ? 'bg-[#282a2e] text-[#d8b4fe] shadow-sm'
+                    : 'text-[#8e918f] hover:text-[#e3e3e3]'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#a78bfa]" />
+                <span>Brush Up Existing ({existingVoiceItems.length} lines)</span>
+              </button>
+            </div>
+          )}
+
+          {/* Existing Dialogue Preview (in Brush Up Mode) */}
+          {generatorMode === 'brush_up' && existingVoiceItems.length > 0 && (
+            <div className="p-2.5 rounded bg-[#16181b] border border-[#26282d] space-y-1.5">
+              <div className="text-[11px] font-mono uppercase tracking-wider text-[#8e918f] flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <MessageSquareQuote className="w-3.5 h-3.5 text-[#a78bfa]" />
+                  Current Timeline Dialogue
+                </span>
+                <span className="text-[#a78bfa]">{existingVoiceItems.length} lines ready to polish</span>
+              </div>
+              <div className="max-h-24 overflow-y-auto space-y-1 pr-1 font-mono text-[11px]">
+                {existingVoiceItems.map((item, idx) => {
+                  const char = characters.find((c) => c.id === item.characterId);
+                  return (
+                    <div key={item.id} className="text-[#c4c7c5] flex items-baseline gap-1.5 truncate">
+                      <span className="text-[#8ab4f8] font-bold flex-shrink-0">
+                        {idx + 1}. {char?.name || 'Speaker'}:
+                      </span>
+                      <span className="truncate">{item.subtitleText || item.text}</span>
+                      {item.expression && item.expression !== 'default' && (
+                        <span className="text-[9px] px-1 rounded bg-[#202226] text-[#e0a82e] flex-shrink-0">
+                          {item.expression}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Generation backend selection */}
           <div>
             <label className="text-[11px] font-mono text-[#c4c7c5] block mb-1.5 uppercase">
@@ -284,14 +372,22 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           {/* Topic / Prompt */}
           <div>
             <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5 flex items-center justify-between">
-              <span>Script Topic & Prompt (Outputs Japanese dialogue)</span>
+              <span>
+                {generatorMode === 'brush_up'
+                  ? 'Refinement Instructions (Optional)'
+                  : 'Script Topic & Prompt (Outputs Japanese dialogue)'}
+              </span>
               <span className="text-[10px] text-[#8e918f]">Outputs Japanese</span>
             </label>
             <textarea
               rows={2}
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="（空欄でOK：動画の画面・文字・出来事をAIがじっくり観察して自動実況・解説します。特定のシチュエーションや追加の指示があれば入力してください）"
+              placeholder={
+                generatorMode === 'brush_up'
+                  ? '（空欄でOK：動画と既存セリフから自動でテンポ・掛け合い・カタカナ読みを磨き上げます。「ツッコミを鋭く」「オチを派手に」等の指示も可能です）'
+                  : '（空欄でOK：動画の画面・文字・出来事をAIがじっくり観察して自動実況・解説します。特定のシチュエーションや追加の指示があれば入力してください）'
+              }
               className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg p-3 text-xs text-[#e3e3e3] outline-none transition resize-none font-normal"
             />
 
@@ -317,6 +413,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {characters.map((char) => {
                 const isSelected = selectedCharIds.includes(char.id);
+                const isCoeiroink = char.ttsProviderId === 'coeiroink';
                 return (
                   <button
                     key={char.id}
@@ -335,10 +432,21 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
                           char.subtitleStyle.outerStrokeColor || char.subtitleStyle.textColor || '#8ab4f8',
                       }}
                     />
-                    <div className="flex-1 truncate">
-                      <div className="text-xs font-medium truncate">{char.name}</div>
+                    <div className="flex-1 min-w-0 truncate">
+                      <div className="text-xs font-medium truncate flex items-center gap-1.5">
+                        <span className="truncate">{char.name}</span>
+                        <span
+                          className={`text-[9px] px-1 py-0.2 rounded font-mono font-medium flex-shrink-0 ${
+                            isCoeiroink
+                              ? 'bg-[#3b1d54] text-[#d8b4fe] border border-[#6b21a8]'
+                              : 'bg-[#172554] text-[#93c5fd] border border-[#1e40af]'
+                          }`}
+                        >
+                          {isCoeiroink ? 'COEIROINK' : 'VOICEVOX'}
+                        </span>
+                      </div>
                       <div className="text-[10px] text-[#8e918f] font-mono">
-                        ID: {char.speakerId}
+                        Style ID: {char.speakerId}
                       </div>
                     </div>
                     {isSelected && <Check className="w-3.5 h-3.5 text-[#8ab4f8] flex-shrink-0" />}
@@ -427,13 +535,18 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
 
           <button
             onClick={handleStartGeneration}
-            disabled={(!topic.trim() && !useVideoVision) || isGenerating}
+            disabled={isGenerating || (generatorMode === 'new' && !topic.trim() && !useVideoVision)}
             className="px-5 py-2 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] text-xs font-semibold transition flex items-center gap-2 disabled:opacity-40"
           >
             {isGenerating ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Generating Japanese Script & Audio...</span>
+              </>
+            ) : generatorMode === 'brush_up' ? (
+              <>
+                <Sparkles className="w-3.5 h-3.5 text-[#a78bfa]" />
+                <span>Brush Up Script & Audio</span>
               </>
             ) : (
               <>

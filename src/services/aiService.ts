@@ -19,6 +19,7 @@ export interface ScriptLinePrompt {
   characterId: string;
   characterName: string;
   text: string;
+  subtitleText?: string; // 画面字幕用（英単語は本来の英語スペル、textは音声合成エンジン用のカタカナ読み）
   expression?: string;
   pauseAfter?: number; // 秒単位の間・ポーズ時間（タメ、ツッコミの余韻、テンポ演出）
   se?: string;
@@ -29,11 +30,19 @@ export interface ScriptLinePrompt {
   };
 }
 
+export interface ExistingDialogueLine {
+  speaker: string;
+  text: string;
+  subtitleText?: string;
+  expression?: string;
+  pauseAfter?: number;
+}
+
 export type AiProviderType = 'gemini' | 'remote_ollama' | 'remote_openai' | 'local_persona';
 
 export interface GenerateFullScriptRequest {
   topic: string;
-  characters: (Character | { id: string; name: string; avatar?: CharacterAvatar })[];
+  characters: (Character | { id: string; name: string; avatar?: CharacterAvatar; ttsProviderId?: string })[];
   style?: 'gaming' | 'tech_review' | 'linux_tech' | 'comedy_banter' | 'shorts_hook' | 'general';
   lineCount?: number;
   autoLineCount?: boolean;
@@ -42,6 +51,8 @@ export interface GenerateFullScriptRequest {
   remoteEndpoint?: string; // e.g. http://192.168.1.100:11434
   remoteModel?: string;    // e.g. qwen2.5:latest, llama3
   videoKeyframes?: string[]; // base64 JPEG keyframes for multimodal video understanding!
+  mode?: 'new' | 'brush_up'; // 新規生成か、既存セリフのブラッシュアップ推敲か
+  existingDialogue?: ExistingDialogueLine[]; // タイムライン上の既存セリフ
 }
 
 /**
@@ -306,6 +317,8 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
     remoteEndpoint,
     remoteModel,
     videoKeyframes = [],
+    mode = 'new',
+    existingDialogue = [],
   } = req;
 
   if (!characters.length) return [];
@@ -319,18 +332,21 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
     else if (c.name.includes('つむぎ')) persona = '一人称「あーし」、語尾は「〜っす」「〜じゃん」。埼玉ギャル。';
     else if (c.name.includes('霊夢') || c.name.toLowerCase().includes('reimu')) persona = '一人称「私」、語尾は「〜よ」「〜わね」「〜でしょ」。常識人・ツッコミ役。';
     else if (c.name.includes('魔理沙') || c.name.toLowerCase().includes('marisa')) persona = '一人称「私」、語尾は「〜ぜ」「〜だな」「〜なのか？」。活発で探究心旺盛。';
+    else if (c.name.includes('Maker') || c.name.includes('つくよみ')) persona = '一人称「私」、礼儀正しく落ち着いた知的な口調。ものづくり・技術解説が好き。';
 
     const charObj = c as Character;
+    const providerTag = charObj.ttsProviderId ? ` [音声合成: ${charObj.ttsProviderId.toUpperCase()}]` : '';
     const exprKeys =
       charObj.avatar?.expressions && Object.keys(charObj.avatar.expressions).length > 0
         ? ['default', ...Object.keys(charObj.avatar.expressions)]
         : ['default', 'smile', 'shock', 'trouble', 'angry'];
     const exprListStr = Array.from(new Set(exprKeys)).join(', ');
 
-    return `- ${c.name}: ${persona}\n  使用可能な表情 (expression): [${exprListStr}]`;
+    return `- ${c.name}${providerTag}: ${persona}\n  使用可能な表情 (expression): [${exprListStr}]`;
   }).join('\n\n');
 
   const hasVideoVision = videoKeyframes.length > 0;
+  const isBrushUp = mode === 'brush_up' && existingDialogue.length > 0;
 
   const lineCountInstruction = autoLineCount
     ? `【クリップ数（セリフ行数）の自動決定】
@@ -338,7 +354,19 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
     : `【セリフ行数】
 指定されたセリフ行数（${lineCount}行）で台本を作成してください。`;
 
-  const baseInstructions = hasVideoVision
+  const brushUpSection = isBrushUp
+    ? `【既存セリフのブラッシュアップ（推敲・改善モード）】
+現在タイムライン上には以下のセリフ（全${existingDialogue.length}行）が既に配置されています:
+${existingDialogue.map((d, i) => `${i + 1}. ${d.speaker}: ${d.subtitleText || d.text}${d.expression ? ` [表情: ${d.expression}]` : ''}`).join('\n')}
+
+上記の既存の会話の流れ・展開を踏まえた上で、動画の映像内容やキャラクターの個性をより活かし、
+掛け合いの面白さ、テンポ感、間のとり方、表情指定、英語のカタカナ読み分けなどを大幅にブラッシュアップ（改善・推敲）した完成版台本を出力してください。
+${topic ? `ユーザーからの推敲・改善指示: ${topic}` : ''}`
+    : '';
+
+  const baseInstructions = isBrushUp
+    ? brushUpSection
+    : hasVideoVision
     ? `添付された画像は、ユーザーが編集中の動画から時系列順に抽出したスクリーンショット（キーフレーム）です。
 【映像の詳細観察とセリフの完全同期】
 画面に映っている具体的な要素（操作画面、キャラクターや敵、文字やUI、マップ、オブジェクトの動き、ハプニングなど）を精密に読み取ってください。
@@ -346,7 +374,7 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
 画面を無視した適当な雑談や、どの動画でも使えるような汎用的なセリフ・定型文は絶対に禁止です。画面内の固有の出来事にしっかり言及してください。
 ${lineCountInstruction}
 ${topic ? `ユーザーからの補足指示: ${topic}` : ''}`
-    : `以下のトピックに基づいて、キャラクター達が定型句にとらわれず、自由で生き生きとした掛け合いを行う完全オリジナルの台本を作成してください。
+    : `以下のトピックに基づいて、キャラクター達が定型句にとらわない、自由で生き生きとした掛け合いを行う完全オリジナルの台本を作成してください。
 トピック: ${topic || '実況動画'}
 ${lineCountInstruction}
 ※すべてのセリフ（text）は必ず自然でテンポの良い日本語で生成してください。`;
@@ -359,15 +387,21 @@ ${lineCountInstruction}
    AIならではの柔軟な発想で、映像の状況やハプニングに即座に反応する生き生きとした会話を組み立ててください。
 2. キャラクターの個性（ペルソナ）:
    各キャラクターの口調・一人称・性格を自然にセリフに反映してください（例: ずんだもんは「ボク」「〜なのだ」「〜のだ」、四国めたんは上品なお嬢様ツッコミ「わたくし」「〜ですわ」「〜かしら」等）。
-3. 表情の自動演出（expression）:
+3. 英語・アルファベット略語のカタカナ読みと字幕分離（最重要）:
+   VOICEVOXやCOEIROINKなどの日本語音声合成エンジンは、英単語やアルファベット略語（例: Ubuntu, ROS2, RViz, Linux, Python, AI, GitHub, API, CPU, FPS, GPU等）をそのまま入力すると正しく発音できません。
+   そのため、必ず以下のように「読み上げ用テキスト（text）」と「画面表示用字幕（subtitleText）」を分けて出力してください:
+   - "text": 音声合成エンジンが滑らかに日本語発音できるように、英単語やアルファベット部分を自然なカタカナ読みに置き換えたセリフ（例: 「ウブントゥでロスツーとアールビズを起動するのだ！」）
+   - "subtitleText": 画面上の字幕テロップとして美しく表示するためのテキスト。英単語は元のきれいな英語スペルのまま残す（例: 「UbuntuでROS2とRVizを起動するのだ！」）
+   ※ 英単語やアルファベットを含まない純粋な日本語文の場合は、"subtitleText" は "text" と同一にするか省略可能です。
+4. 表情の自動演出（expression）:
    各キャラクターのセリフの感情（喜び、驚き、困惑、怒り、真剣、ドヤ顔、焦りなど）やリアクションに合わせて、下記「登場キャラクター設定」に記載された「使用可能な表情 (expression)」の中から、最も相応しい表情IDをセリフごとに必ず厳選してください。
-4. 間のとり方・テンポ演出（pauseAfter）:
+5. 間のとり方・テンポ演出（pauseAfter）:
    掛け合いのテンポ感や面白さを最大化するために、セリフ発話後の「間（秒数）」を "pauseAfter" として指定してください。
    - 畳み掛けるようなツッコミ・速いテンポ: 0.1 〜 0.3 秒
    - 通常の自然な会話の間: 0.4 〜 0.6 秒
    - 驚き・困惑・ツッコミ待ち・落ち・タメ・画面の展開待ち: 0.8 〜 1.5 秒
-5. すべて自然な日本語:
-   生成するセリフ（text）は、100%必ずすべて自然で魅力的な「日本語」で出力してください。
+6. すべて自然な日本語:
+   生成するセリフ（text）は、100%必ずすべて自然で魅力的な日本語で出力してください。
 
 ${baseInstructions}
 動画スタイル・演出: 動画の映像内容、テンポ、画面の雰囲気に合わせてAIが最も面白く自然な構成・スタイルを自動判断してください。
@@ -380,7 +414,8 @@ ${charProfiles}
 [
   {
     "speaker": "${char1.name}",
-    "text": "画面の展開に即座に反応する生き生きとしたセリフ",
+    "text": "ウブントゥでロスツーを動かしてみるのだ！",
+    "subtitleText": "UbuntuでROS2を動かしてみるのだ！",
     "expression": "shock",
     "pauseAfter": 0.8,
     "se": "pop",
@@ -388,12 +423,15 @@ ${charProfiles}
   },
   {
     "speaker": "${char2.name}",
-    "text": "それに対する自然なツッコミやリアクションのセリフ",
+    "text": "画面のターミナルにログが流れていますわね。",
+    "subtitleText": "画面のターミナルにログが流れていますわね。",
     "expression": "smile",
     "pauseAfter": 0.4,
     "se": "chime"
   }
 ]
+※ text: 音声合成エンジン用のセリフ（英単語やアルファベットは正しく発音できるカタカナ読みに変換）
+※ subtitleText: 画面表示用の字幕（英単語は本来の英語スペル表記を維持）
 ※ expression: キャラクターごとの使用可能な表情リストからセリフの感情・文脈に合わせて厳選
 ※ pauseAfter: 発話後の間合いの秒数（0.1〜1.5秒程度。テンポ感やタメに合わせて演出）
 ※ se (任意): "pop", "chime", "click", "punch", "error", "success", "laser", "kira", "question"
@@ -537,6 +575,8 @@ function parseScriptJson(
     const list = JSON.parse(jsonMatch[0]) as {
       speaker: string;
       text: string;
+      subtitleText?: string;
+      subtitle?: string;
       expression?: string;
       pauseAfter?: number;
       pause?: number;
@@ -553,6 +593,9 @@ function parseScriptJson(
         characters.find((c) => c.name.includes(item.speaker) || item.speaker.includes(c.name)) || defaultChar;
       const cleanText = (item.text || '').trim().replace(/^["']|["']$/g, '');
       const formatted = isAiGenerated ? cleanText : formatSpeechWithPersona(matchedChar.name, cleanText);
+
+      const rawSub = item.subtitleText ?? item.subtitle;
+      const subtitleText = rawSub ? String(rawSub).trim().replace(/^["']|["']$/g, '') : undefined;
 
       // AI選定の表情またはテキスト感情からの推論、およびキャラクターの保持表情への正規化
       const rawExpr = item.expression ? String(item.expression).trim() : '';
@@ -578,6 +621,7 @@ function parseScriptJson(
         characterId: matchedChar.id,
         characterName: matchedChar.name,
         text: formatted,
+        subtitleText,
         expression: expr,
         pauseAfter,
         se: item.se ? String(item.se).trim() : undefined,

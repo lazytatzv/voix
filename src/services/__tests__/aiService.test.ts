@@ -102,5 +102,25 @@ describe('aiService', () => {
         expect(line.pauseAfter).toBeGreaterThan(0);
       }
     });
+
+    it('supports brush-up mode with existing dialogue lines', async () => {
+      const script = await generateFullScript({
+        topic: 'ツッコミを鋭く改善',
+        characters: [dummyChar, techGirlChar],
+        mode: 'brush_up',
+        existingDialogue: [
+          { speaker: 'ずんだもん', text: 'UbuntuでROS2を起動したのだ', expression: 'smile' },
+          { speaker: 'Tech Girl', text: 'ログを確認してください。', expression: 'thoughtful' },
+        ],
+        lineCount: 2,
+        provider: 'local_persona',
+      });
+
+      expect(script.length).toBeGreaterThan(0);
+      for (const line of script) {
+        expect(line.text.length).toBeGreaterThan(0);
+        expect(typeof line.pauseAfter).toBe('number');
+      }
+    });
   });
 });
