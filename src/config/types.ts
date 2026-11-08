@@ -229,7 +229,7 @@ export const DEFAULT_CONFIG: VoixConfig = {
   tts: {
     providers: [
       { id: 'voicevox', name: 'VOICEVOX', endpoint: 'http://localhost:50021', enabled: true },
-      { id: 'coeiroink', name: 'COEIROINK', endpoint: 'http://localhost:50031', enabled: true },
+      { id: 'coeiroink', name: 'COEIROINK', endpoint: 'http://localhost:50032', enabled: true },
       { id: 'aivis', name: 'AivisSpeech', endpoint: 'http://localhost:10101', enabled: true },
     ],
   },

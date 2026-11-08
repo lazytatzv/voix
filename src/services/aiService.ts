@@ -210,16 +210,26 @@ async function callGeminiApi(action: AiAction, text: string, apiKey: string): Pr
       break;
   }
 
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-  });
-
-  if (!res.ok) throw new Error(`Gemini API HTTP ${res.status}`);
-  const data = await res.json();
-  const output = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  return output ? output.trim().replace(/^["']|["']$/g, '') : text;
+  const models = ['gemini-3.5-flash', 'gemini-2.5-flash'];
+  let lastErr: any = null;
+  for (const m of models) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const output = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        return output ? output.trim().replace(/^["']|["']$/g, '') : text;
+      }
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  if (lastErr) throw lastErr;
+  return text;
 }
 
 /**
@@ -274,7 +284,7 @@ ${topic ? `ユーザーからの補足指示: ${topic}` : ''}`
    生成するセリフ（text）は、100%必ずすべて自然で魅力的な「日本語」で出力してください。
 
 ${baseInstructions}
-動画スタイル: ${style}
+動画スタイル・演出: 動画の映像内容、テンポ、画面の雰囲気に合わせてAIが最も面白く自然な構成・スタイルを自動判断してください。
 登場キャラクター設定:
 ${charProfiles}
 
@@ -300,7 +310,7 @@ ${charProfiles}
 ※ anim (任意): "bounce", "pop", "shake", "nod"
 ※ 重ねて警告: 定型文は避け、映像に合わせたオリジナルの日本語セリフを出力してください。`;
 
-  // 1. Google Gemini 2.5 Flash (マルチモーダル動画認識対応)
+  // 1. Google Gemini 3.x / 2.5 Flash (マルチモーダル動画認識対応)
   if ((provider === 'gemini' || !remoteEndpoint) && apiKey?.trim()) {
     try {
       const parts: any[] = [{ text: systemPrompt }];
@@ -327,22 +337,34 @@ ${charProfiles}
         });
       }
 
-      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey.trim()}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts }] }),
-      });
+      const candidateModels = ['gemini-3.5-flash', 'gemini-2.5-flash'];
+      let lastError: Error | null = null;
 
-      if (res.ok) {
-        const data = await res.json();
-        const rawJsonText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-        const parsed = parseScriptJson(rawJsonText, characters, char1, true);
-        if (parsed.length > 0) return parsed;
-        throw new Error('Geminiから有効な台本JSONを取得できませんでした。もう一度お試しください。');
-      } else {
-        const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.error?.message || `HTTP ${res.status}`;
-        throw new Error(`Gemini API エラー: ${errMsg}`);
+      for (const model of candidateModels) {
+        try {
+          const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey.trim()}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts }] }),
+          });
+
+          if (res.ok) {
+            const data = await res.json();
+            const rawJsonText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+            const parsed = parseScriptJson(rawJsonText, characters, char1, true);
+            if (parsed.length > 0) return parsed;
+          } else {
+            const errData = await res.json().catch(() => ({}));
+            const errMsg = errData.error?.message || `HTTP ${res.status}`;
+            lastError = new Error(`Gemini (${model}): ${errMsg}`);
+          }
+        } catch (e: any) {
+          lastError = e;
+        }
+      }
+
+      if (lastError && provider === 'gemini') {
+        throw lastError;
       }
     } catch (e) {
       console.warn('Gemini multimodal call failed:', e);

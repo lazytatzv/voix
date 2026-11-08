@@ -25,7 +25,6 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   hasVideo,
 }) => {
   const [topic, setTopic] = useState('');
-  const [style, setStyle] = useState<'gaming' | 'tech_review' | 'linux_tech' | 'comedy_banter' | 'shorts_hook' | 'general'>('general');
   const [lineCount, setLineCount] = useState<number>(6);
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>(() =>
     characters.slice(0, 2).map((c) => c.id)
@@ -106,7 +105,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           : provider === 'remote_openai'
           ? `Sending prompt to remote OpenAI server...`
           : apiKey.trim()
-          ? 'Generating Japanese script with Gemini 2.5 Flash...'
+          ? 'Generating Japanese script with Gemini 3.x Flash...'
           : 'Generating Japanese script with the offline persona engine...'
       );
 
@@ -114,7 +113,6 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
       const script = await generateFullScript({
         topic: topic.trim(),
         characters: activeChars.length > 0 ? activeChars : characters,
-        style,
         lineCount,
         provider,
         apiKey: apiKey.trim() || undefined,
@@ -348,51 +346,24 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             </div>
           </div>
 
-          {/* Video Style & Line Count */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-[11px] font-mono uppercase text-[#c4c7c5] block mb-1.5">
-                Style / Format
+          {/* Dialogue Lines Count */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium text-[#c4c7c5]">
+                Dialogue Lines Count
               </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                {[
-                  { id: 'linux_tech', label: 'Linux & Code' },
-                  { id: 'tech_review', label: 'Tech & Explainer' },
-                  { id: 'comedy_banter', label: 'Comedy & Banter' },
-                  { id: 'gaming', label: 'Gaming Highlights' },
-                  { id: 'shorts_hook', label: 'Shorts Hook' },
-                ].map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={() => setStyle(s.id as any)}
-                    className={`px-2 py-1.5 rounded-sm text-xs font-mono border text-left transition ${
-                      style === s.id
-                        ? 'bg-[#303236] border-[#5f6368] text-white'
-                        : 'bg-[#151619] border-[#24262a] text-[#8e918f] hover:text-[#e3e3e3]'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
-                ))}
-              </div>
+              <span className="text-xs font-mono font-bold text-[#8ab4f8]">{lineCount} lines</span>
             </div>
-
-            <div>
-              <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
-                Lines Count: <span className="text-[#8ab4f8] font-bold">{lineCount}</span> lines
-              </label>
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="range"
-                  min={2}
-                  max={14}
-                  step={2}
-                  value={lineCount}
-                  onChange={(e) => setLineCount(parseInt(e.target.value))}
-                  className="w-full h-1 bg-[#2e3135] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
-                />
-              </div>
+            <div className="flex items-center gap-2 pt-1">
+              <input
+                type="range"
+                min={2}
+                max={16}
+                step={2}
+                value={lineCount}
+                onChange={(e) => setLineCount(parseInt(e.target.value))}
+                className="w-full h-1 bg-[#2e3135] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
+              />
             </div>
           </div>
 
