@@ -8,9 +8,13 @@ import {
   X,
   Loader2,
   Zap,
+  Sparkles,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import {
+  generateJavaScriptScript,
+  generateTypeDefinition,
+  generateVoixJsLibrary,
   generateStructuredCodebaseScript,
   generateCodeProject,
   openInExternalEditor,
@@ -40,6 +44,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
 }) => {
   const [targetDir, setTargetDir] = useState('');
   const [projectName, setProjectName] = useState(project.name || 'my_video');
+  const [format, setFormat] = useState<'js' | 'yaml'>('js');
   const [includeSnippets, setIncludeSnippets] = useState(true);
   const [enableWatch, setEnableWatch] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -53,10 +58,18 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
         : '.';
       setTargetDir(defaultDir);
       setProjectName(project.name || 'my_video');
-      const snippet = generateStructuredCodebaseScript(project);
+    }
+  }, [isOpen, projectPath, project.name]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const snippet =
+        format === 'js'
+          ? generateJavaScriptScript(project)
+          : generateStructuredCodebaseScript(project);
       setPreviewSnippet(snippet);
     }
-  }, [isOpen, project, projectPath]);
+  }, [isOpen, format, project]);
 
   const handlePickDirectory = async () => {
     try {
@@ -77,11 +90,25 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
     if (!targetDir.trim()) return;
     setIsGenerating(true);
     try {
-      const scriptYaml = generateStructuredCodebaseScript(project);
-      const generatedPath = await generateCodeProject(targetDir.trim(), projectName.trim(), scriptYaml);
+      const isJs = format === 'js';
+      const scriptCode = isJs
+        ? generateJavaScriptScript(project)
+        : generateStructuredCodebaseScript(project);
+      const typeDef = isJs ? generateTypeDefinition(project) : undefined;
+      const voixLib = isJs ? generateVoixJsLibrary() : undefined;
+
+      const generatedPath = await generateCodeProject(
+        targetDir.trim(),
+        projectName.trim(),
+        scriptCode,
+        format,
+        typeDef,
+        voixLib
+      );
       setGeneratedFilePath(generatedPath);
+      const ext = isJs ? '.js' : '.voix.yaml';
       if (onShowToast) {
-        onShowToast(`Generated code project: ${projectName}.voix.yaml`);
+        onShowToast(`Generated code project: ${projectName}${ext}`);
       }
 
       if (enableWatch) {
@@ -116,7 +143,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
             <h2 className="text-sm font-semibold text-[#e3e3e3] flex items-center gap-2">
               Code Generator & VS Code Sync
               <span className="text-[10px] font-mono font-normal px-2 py-0.5 rounded bg-[#1c293a] text-[#8ab4f8] border border-[#2b415e]">
-                STM32CubeMX Style
+                JavaScript / TypeScript DSL
               </span>
             </h2>
           </div>
@@ -136,16 +163,67 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
             <Zap className="w-5 h-5 text-amber-300 flex-shrink-0 mt-0.5" />
             <div className="text-[#c2e7ff] space-y-1">
               <p className="font-semibold text-white">
-                GUI Generator → VS Code Programming Workflow
+                GUI Rough Layout → Code-First Programming Workflow
               </p>
               <p className="text-[11px] text-[#9ac3e6] leading-relaxed">
-                Like STM32CubeMX, configure your background video, characters, and jump cuts roughly in the GUI. Then click <strong>Generate Code Project</strong> to edit dialogue lines in VS Code at extreme speed using snippets (<code className="bg-[#1f2f42] px-1 py-0.2 rounded text-white">z</code>, <code className="bg-[#1f2f42] px-1 py-0.2 rounded text-white">m</code>, <code className="bg-[#1f2f42] px-1 py-0.2 rounded text-white">cmd</code>). Voix hot-reloads the video timeline and audio on every save.
+                Rough out video cuts, characters, and assets in the GUI, then click <strong>Generate Code Project</strong>. Edit your video in VS Code using JavaScript function calls (<code className="bg-[#1f2f42] px-1 py-0.2 rounded text-white">z(...)</code>, <code className="bg-[#1f2f42] px-1 py-0.2 rounded text-white">m(...)</code>, <code className="bg-[#1f2f42] px-1 py-0.2 rounded text-white">pause(...)</code>), loops, and helper functions with full autocompletion via <code className="bg-[#1f2f42] px-1 py-0.2 rounded text-white">voix.d.ts</code>. Voix Studio instantly hot-reloads the video timeline and audio on every save (<kbd className="bg-[#1f2f42] px-1 py-0.2 rounded text-white font-mono">Ctrl+S</kbd>).
               </p>
             </div>
           </div>
 
           {/* Form Fields */}
           <div className="bg-[#181a1e] border border-[#26282d] rounded-lg p-4 space-y-3">
+            {/* Format Selector */}
+            <div>
+              <label className="text-[11px] font-mono text-[#8e918f] block mb-1.5">
+                Script Language & Format:
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setFormat('js')}
+                  className={`p-2.5 rounded border text-left transition flex flex-col justify-between ${
+                    format === 'js'
+                      ? 'bg-[#1a2b3c] border-[#3b82f6] text-white shadow-xs'
+                      : 'bg-[#121316] border-[#2e3137] text-[#a8aaa8] hover:border-[#3f434c]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-xs flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                      JavaScript / TypeScript
+                    </span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#2563eb]/30 text-[#93c5fd]">
+                      Recommended
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#8e918f] font-mono leading-tight">
+                    .js + voix.d.ts (Loops, functions, variables & full VS Code autocompletion)
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setFormat('yaml')}
+                  className={`p-2.5 rounded border text-left transition flex flex-col justify-between ${
+                    format === 'yaml'
+                      ? 'bg-[#1a2b3c] border-[#3b82f6] text-white shadow-xs'
+                      : 'bg-[#121316] border-[#2e3137] text-[#a8aaa8] hover:border-[#3f434c]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold text-xs">YAML Script</span>
+                    <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-[#32363e] text-[#a8aaa8]">
+                      Declarative
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-[#8e918f] font-mono leading-tight">
+                    .voix.yaml (Simple line-by-line declarative format)
+                  </span>
+                </button>
+              </div>
+            </div>
+
             <div>
               <label className="text-[11px] font-mono text-[#8e918f] block mb-1">
                 Destination Folder:
@@ -190,7 +268,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
                   onChange={(e) => setIncludeSnippets(e.target.checked)}
                   className="accent-[#3b82f6] rounded"
                 />
-                <span>Include VS Code Snippets & recommendations (.vscode/)</span>
+                <span>Include VS Code configuration & IntelliSense (.vscode/ & voix.d.ts)</span>
               </label>
 
               <label className="flex items-center gap-2 cursor-pointer select-none text-[#c4c7c5]">
@@ -220,7 +298,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
               <button
                 type="button"
                 onClick={() => onToggleWatcher(false, activeWatchPath)}
-                className="text-[11px] text-rose-300 hover:text-rose-200 underline font-mono"
+                className="text-[11px] text-rose-300 hover:text-rose-200 underline font-mono cursor-pointer"
               >
                 Stop Watcher
               </button>
@@ -232,11 +310,14 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
             <div className="flex items-center justify-between text-[#8e918f] text-[11px] font-mono">
               <span className="flex items-center gap-1.5">
                 <FileCode className="w-3.5 h-3.5 text-[#8ab4f8]" />
-                Generated Script Code Preview ({projectName}.voix.yaml)
+                Generated Script Code Preview ({projectName}
+                {format === 'js' ? '.js' : '.voix.yaml'})
               </span>
-              <span>STM32CubeMX Code Sections</span>
+              <span className="text-[#6f7276]">
+                {format === 'js' ? 'ES Module with voix.d.ts' : 'YAML Format'}
+              </span>
             </div>
-            <pre className="bg-[#0f1012] border border-[#242629] rounded-lg p-3 text-[11px] font-mono text-[#a8b1bd] max-h-44 overflow-y-auto leading-relaxed select-text">
+            <pre className="bg-[#0f1012] border border-[#242629] rounded-lg p-3 text-[11px] font-mono text-[#a8b1bd] max-h-48 overflow-y-auto leading-relaxed select-text">
               {previewSnippet}
             </pre>
           </div>
@@ -249,7 +330,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
               <button
                 type="button"
                 onClick={handleOpenEditor}
-                className="px-3.5 py-1.5 bg-[#1e252f] hover:bg-[#283340] border border-[#304154] text-[#8ab4f8] rounded text-xs font-semibold inline-flex items-center gap-1.5 transition"
+                className="px-3.5 py-1.5 bg-[#1e252f] hover:bg-[#283340] border border-[#304154] text-[#8ab4f8] rounded text-xs font-semibold inline-flex items-center gap-1.5 transition cursor-pointer"
               >
                 <ExternalLink className="w-3.5 h-3.5" />
                 Open in VS Code
@@ -261,7 +342,7 @@ export const CodeGeneratorModal: React.FC<CodeGeneratorModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-3.5 py-1.5 bg-[#25282c] hover:bg-[#30343a] text-xs text-[#e3e3e3] rounded transition"
+              className="px-3.5 py-1.5 bg-[#25282c] hover:bg-[#30343a] text-xs text-[#e3e3e3] rounded transition cursor-pointer"
             >
               Close
             </button>

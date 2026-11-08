@@ -22,7 +22,11 @@ import { SoundEffectPaletteModal } from './components/SoundEffectPaletteModal';
 import { JumpCutModal } from './components/JumpCutModal';
 import { GitHistoryModal } from './components/GitHistoryModal';
 import { CodeGeneratorModal } from './components/CodeGeneratorModal';
-import { startWatchingFile, stopWatchingFile } from './services/codeGenService';
+import {
+  startWatchingFile,
+  stopWatchingFile,
+  evaluateJavaScriptScript,
+} from './services/codeGenService';
 import { parseScriptWithConfig } from './utils/scriptParser';
 import { addSnapshotKeyframe } from './render/keyframes';
 import { parseSrt } from './utils/srt';
@@ -2424,7 +2428,37 @@ export function App() {
         const unlisten = await startWatchingFile(path, async (payload) => {
           appLog('App', `File watcher detected change in ${payload.path}`);
           try {
-            // First check if it's a full project YAML
+            // First check if it's a JavaScript / TypeScript file
+            if (payload.path.endsWith('.js') || payload.path.endsWith('.ts')) {
+              const result = evaluateJavaScriptScript(
+                payload.content,
+                projectRef.current.characters
+              );
+              if (result.error) {
+                setToast(`JS Error: ${result.error}`);
+                console.warn('[Watcher] JS error:', result.error);
+                return;
+              }
+              if (result.items.length > 0) {
+                commitProject(
+                  (prev) => ({
+                    ...prev,
+                    name: result.title || prev.name,
+                    items: result.items,
+                    timeline: {
+                      ...prev.timeline,
+                      ...(result.config || {}),
+                      duration: computeProjectDuration(result.items, videoDurationRef.current),
+                    },
+                  }),
+                  true
+                );
+                setToast(`Hot-reloaded ${result.items.length} items from ${payload.path.split(/[\\/]/).pop()}`);
+                return;
+              }
+            }
+
+            // Fallback: check if it's a full project YAML
             try {
               const restored = projectFromYaml(payload.content);
               if (restored && restored.items && restored.items.length > 0) {

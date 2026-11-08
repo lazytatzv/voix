@@ -354,7 +354,7 @@ export const Header: React.FC<HeaderProps> = ({
               type="button"
               onClick={onOpenCodeGen}
               className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-emerald-400 transition"
-              title="Code Generator & VS Code Sync (STM32CubeMX Style)"
+              title="Code Generator & VS Code Sync (JavaScript / TypeScript)"
             >
               <Code2 className="w-3.5 h-3.5" />
             </button>
@@ -507,7 +507,7 @@ export const Header: React.FC<HeaderProps> = ({
                       Code Generator (VS Code)
                     </span>
                     <span className="block mt-0.5 pl-[20px] text-[10px] font-mono text-[#6f7276]">
-                      STM32CubeMX style live sync
+                      JavaScript & TypeScript live sync
                     </span>
                   </button>
                 )}
