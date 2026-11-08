@@ -390,6 +390,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     }
   }, [videoSrc, videoInfo, isMetadataReady]);
 
+  // Propagate fast metadata from ffprobe immediately
+  useEffect(() => {
+    if (videoInfo && videoInfo.duration > 0) {
+      onVideoDurationLoaded?.(videoInfo.duration, videoInfo.width, videoInfo.height);
+    }
+  }, [videoInfo, onVideoDurationLoaded]);
+
   // Match the project's background-video level; the dedicated mute button
   // silences all preview audio without discarding the configured volume.
   useEffect(() => {
@@ -1247,19 +1254,21 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               }}
               onError={handleVideoError}
             />
-            {!videoTrackHidden && !videoError && !loadError && (!isMetadataReady || loading) && (
+            {!videoTrackHidden && !videoError && !loadError && !videoInfo && (!isMetadataReady || loading) && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 p-6 text-center select-none pointer-events-none">
                 <Loader2 className="w-5 h-5 text-[#8ab4f8] animate-spin mb-2" />
                 <p className="text-xs font-mono text-[#c4c7c5]">Loading video…</p>
-                {videoInfo && (
-                  <p className="mt-1 text-[10px] font-mono text-[#6f7276]">
-                    {formatTime(videoInfo.duration)} · {videoInfo.width}×{videoInfo.height}
-                    {videoInfo.videoCodec ? ` · ${videoInfo.videoCodec}` : ''}
-                  </p>
-                )}
                 <p className="mt-2 text-[10px] font-mono text-[#5f6368]">
                   Streaming from disk (no full-file copy)
                 </p>
+              </div>
+            )}
+            {!videoTrackHidden && !videoError && !loadError && videoInfo && !isMetadataReady && (
+              <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 rounded-sm border border-[#2e3135] bg-black/70 px-2 py-1 pointer-events-none">
+                <Loader2 className="w-3 h-3 animate-spin text-[#8ab4f8]" />
+                <span className="text-[10px] font-mono text-[#c4c7c5]">
+                  Preparing video ({videoInfo.width}×{videoInfo.height})…
+                </span>
               </div>
             )}
             {!videoTrackHidden && isMetadataReady && isBuffering && isPlaying && !videoError && (

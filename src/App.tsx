@@ -617,7 +617,7 @@ export function App() {
   const hydrationInFlightRef = useRef<Set<string>>(new Set());
 
   const ensureVoiceAudio = useCallback(
-    async (id: string, force = false): Promise<string | null> => {
+    async (id: string, force = false, allowSynthesize = true): Promise<string | null> => {
       const item = projectRef.current.items.find((it) => it.id === id);
       if (!item || item.type !== 'voice') return null;
       if (!force && item.audioBlobUrl) return item.audioBlobUrl;
@@ -658,6 +658,11 @@ export function App() {
         }
 
         if (!blob) {
+          if (!allowSynthesize) {
+            // During background hydration, don't trigger online TTS synthesis for missing audio
+            updateItem(id, { isSynthesizing: false }, false);
+            return null;
+          }
           const result = await ttsManager.synthesize(
             character.ttsProviderId,
             character.speakerId,
@@ -763,20 +768,40 @@ export function App() {
     };
   }, []);
 
-  // Hydrate audio for projects loaded from YAML/cache without re-synthesizing.
+  // Hydrate audio from disk cache for projects loaded from YAML without re-synthesizing.
   useEffect(() => {
+    let cancelled = false;
     const pending = project.items.filter((item) => {
       if (item.type !== 'voice') return false;
       if (!item.text.trim() || item.audioBlobUrl || item.isSynthesizing) return false;
       if (hydrationInFlightRef.current.has(item.id)) return false;
       return hydrationAttemptsRef.current.get(item.id) !== item.text;
     });
-    pending.forEach((item) => {
-      hydrationInFlightRef.current.add(item.id);
-      void ensureVoiceAudio(item.id).finally(() => {
-        hydrationInFlightRef.current.delete(item.id);
-      });
-    });
+    if (pending.length === 0) return;
+
+    // Process with a controlled pool (max 6 in flight) to prevent thread/socket exhaustion
+    const queue = [...pending];
+    const CONCURRENCY = 6;
+    let active = 0;
+
+    const pump = () => {
+      if (cancelled) return;
+      while (active < CONCURRENCY && queue.length > 0) {
+        const item = queue.shift()!;
+        active++;
+        hydrationInFlightRef.current.add(item.id);
+        void ensureVoiceAudio(item.id, false, false).finally(() => {
+          hydrationInFlightRef.current.delete(item.id);
+          active--;
+          pump();
+        });
+      }
+    };
+    pump();
+
+    return () => {
+      cancelled = true;
+    };
   }, [project.items, ensureVoiceAudio]);
 
   /* ------------------------------------------------------------------ */

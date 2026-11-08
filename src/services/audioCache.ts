@@ -30,6 +30,38 @@ export async function base64ToBlob(base64: string, mime = 'audio/wav'): Promise<
 }
 
 export async function measureAudioDuration(blob: Blob): Promise<number> {
+  // Fast path: parse duration directly from WAV header in <0.01ms without AudioContext/GStreamer
+  // This avoids spawning hundreds of threads and pinning CPU during project loads.
+  try {
+    if (blob.size >= 44) {
+      const headerBytes = await blob.slice(0, 128).arrayBuffer();
+      const view = new DataView(headerBytes);
+      // 'RIFF' = 0x52494646, 'WAVE' = 0x57415645
+      if (view.getUint32(0, false) === 0x52494646 && view.getUint32(8, false) === 0x57415645) {
+        let offset = 12;
+        let byteRate = 0;
+        let dataSize = 0;
+        while (offset + 8 <= headerBytes.byteLength) {
+          const chunkId = view.getUint32(offset, false);
+          const chunkSize = view.getUint32(offset + 4, true);
+          if (chunkId === 0x666d7420) {
+            // 'fmt '
+            byteRate = view.getUint32(offset + 16, true);
+          } else if (chunkId === 0x64617461) {
+            // 'data'
+            dataSize = chunkSize > 0 ? chunkSize : blob.size - (offset + 8);
+            break;
+          }
+          offset += 8 + chunkSize;
+        }
+        if (byteRate > 0 && dataSize > 0) {
+          return dataSize / byteRate;
+        }
+      }
+    }
+  } catch {}
+
+  // Fallback to WebAudio decodeAudioData only if header parsing fails
   try {
     const arrayBuffer = await blob.arrayBuffer();
     const AudioCtx =

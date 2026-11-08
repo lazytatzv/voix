@@ -47,8 +47,69 @@ async function readAudioBlob(src: string, blob?: Blob): Promise<Blob | null> {
 }
 
 async function extractPeaks(blob: Blob, buckets: number): Promise<number[]> {
-  const ctx = getAudioContext();
   const arrayBuffer = await blob.arrayBuffer();
+
+  // Fast path: parse 16-bit PCM WAV directly in JS without spawning WebAudio / GStreamer pipelines
+  if (arrayBuffer.byteLength >= 44) {
+    const view = new DataView(arrayBuffer);
+    if (view.getUint32(0, false) === 0x52494646 && view.getUint32(8, false) === 0x57415645) {
+      let offset = 12;
+      let audioFormat = 0;
+      let numChannels = 1;
+      let bitsPerSample = 16;
+      let dataOffset = 0;
+      let dataSize = 0;
+      while (offset + 8 <= arrayBuffer.byteLength) {
+        const chunkId = view.getUint32(offset, false);
+        const chunkSize = view.getUint32(offset + 4, true);
+        if (chunkId === 0x666d7420) {
+          // 'fmt '
+          audioFormat = view.getUint16(offset + 8, true);
+          numChannels = Math.max(1, view.getUint16(offset + 10, true));
+          bitsPerSample = view.getUint16(offset + 22, true);
+        } else if (chunkId === 0x64617461) {
+          // 'data'
+          dataOffset = offset + 8;
+          dataSize = chunkSize > 0 ? chunkSize : arrayBuffer.byteLength - dataOffset;
+          break;
+        }
+        offset += 8 + chunkSize;
+      }
+
+      if (audioFormat === 1 && bitsPerSample === 16 && dataOffset > 0 && dataSize > 0) {
+        const sampleCount = Math.floor(dataSize / 2);
+        const samples =
+          dataOffset % 2 === 0
+            ? new Int16Array(arrayBuffer, dataOffset, sampleCount)
+            : new Int16Array(arrayBuffer.slice(dataOffset, dataOffset + sampleCount * 2));
+
+        const peaks: number[] = [];
+        let maxPeak = 0;
+        const samplesPerBucket = Math.max(1, Math.floor(sampleCount / buckets));
+        for (let bucket = 0; bucket < buckets; bucket++) {
+          const start = bucket * samplesPerBucket;
+          const end =
+            bucket === buckets - 1 ? sampleCount : Math.min(sampleCount, start + samplesPerBucket);
+          let peak = 0;
+          for (let i = start; i < end; i += numChannels) {
+            const val = Math.abs(samples[i] || 0);
+            if (val > peak) peak = val;
+          }
+          peaks.push(peak);
+          if (peak > maxPeak) maxPeak = peak;
+        }
+        if (maxPeak > 0) {
+          for (let i = 0; i < peaks.length; i++) {
+            peaks[i] = Math.min(1, peaks[i] / maxPeak);
+          }
+        }
+        return peaks;
+      }
+    }
+  }
+
+  // Fallback to WebAudio decodeAudioData for other audio formats
+  const ctx = getAudioContext();
   const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
   const channelCount = Math.max(1, decoded.numberOfChannels);
   const length = decoded.length;

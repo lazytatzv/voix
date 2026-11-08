@@ -272,15 +272,7 @@ fn handle_request(
     }
 
     match parse_range(range_header, file_len) {
-        RangeSpec::Full => {
-            if file_len > MAX_RANGE_CHUNK && mime.starts_with("video/") {
-                // For large videos without a Range header, serve the first chunk as 206 Partial Content
-                // (RFC 7233 § 4.1) so the server never streams multi-gigabyte files into an open socket.
-                respond_partial(request, file, file_len, mime, 0, MAX_RANGE_CHUNK - 1)
-            } else {
-                respond_full(request, file, file_len, mime)
-            }
-        }
+        RangeSpec::Full => respond_full(request, file, file_len, mime),
         RangeSpec::Partial { start, end } => {
             respond_partial(request, file, file_len, mime, start, end)
         }
