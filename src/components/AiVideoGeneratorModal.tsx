@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Loader2, Wand2, Check, Bot, Video, ExternalLink } from 'lucide-react';
+import { X, Loader2, Wand2, Check, Bot, Video, ExternalLink, Sparkles } from 'lucide-react';
 import { Character } from '../types';
 import { generateFullScript, ScriptLinePrompt, AiProviderType } from '../services/aiService';
 import { loadSettingsFromConfig, saveSettingsToConfig } from '../services/configService';
@@ -25,6 +25,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   hasVideo,
 }) => {
   const [topic, setTopic] = useState('');
+  const [autoLineCount, setAutoLineCount] = useState<boolean>(true);
   const [lineCount, setLineCount] = useState<number>(6);
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>(() =>
     characters.slice(0, 2).map((c) => c.id)
@@ -105,7 +106,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
           : provider === 'remote_openai'
           ? `Sending prompt to remote OpenAI server...`
           : apiKey.trim()
-          ? 'Generating Japanese script with Gemini 3.x Flash...'
+          ? 'Choreographing Japanese script, expressions & pacing with Gemini 3.x Flash...'
           : 'Generating Japanese script with the offline persona engine...'
       );
 
@@ -114,6 +115,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
         topic: topic.trim(),
         characters: activeChars.length > 0 ? activeChars : characters,
         lineCount,
+        autoLineCount,
         provider,
         apiKey: apiKey.trim() || undefined,
         remoteEndpoint: remoteEndpoint.trim() || undefined,
@@ -346,24 +348,61 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
             </div>
           </div>
 
-          {/* Dialogue Lines Count */}
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
+          {/* Dialogue Clips Count & AI Auto Pacing */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
               <label className="text-xs font-medium text-[#c4c7c5]">
-                Dialogue Lines Count
+                Dialogue Clips & Pacing
               </label>
-              <span className="text-xs font-mono font-bold text-[#8ab4f8]">{lineCount} lines</span>
+              <button
+                type="button"
+                onClick={() => setAutoLineCount(!autoLineCount)}
+                className={`px-2 py-0.5 rounded text-[11px] font-mono border transition flex items-center gap-1.5 ${
+                  autoLineCount
+                    ? 'bg-[#1e3a5f] border-[#3b82f6] text-[#c2e7ff]'
+                    : 'bg-[#151619] border-[#2c2e33] text-[#8e918f] hover:text-[#e3e3e3]'
+                }`}
+              >
+                <Sparkles className="w-3 h-3 text-[#60a5fa]" />
+                <span>Auto (AI Decides)</span>
+              </button>
             </div>
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="range"
-                min={2}
-                max={16}
-                step={2}
-                value={lineCount}
-                onChange={(e) => setLineCount(parseInt(e.target.value))}
-                className="w-full h-1 bg-[#2e3135] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
-              />
+
+            {autoLineCount ? (
+              <div className="p-2.5 rounded-sm bg-[#16181b] border border-[#26282d] flex items-center justify-between text-xs text-[#9aa0a6]">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-[#34d399] animate-pulse" />
+                  <span>AI determines clip count (adaptive 4–12 lines) & pacing</span>
+                </div>
+                <span className="text-[11px] font-mono text-[#8ab4f8]">Adaptive</span>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-1 text-xs">
+                  <span className="text-[#9aa0a6]">Fixed Clips Count</span>
+                  <span className="font-mono font-bold text-[#8ab4f8]">{lineCount} lines</span>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <input
+                    type="range"
+                    min={2}
+                    max={16}
+                    step={2}
+                    value={lineCount}
+                    onChange={(e) => setLineCount(parseInt(e.target.value))}
+                    className="w-full h-1 bg-[#2e3135] rounded-lg appearance-none cursor-pointer accent-[#3b82f6]"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex items-center gap-4 text-[11px] text-[#8e918f] pt-0.5">
+              <span className="flex items-center gap-1">
+                <span className="text-[#8ab4f8]">✓</span> AI Expression Selection
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="text-[#8ab4f8]">✓</span> Dynamic Pause Pacing (間)
+              </span>
             </div>
           </div>
 

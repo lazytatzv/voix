@@ -1,6 +1,9 @@
 // Voix AI Studio Engine
 // 動画制作者のためのAIアシスタントサービス (脚本自動生成, 動画解析, リモートAIサーバー連携, キャラ口調変換)
 
+import { Character, CharacterAvatar } from '../types';
+import { normalizeExpressionTag } from '../utils/scriptParser';
+
 export type AiAction = 'translate_en' | 'translate_ja' | 'zundamon' | 'metan' | 'reaction' | 'shorten';
 
 export interface AiRequest {
@@ -16,7 +19,8 @@ export interface ScriptLinePrompt {
   characterId: string;
   characterName: string;
   text: string;
-  expression?: 'default' | 'smile' | 'shock' | 'trouble' | 'angry';
+  expression?: string;
+  pauseAfter?: number; // 秒単位の間・ポーズ時間（タメ、ツッコミの余韻、テンポ演出）
   se?: string;
   anim?: string;
   terminal?: {
@@ -29,9 +33,10 @@ export type AiProviderType = 'gemini' | 'remote_ollama' | 'remote_openai' | 'loc
 
 export interface GenerateFullScriptRequest {
   topic: string;
-  characters: { id: string; name: string }[];
+  characters: (Character | { id: string; name: string; avatar?: CharacterAvatar })[];
   style?: 'gaming' | 'tech_review' | 'linux_tech' | 'comedy_banter' | 'shorts_hook' | 'general';
   lineCount?: number;
+  autoLineCount?: boolean;
   provider?: AiProviderType;
   apiKey?: string;
   remoteEndpoint?: string; // e.g. http://192.168.1.100:11434
@@ -233,14 +238,69 @@ async function callGeminiApi(action: AiAction, text: string, apiKey: string): Pr
 }
 
 /**
+ * キャラクターの利用可能な表情リストから最適な表情キーを解決・正規化する
+ */
+export function normalizeExpressionForChar(
+  rawExpr: string,
+  character?: Character | { id: string; name: string; avatar?: CharacterAvatar }
+): string {
+  if (!rawExpr || rawExpr === 'default') return 'default';
+  const clean = String(rawExpr).trim().toLowerCase();
+
+  const charExpressions =
+    character && 'avatar' in character && character.avatar?.expressions
+      ? Object.keys(character.avatar.expressions)
+      : [];
+
+  // 1. キャラクターの表情リストに完全一致
+  if (charExpressions.includes(clean)) {
+    return clean;
+  }
+
+  // 2. 標準タグ正規化 (例: '笑顔' -> 'smile', 'happy' -> 'smile', 'surprised' -> 'shock')
+  const normalized = normalizeExpressionTag(clean);
+  if (charExpressions.includes(normalized)) {
+    return normalized;
+  }
+
+  // 3. 感情シノニム辞書による高精度マッピング
+  const synonymMap: Record<string, string[]> = {
+    smile: ['happy', 'laugh', 'joy', 'fun', 'pleased', '笑顔', 'にっこり', 'わらい', '笑', '喜', 'ドヤ', 'smug'],
+    shock: ['surprised', 'surprise', 'astonished', 'stunned', 'panic', '驚き', 'ショック', 'びっくり', '驚', 'パニック'],
+    trouble: ['worried', 'sweat', 'anxious', 'confused', 'sad', '困り', 'あせ', '汗', '困', '不安', '苦笑い'],
+    angry: ['mad', 'furious', 'rage', 'annoyed', '怒り', 'いかり', 'おこ', '怒', '不満'],
+    thoughtful: ['thinking', 'curious', 'wondering', '考え', '思案', '真剣'],
+  };
+
+  for (const [targetKey, syns] of Object.entries(synonymMap)) {
+    if (clean === targetKey || syns.includes(clean)) {
+      if (charExpressions.includes(targetKey)) return targetKey;
+      for (const syn of syns) {
+        if (charExpressions.includes(syn)) return syn;
+      }
+      return targetKey;
+    }
+  }
+
+  // キャラクターに表情が登録されている場合、一致しなければnormalizedまたはdefault
+  if (charExpressions.length > 0) {
+    if (charExpressions.includes(normalized)) return normalized;
+    return 'default';
+  }
+
+  return normalized || 'default';
+}
+
+/**
  * トピックまたは動画キーフレームから動画全体の掛け合い台本を一括自動生成する
  */
 export async function generateFullScript(req: GenerateFullScriptRequest): Promise<ScriptLinePrompt[]> {
   const {
     topic,
     characters,
-    style = 'gaming',
+    style = 'general',
     lineCount = 6,
+    autoLineCount = true,
     provider = 'gemini',
     apiKey,
     remoteEndpoint,
@@ -253,23 +313,42 @@ export async function generateFullScript(req: GenerateFullScriptRequest): Promis
   const char2 = characters.length > 1 ? characters[1] : characters[0];
 
   const charProfiles = characters.map((c) => {
-    if (c.name.includes('ずんだ')) return `- ${c.name}: 一人称「ボク」、語尾は「〜なのだ」「〜のだ」。元気でマスコット的。`;
-    if (c.name.includes('めたん')) return `- ${c.name}: 一人称「わたくし」、語尾は「〜ですわ」「〜かしら」「〜わね」。良家のお嬢様でツッコミ役。`;
-    if (c.name.includes('つむぎ')) return `- ${c.name}: 一人称「あーし」、語尾は「〜っす」「〜じゃん」。埼玉ギャル。`;
-    return `- ${c.name}: 自然な話し言葉。`;
-  }).join('\n');
+    let persona = '自然な話し言葉。';
+    if (c.name.includes('ずんだ')) persona = '一人称「ボク」、語尾は「〜なのだ」「〜のだ」。元気でマスコット的。';
+    else if (c.name.includes('めたん')) persona = '一人称「わたくし」、語尾は「〜ですわ」「〜かしら」「〜わね」。良家のお嬢様でツッコミ役。';
+    else if (c.name.includes('つむぎ')) persona = '一人称「あーし」、語尾は「〜っす」「〜じゃん」。埼玉ギャル。';
+    else if (c.name.includes('霊夢') || c.name.toLowerCase().includes('reimu')) persona = '一人称「私」、語尾は「〜よ」「〜わね」「〜でしょ」。常識人・ツッコミ役。';
+    else if (c.name.includes('魔理沙') || c.name.toLowerCase().includes('marisa')) persona = '一人称「私」、語尾は「〜ぜ」「〜だな」「〜なのか？」。活発で探究心旺盛。';
+
+    const charObj = c as Character;
+    const exprKeys =
+      charObj.avatar?.expressions && Object.keys(charObj.avatar.expressions).length > 0
+        ? ['default', ...Object.keys(charObj.avatar.expressions)]
+        : ['default', 'smile', 'shock', 'trouble', 'angry'];
+    const exprListStr = Array.from(new Set(exprKeys)).join(', ');
+
+    return `- ${c.name}: ${persona}\n  使用可能な表情 (expression): [${exprListStr}]`;
+  }).join('\n\n');
 
   const hasVideoVision = videoKeyframes.length > 0;
+
+  const lineCountInstruction = autoLineCount
+    ? `【クリップ数（セリフ行数）の自動決定】
+動画の映像展開、見どころ、オチに合わせて、最もテンポ良く綺麗にまとまる最適なクリップ数（目安: 4〜12行程度、必要に応じて過不足なく）をAI自身が判断して生成してください。`
+    : `【セリフ行数】
+指定されたセリフ行数（${lineCount}行）で台本を作成してください。`;
 
   const baseInstructions = hasVideoVision
     ? `添付された画像は、ユーザーが編集中の動画から時系列順に抽出したスクリーンショット（キーフレーム）です。
 【映像の詳細観察とセリフの完全同期】
 画面に映っている具体的な要素（操作画面、キャラクターや敵、文字やUI、マップ、オブジェクトの動き、ハプニングなど）を精密に読み取ってください。
-「何が画面に映っているか」「何が起きているか」に具体的に触れながら、キャラクター達がその場で画面を見ながら喋っているリアルな実況・解説・リアクション台本を${lineCount}行作成してください！
+「何が画面に映っているか」「何が起きているか」に具体的に触れながら、キャラクター達がその場で画面を見ながら喋っているリアルな実況・解説・リアクション台本を作成してください！
 画面を無視した適当な雑談や、どの動画でも使えるような汎用的なセリフ・定型文は絶対に禁止です。画面内の固有の出来事にしっかり言及してください。
+${lineCountInstruction}
 ${topic ? `ユーザーからの補足指示: ${topic}` : ''}`
-    : `以下のトピックに基づいて、キャラクター達が定型句にとらわれず、自由で生き生きとした掛け合いを行う完全オリジナルの台本を${lineCount}行作成してください。
+    : `以下のトピックに基づいて、キャラクター達が定型句にとらわれず、自由で生き生きとした掛け合いを行う完全オリジナルの台本を作成してください。
 トピック: ${topic || '実況動画'}
+${lineCountInstruction}
 ※すべてのセリフ（text）は必ず自然でテンポの良い日本語で生成してください。`;
 
   const systemPrompt = `あなたはYouTubeやニコニコ動画で大人気の動画を演出する、クリエイティブな動画監督AIです。
@@ -280,12 +359,20 @@ ${topic ? `ユーザーからの補足指示: ${topic}` : ''}`
    AIならではの柔軟な発想で、映像の状況やハプニングに即座に反応する生き生きとした会話を組み立ててください。
 2. キャラクターの個性（ペルソナ）:
    各キャラクターの口調・一人称・性格を自然にセリフに反映してください（例: ずんだもんは「ボク」「〜なのだ」「〜のだ」、四国めたんは上品なお嬢様ツッコミ「わたくし」「〜ですわ」「〜かしら」等）。
-3. すべて自然な日本語:
+3. 表情の自動演出（expression）:
+   各キャラクターのセリフの感情（喜び、驚き、困惑、怒り、真剣、ドヤ顔、焦りなど）やリアクションに合わせて、下記「登場キャラクター設定」に記載された「使用可能な表情 (expression)」の中から、最も相応しい表情IDをセリフごとに必ず厳選してください。
+4. 間のとり方・テンポ演出（pauseAfter）:
+   掛け合いのテンポ感や面白さを最大化するために、セリフ発話後の「間（秒数）」を "pauseAfter" として指定してください。
+   - 畳み掛けるようなツッコミ・速いテンポ: 0.1 〜 0.3 秒
+   - 通常の自然な会話の間: 0.4 〜 0.6 秒
+   - 驚き・困惑・ツッコミ待ち・落ち・タメ・画面の展開待ち: 0.8 〜 1.5 秒
+5. すべて自然な日本語:
    生成するセリフ（text）は、100%必ずすべて自然で魅力的な「日本語」で出力してください。
 
 ${baseInstructions}
 動画スタイル・演出: 動画の映像内容、テンポ、画面の雰囲気に合わせてAIが最も面白く自然な構成・スタイルを自動判断してください。
-登場キャラクター設定:
+
+登場キャラクター設定と利用可能な表情:
 ${charProfiles}
 
 【出力形式】
@@ -295,6 +382,7 @@ ${charProfiles}
     "speaker": "${char1.name}",
     "text": "画面の展開に即座に反応する生き生きとしたセリフ",
     "expression": "shock",
+    "pauseAfter": 0.8,
     "se": "pop",
     "anim": "bounce"
   },
@@ -302,10 +390,12 @@ ${charProfiles}
     "speaker": "${char2.name}",
     "text": "それに対する自然なツッコミやリアクションのセリフ",
     "expression": "smile",
+    "pauseAfter": 0.4,
     "se": "chime"
   }
 ]
-※ expression: キャラクターに合った表情 ("default", "smile", "shock", "trouble", "angry", "explain_right", "point_up" など)
+※ expression: キャラクターごとの使用可能な表情リストからセリフの感情・文脈に合わせて厳選
+※ pauseAfter: 発話後の間合いの秒数（0.1〜1.5秒程度。テンポ感やタメに合わせて演出）
 ※ se (任意): "pop", "chime", "click", "punch", "error", "success", "laser", "kira", "question"
 ※ anim (任意): "bounce", "pop", "shake", "nod"
 ※ 重ねて警告: 定型文は避け、映像に合わせたオリジナルの日本語セリフを出力してください。`;
@@ -436,8 +526,8 @@ ${charProfiles}
 
 function parseScriptJson(
   rawText: string,
-  characters: { id: string; name: string }[],
-  defaultChar: { id: string; name: string },
+  characters: (Character | { id: string; name: string; avatar?: CharacterAvatar })[],
+  defaultChar: Character | { id: string; name: string },
   isAiGenerated: boolean = false
 ): ScriptLinePrompt[] {
   const jsonMatch = rawText.match(/\[[\s\S]*\]/);
@@ -448,6 +538,9 @@ function parseScriptJson(
       speaker: string;
       text: string;
       expression?: string;
+      pauseAfter?: number;
+      pause?: number;
+      gap?: number;
       se?: string;
       anim?: string;
       cmd?: string;
@@ -460,7 +553,19 @@ function parseScriptJson(
         characters.find((c) => c.name.includes(item.speaker) || item.speaker.includes(c.name)) || defaultChar;
       const cleanText = (item.text || '').trim().replace(/^["']|["']$/g, '');
       const formatted = isAiGenerated ? cleanText : formatSpeechWithPersona(matchedChar.name, cleanText);
-      const expr = (item.expression as any) || inferExpressionFromText(formatted);
+
+      // AI選定の表情またはテキスト感情からの推論、およびキャラクターの保持表情への正規化
+      const rawExpr = item.expression ? String(item.expression).trim() : '';
+      const expr = rawExpr
+        ? normalizeExpressionForChar(rawExpr, matchedChar)
+        : normalizeExpressionForChar(inferExpressionFromText(formatted), matchedChar);
+
+      // 間のとり方 (pauseAfter)
+      let pauseAfter: number | undefined = undefined;
+      const rawPause = item.pauseAfter ?? item.pause ?? item.gap;
+      if (typeof rawPause === 'number' && !isNaN(rawPause)) {
+        pauseAfter = Math.max(0.05, Math.min(3.0, Number(rawPause.toFixed(2))));
+      }
 
       let terminal: { cmd: string; output?: string } | undefined = undefined;
       if (item.terminal?.cmd) {
@@ -474,6 +579,7 @@ function parseScriptJson(
         characterName: matchedChar.name,
         text: formatted,
         expression: expr,
+        pauseAfter,
         se: item.se ? String(item.se).trim() : undefined,
         anim: item.anim ? String(item.anim).trim() : undefined,
         terminal,
@@ -486,7 +592,7 @@ function parseScriptJson(
 
 function generateDynamicScript(
   topic: string,
-  characters: { id: string; name: string }[],
+  characters: (Character | { id: string; name: string; avatar?: CharacterAvatar })[],
   style: string = 'general',
   count: number = 6
 ): ScriptLinePrompt[] {
@@ -497,6 +603,7 @@ function generateDynamicScript(
   interface DynamicTemplate {
     speakerIsFirst: boolean;
     baseText: string;
+    pauseAfter?: number;
     se?: string;
     anim?: string;
     terminal?: { cmd: string; output?: string };
@@ -578,16 +685,18 @@ function generateDynamicScript(
 
   const selected = templates.slice(0, Math.max(2, count));
 
-  return selected.map((tpl) => {
+  return selected.map((tpl, idx) => {
     const char = tpl.speakerIsFirst ? c1 : c2;
     const textWithPersona = formatSpeechWithPersona(char.name, tpl.baseText);
-    const expr = inferExpressionFromText(textWithPersona);
+    const expr = normalizeExpressionForChar(inferExpressionFromText(textWithPersona), char);
+    const pauseAfter = tpl.pauseAfter ?? (idx % 2 === 0 ? 0.35 : 0.65);
 
     return {
       characterId: char.id,
       characterName: char.name,
       text: textWithPersona,
       expression: expr,
+      pauseAfter,
       se: tpl.se,
       anim: tpl.anim,
       terminal: tpl.terminal,

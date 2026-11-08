@@ -2454,7 +2454,11 @@ export function App() {
             anim: line.anim,
             terminal: line.terminal,
           });
-          currentStart += duration + DEFAULT_LINE_GAP;
+          const pauseGap =
+            typeof line.pauseAfter === 'number' && !isNaN(line.pauseAfter)
+              ? line.pauseAfter
+              : DEFAULT_LINE_GAP;
+          currentStart += duration + pauseGap;
         } catch (err) {
           console.warn('[App] AI video synthesis failed:', line.text, err);
         }
