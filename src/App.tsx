@@ -21,6 +21,9 @@ import { QuickDialogueBar } from './components/QuickDialogueBar';
 import { SoundEffectPaletteModal } from './components/SoundEffectPaletteModal';
 import { JumpCutModal } from './components/JumpCutModal';
 import { GitHistoryModal } from './components/GitHistoryModal';
+import { CodeGeneratorModal } from './components/CodeGeneratorModal';
+import { startWatchingFile, stopWatchingFile } from './services/codeGenService';
+import { parseScriptWithConfig } from './utils/scriptParser';
 import { addSnapshotKeyframe } from './render/keyframes';
 import { parseSrt } from './utils/srt';
 import { nudgeTimelineItems, rippleDeleteTimelineItems } from './utils/timelineEdit';
@@ -228,11 +231,13 @@ export function App() {
   const lastItemHistoryRef = useRef<{ id: string; time: number }>({ id: '', time: 0 });
 
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const videoSrcRef = useRef<string | null>(null);
   const [rawVideoPath, setRawVideoPath] = useState<string | null>(null);
   const rawVideoPathRef = useRef<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number>(15);
   const videoDurationRef = useRef<number>(15);
   const [videoLoading, setVideoLoading] = useState(false);
+  const videoLoadingRef = useRef<boolean>(false);
   const [videoInfo, setVideoInfo] = useState<MediaInfo | null>(null);
   const videoInfoRef = useRef<MediaInfo | null>(null);
   const [videoLoadError, setVideoLoadError] = useState<string | null>(null);
@@ -262,6 +267,10 @@ export function App() {
   const [isSePaletteOpen, setIsSePaletteOpen] = useState(false);
   const [isJumpCutOpen, setIsJumpCutOpen] = useState(false);
   const [isGitModalOpen, setIsGitModalOpen] = useState(false);
+  const [isCodeGenOpen, setIsCodeGenOpen] = useState(false);
+  const [isWatchingCode, setIsWatchingCode] = useState(false);
+  const [activeWatchPath, setActiveWatchPath] = useState<string | null>(null);
+  const unlistenWatcherRef = useRef<(() => void) | null>(null);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -388,16 +397,28 @@ export function App() {
 
   const syncVideoSource = useCallback(
     (path: string | null, force = false) => {
+      // Skip redundant reload if the exact same video is already loaded or in-flight
+      if (
+        !force &&
+        path &&
+        path === rawVideoPathRef.current &&
+        (videoSrcRef.current || videoLoadingRef.current)
+      ) {
+        appLog('App', `syncVideoSource: skipped redundant reload for path=${path}`);
+        return;
+      }
       appLog('App', `syncVideoSource: path=${path} force=${force}`);
       rawVideoPathRef.current = path;
       setRawVideoPath(path);
       const token = ++videoLoadTokenRef.current;
       setVideoSrc(null);
+      videoSrcRef.current = null;
       setVideoLoadError(null);
       setVideoInfo(null);
       videoInfoRef.current = null;
       if (!path) {
         setVideoLoading(false);
+        videoLoadingRef.current = false;
         return;
       }
       if (force) {
@@ -405,6 +426,7 @@ export function App() {
         forgetMediaProbe(path);
       }
       setVideoLoading(true);
+      videoLoadingRef.current = true;
 
       // Resolve the streaming URL and probe metadata in parallel. The probe
       // gives the real duration for long/fragmented files where WebKitGTK
@@ -415,18 +437,25 @@ export function App() {
             'App',
             `syncVideoSource resolved: ${url} (token=${token}, current=${videoLoadTokenRef.current})`
           );
-          if (videoLoadTokenRef.current === token) setVideoSrc(url);
+          if (videoLoadTokenRef.current === token) {
+            setVideoSrc(url);
+            videoSrcRef.current = url;
+          }
         })
         .catch((err) => {
           appLog('App', `syncVideoSource failed: ${err}`);
           console.warn('[App] video load failed:', err);
           if (videoLoadTokenRef.current === token) {
             setVideoSrc(null);
+            videoSrcRef.current = null;
             setVideoLoadError(String(err));
           }
         })
         .finally(() => {
-          if (videoLoadTokenRef.current === token) setVideoLoading(false);
+          if (videoLoadTokenRef.current === token) {
+            setVideoLoading(false);
+            videoLoadingRef.current = false;
+          }
         });
 
       void probeMedia(path).then((info) => {
@@ -2352,6 +2381,63 @@ export function App() {
     }));
   };
 
+  const handleToggleWatcher = useCallback(
+    async (enable: boolean, path: string) => {
+      if (unlistenWatcherRef.current) {
+        unlistenWatcherRef.current();
+        unlistenWatcherRef.current = null;
+      }
+      if (activeWatchPath) {
+        await stopWatchingFile(activeWatchPath);
+      }
+      if (!enable) {
+        setIsWatchingCode(false);
+        setActiveWatchPath(null);
+        return;
+      }
+      try {
+        const unlisten = await startWatchingFile(path, async (payload) => {
+          appLog('App', `File watcher detected change in ${payload.path}`);
+          try {
+            // First check if it's a full project YAML
+            try {
+              const restored = projectFromYaml(payload.content);
+              if (restored && restored.items && restored.items.length > 0) {
+                commitProject(() => restored, true);
+                setToast(`Hot-reloaded project from VS Code`);
+                return;
+              }
+            } catch {}
+
+            // Fallback: parse as script lines and sync
+            const { lines, config } = parseScriptWithConfig(payload.content);
+            if (lines.length > 0) {
+              await handleSyncFromYaml(lines, config);
+              setToast(`Hot-reloaded script (${lines.length} lines) from VS Code`);
+            }
+          } catch (e) {
+            console.warn('Failed to parse hot-reloaded script:', e);
+          }
+        });
+        unlistenWatcherRef.current = unlisten;
+        setIsWatchingCode(true);
+        setActiveWatchPath(path);
+        setToast(`Live watching ${path.split(/[\\/]/).pop()} for VS Code edits`);
+      } catch (err) {
+        setToast(`Failed to watch file: ${String(err)}`);
+      }
+    },
+    [activeWatchPath, commitProject, handleSyncFromYaml]
+  );
+
+  useEffect(() => {
+    return () => {
+      if (unlistenWatcherRef.current) {
+        unlistenWatcherRef.current();
+      }
+    };
+  }, []);
+
   /* ------------------------------------------------------------------ */
   /* Tachie import                                                       */
   /* ------------------------------------------------------------------ */
@@ -2762,6 +2848,8 @@ export function App() {
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
         onOpenGitHistory={() => setIsGitModalOpen(true)}
+        onOpenCodeGen={() => setIsCodeGenOpen(true)}
+        isWatchingCode={isWatchingCode}
         onOpenAssets={() => setIsAssetAuditOpen(true)}
         onExportVideo={() => setIsExportModalOpen(true)}
         onOpenAiVideoGenerator={() => setIsAiVideoModalOpen(true)}
@@ -3105,6 +3193,17 @@ export function App() {
         onSaveCurrentProject={async () => {
           await handleSaveProject(false);
         }}
+        onShowToast={(msg) => setToast(msg)}
+      />
+
+      <CodeGeneratorModal
+        isOpen={isCodeGenOpen}
+        onClose={() => setIsCodeGenOpen(false)}
+        project={project}
+        projectPath={projectPath}
+        isWatching={isWatchingCode}
+        activeWatchPath={activeWatchPath}
+        onToggleWatcher={handleToggleWatcher}
         onShowToast={(msg) => setToast(msg)}
       />
 

@@ -221,6 +221,8 @@ export function itemsToRawText(
   return includeConfig ? generateYamlConfigHeader(characters) + dialogueBody : dialogueBody;
 }
 
+export const serializeScriptToYaml = itemsToRawText;
+
 /**
  * YAMLデータオブジェクトからParsedScriptLineのリストを抽出
  * - z(smile): セリフ

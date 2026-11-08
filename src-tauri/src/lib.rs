@@ -1,5 +1,6 @@
 mod media_server;
 mod git_service;
+mod code_generator;
 
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
@@ -1618,6 +1619,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(ExportProcessState::default())
         .manage(MediaServerState(media_server))
+        .manage(code_generator::WatcherState::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -1659,7 +1661,11 @@ pub fn run() {
             git_service::git_commit_snapshot,
             git_service::git_init_repository,
             git_service::git_push_remote,
-            git_service::git_read_file_at_commit
+            git_service::git_read_file_at_commit,
+            code_generator::open_in_external_editor,
+            code_generator::start_file_watcher,
+            code_generator::stop_file_watcher,
+            code_generator::generate_vscode_project
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

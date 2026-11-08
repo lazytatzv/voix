@@ -21,6 +21,7 @@ import {
   MoreHorizontal,
   RefreshCw,
   FolderGit2,
+  Code2,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -43,6 +44,8 @@ interface HeaderProps {
   onOpenSettings?: () => void;
   onOpenProjectSettings?: () => void;
   onOpenGitHistory?: () => void;
+  onOpenCodeGen?: () => void;
+  isWatchingCode?: boolean;
   onExportVideo: () => void;
   onOpenAiVideoGenerator: () => void;
   hasVideo: boolean;
@@ -76,6 +79,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenSettings,
   onOpenProjectSettings,
   onOpenGitHistory,
+  onOpenCodeGen,
+  isWatchingCode,
   onExportVideo,
   onOpenAiVideoGenerator,
   hasVideo,
@@ -344,6 +349,26 @@ export const Header: React.FC<HeaderProps> = ({
               <FolderGit2 className="w-3.5 h-3.5" />
             </button>
           )}
+          {onOpenCodeGen && (
+            <button
+              type="button"
+              onClick={onOpenCodeGen}
+              className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-emerald-400 transition"
+              title="Code Generator & VS Code Sync (STM32CubeMX Style)"
+            >
+              <Code2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {isWatchingCode && (
+            <span
+              className="flex items-center gap-1 text-[10px] font-mono text-emerald-400 bg-[#14231b] px-1.5 py-0.5 rounded border border-[#21432f] cursor-pointer"
+              onClick={onOpenCodeGen}
+              title="Live hot-reload watcher is active for VS Code"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="hidden lg:inline">VS Code Sync</span>
+            </span>
+          )}
           {onOpenAssets && (
             <button
               type="button"
@@ -463,6 +488,26 @@ export const Header: React.FC<HeaderProps> = ({
                     </span>
                     <span className="block mt-0.5 pl-[20px] text-[10px] font-mono text-[#6f7276]">
                       Snapshots, GitHub push & rollback
+                    </span>
+                  </button>
+                )}
+                {onOpenCodeGen && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsMoreOpen(false);
+                      onOpenCodeGen();
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[#202226] transition border-b border-[#242629]"
+                    title="Generate code project and sync with VS Code"
+                  >
+                    <span className="flex items-center gap-2 text-[11px] text-[#e3e3e3]">
+                      <Code2 className="w-3 h-3 text-emerald-400 flex-shrink-0" />
+                      Code Generator (VS Code)
+                    </span>
+                    <span className="block mt-0.5 pl-[20px] text-[10px] font-mono text-[#6f7276]">
+                      STM32CubeMX style live sync
                     </span>
                   </button>
                 )}
