@@ -31,10 +31,11 @@ services:
     build:
       context: ./docker/coeiroink
       dockerfile: Dockerfile.cpu
+      network: host
     image: voix/coeiroink:cpu
     container_name: coeiroink_engine
     ports:
-      - "50032:50032"
+      - "50032:50033"
     volumes:
       - coeiroink_speaker_info:/app/coeiroink/speaker_info
     restart: unless-stopped
@@ -44,10 +45,11 @@ services:
     build:
       context: ./docker/coeiroink
       dockerfile: Dockerfile.gpu
+      network: host
     image: voix/coeiroink:gpu
     container_name: coeiroink_engine_gpu
     ports:
-      - "50032:50032"
+      - "50032:50033"
     volumes:
       - coeiroink_speaker_info:/app/coeiroink/speaker_info
     restart: unless-stopped

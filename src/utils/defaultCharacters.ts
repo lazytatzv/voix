@@ -311,7 +311,61 @@ export const marisaAvatars = {
   },
 };
 
+export const TECH_GIRL_CHARACTER: Character = {
+  id: 'tech_girl',
+  name: 'Tech Girl',
+  ttsProviderId: 'voicevox',
+  speakerId: 2, // Shikoku Metan
+  styleId: 2,
+  avatar: {
+    idle: '/characters/tech_girl/idle.png',
+    speaking: '/characters/tech_girl/explain_right.png',
+    expressions: {
+      idle: '/characters/tech_girl/idle.png',
+      explain_left: '/characters/tech_girl/explain_left.png',
+      point_up: '/characters/tech_girl/point_up.png',
+      explain_right: '/characters/tech_girl/explain_right.png',
+      curious: '/characters/tech_girl/curious.png',
+      surprised: '/characters/tech_girl/surprised.png',
+      thoughtful: '/characters/tech_girl/thoughtful.png',
+      cross_arms: '/characters/tech_girl/cross_arms.png',
+      sweat: '/characters/tech_girl/sweat.png',
+      shrug: '/characters/tech_girl/shrug.png',
+      peace: '/characters/tech_girl/peace.png',
+      welcome: '/characters/tech_girl/welcome.png',
+      sleep: '/characters/tech_girl/sleep.png',
+      trouble: '/characters/tech_girl/trouble.png',
+      smug: '/characters/tech_girl/smug.png',
+      blush: '/characters/tech_girl/blush.png',
+      pout: '/characters/tech_girl/pout.png',
+      pray: '/characters/tech_girl/pray.png',
+      panic: '/characters/tech_girl/panic.png',
+      success: '/characters/tech_girl/success.png',
+    },
+  },
+  subtitleStyle: {
+    textColor: '#ffffff',
+    fontSize: 42,
+    fontFamily: "'Google Sans', 'Noto Sans JP', sans-serif",
+    fontWeight: '900',
+    strokeColor: '#090a0c',
+    strokeWidth: 8,
+    outerStrokeColor: '#a855f7', // Lilac purple
+    outerStrokeWidth: 14,
+    hasShadow: true,
+    shadowColor: 'rgba(0, 0, 0, 0.85)',
+    shadowBlur: 8,
+    shadowOffsetY: 4,
+    bgStyle: 'none',
+    yOffsetPercent: 12,
+  },
+  position: 'right',
+  scale: 0.9,
+  flipH: false,
+};
+
 export const defaultCharacters: Character[] = [
+  TECH_GIRL_CHARACTER,
   {
     id: 'zundamon',
     name: 'ずんだもん',

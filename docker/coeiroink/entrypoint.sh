@@ -2,7 +2,7 @@
 set -e
 
 INTERNAL_PORT=50032
-EXTERNAL_PORT=50032
+EXTERNAL_PORT=50033
 
 echo "🚀 Starting COEIROINK Engine..."
 

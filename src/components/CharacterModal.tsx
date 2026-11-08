@@ -20,6 +20,7 @@ import {
   ListMusic,
   Scaling,
   Sparkles,
+  Scissors,
 } from 'lucide-react';
 import { Character, Speaker, SpeakerStyle } from '../types';
 import { ttsManager } from '../services/tts/TTSManager';
@@ -29,10 +30,11 @@ import { CustomSelect } from './CustomSelect';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
 import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
 import { SafeAvatarImg } from './SafeAvatarImg';
-import { defaultCharacters } from '../utils/defaultCharacters';
+import { defaultCharacters, TECH_GIRL_CHARACTER } from '../utils/defaultCharacters';
 import { VOICEVOX_CATALOG } from '../utils/voicevoxCatalog';
 import { COEIROINK_CATALOG } from '../utils/coeiroinkCatalog';
 import { VOICE_TONE_PRESETS } from '../utils/voiceTonePresets';
+import { SpriteSheetModal } from './SpriteSheetModal';
 
 interface ProviderVoices {
   providerId: string;
@@ -75,6 +77,7 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
   const [auditionAll, setAuditionAll] = useState(false);
   const [isPresetPickerOpen, setIsPresetPickerOpen] = useState(false);
   const [isCoeiroinkPickerOpen, setIsCoeiroinkPickerOpen] = useState(false);
+  const [isSpriteSheetModalOpen, setIsSpriteSheetModalOpen] = useState(false);
   const auditionTokenRef = useRef(0);
   const auditionTimerRef = useRef<number | null>(null);
   const auditionWaitResolveRef = useRef<(() => void) | null>(null);
@@ -627,6 +630,34 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
             >
               <Plus className="w-3.5 h-3.5" />
               Add Speaker
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsSpriteSheetModalOpen(true)}
+              className="mt-2 w-full py-2 px-3 rounded-xl bg-[#281b3b] hover:bg-[#382454] text-[#c084fc] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#52337d] transition cursor-pointer"
+              title="Auto-slice sprite sheet into 20+ transparent expressions and create a character"
+            >
+              <Scissors className="w-3.5 h-3.5 text-[#c084fc]" />
+              Auto-Slice Sprite Sheet
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const newId = `tech_girl_${Date.now()}`;
+                const newChar: Character = {
+                  ...TECH_GIRL_CHARACTER,
+                  id: newId,
+                };
+                onAddCharacter(newChar);
+                setSelectedCharId(newId);
+              }}
+              className="mt-1.5 w-full py-2 px-3 rounded-xl bg-[#1d1b28] hover:bg-[#2a243d] text-[#c084fc] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#3e2c5b] transition cursor-pointer"
+              title="Add Tech Girl (20 expressions) preset character"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+              + Tech Girl (20 Poses)
             </button>
 
             {char && (
@@ -1461,6 +1492,20 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
           </button>
         </div>
       </div>
+
+      <SpriteSheetModal
+        isOpen={isSpriteSheetModalOpen}
+        onClose={() => setIsSpriteSheetModalOpen(false)}
+        providers={providers.map((p) => ({
+          id: p.providerId,
+          name: p.providerName,
+          speakers: p.speakers,
+        }))}
+        onSaveCharacter={(newChar) => {
+          onAddCharacter(newChar);
+          setSelectedCharId(newChar.id);
+        }}
+      />
     </div>
   );
 };
