@@ -1,4 +1,4 @@
-import { Character, ImageItem, ShapeItem, SubtitleStyle, TextItem, TimelineItem, TrackState, VoiceItem } from '../types';
+import { BackgroundMotion, Character, ImageItem, ShapeItem, SubtitleStyle, TextItem, TimelineItem, TrackState, VoiceItem } from '../types';
 import { getCachedImage, getImageContentBounds } from './imageCache';
 import { computeItemMotion } from './itemMotion';
 import { resolveItemTransform } from './keyframes';
@@ -8,6 +8,7 @@ import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } 
 import { computeTextRevealRange, textRevealCharacterCount } from '../utils/textReveal';
 import type { TextRevealTiming } from '../utils/textReveal';
 import { isTrackVisible } from '../utils/tracks';
+import { resolveBackgroundMotion } from '../utils/backgroundMotion';
 import { planVisualLayers, VisualLayerItem } from './visualLayers';
 
 export interface OverlayRenderOptions {
@@ -27,6 +28,12 @@ export interface OverlayRenderOptions {
   backgroundVideo?: HTMLVideoElement | null;
   /** How the background video fills the frame. Defaults to contain. */
   backgroundFit?: 'contain' | 'cover' | 'stretch';
+  /** Ken Burns style camera move for the background video. */
+  backgroundMotion?: BackgroundMotion;
+  /** Strength of the background camera move (0.02 - 0.5). */
+  backgroundMotionAmount?: number;
+  /** Project duration used to pace the background camera move. */
+  duration?: number;
 }
 
 const FALLBACK_STYLE: SubtitleStyle = {
@@ -517,7 +524,7 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
             ctx.strokeStyle = style.strokeColor || 'transparent';
             if (ctx.lineWidth > 0) ctx.strokeText(drawText, drawX, lineY);
           } else {
-            ctx.fillStyle = style.textColor || '#ffffff';
+            ctx.fillStyle = token.highlightColor || style.textColor || '#ffffff';
             ctx.fillText(drawText, drawX, lineY);
             if (style.underline || style.strikethrough) {
               const decorationWidth = ctx.measureText(drawText).width;
@@ -816,10 +823,12 @@ function computeCharacterLayout(
     const anim = charVoice.anim || 'bounce';
     if (anim === 'bounce' && progress < 0.26) {
       animOffsetY = -Math.sin((progress / 0.26) * Math.PI) * 24;
-    } else if (anim === 'pop' && progress < 0.2) {
-      animScale = 1 + Math.sin((progress / 0.2) * Math.PI) * 0.08;
-    } else if (anim === 'shake' && progress < 0.35) {
+    } else if ((anim === 'pop' || anim === 'punch' || anim === 'zoom') && progress < 0.24) {
+      animScale = 1 + Math.sin((progress / 0.24) * Math.PI) * 0.12;
+    } else if ((anim === 'shake' || anim === 'screen-shake' || anim === 'impact') && progress < 0.35) {
       animOffsetX = Math.sin(progress * 50) * 10 * (1 - progress / 0.35);
+    } else if (anim === 'flash' && progress < 0.25) {
+      animOffsetY = -Math.sin((progress / 0.25) * Math.PI) * 18;
     } else if (anim === 'nod' && progress < 0.24) {
       animOffsetY = Math.sin((progress / 0.24) * Math.PI) * 16;
     } else if (anim === 'slide' && progress < 0.3) {
@@ -1033,12 +1042,14 @@ function drawShapeItem(
     ctx.closePath();
   } else if (item.shape === 'burst') {
     strokeOnly = true;
-    const rays = 28;
-    const innerRatio = 0.24;
+    const rays = 32;
+    const innerRatio = 0.22;
+    const angleOffset = Math.sin(time * 35) * 0.05;
     ctx.beginPath();
     for (let i = 0; i < rays; i++) {
-      const angle = (i / rays) * Math.PI * 2;
-      const outerRatio = i % 2 === 0 ? 1 : 0.86;
+      const angle = (i / rays) * Math.PI * 2 + angleOffset;
+      const seed = Math.sin(i * 12.9898 + Math.floor(time * 14)) * 0.12;
+      const outerRatio = Math.max(0.6, (i % 2 === 0 ? 1 : 0.86) + seed);
       ctx.moveTo(
         Math.cos(angle) * halfWidth * innerRatio,
         Math.sin(angle) * halfHeight * innerRatio
@@ -1153,6 +1164,35 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
   ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.restore();
 
+  const visibleItems = items.filter((item) => !item.hidden);
+  const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');
+  const activeVoice = activeVoiceAt(visibleItems, time);
+
+  // Screen shake and camera punch zoom (for games, tsukkomi, shock effects)
+  let screenShakeX = 0;
+  let screenShakeY = 0;
+  let screenScale = 1;
+
+  if (activeVoice) {
+    const anim = activeVoice.anim || '';
+    const progress = time - activeVoice.startTime;
+    if ((anim === 'screen-shake' || anim === 'impact') && progress >= 0 && progress < 0.38) {
+      const decay = 1 - progress / 0.38;
+      const intensity = 20 * decay;
+      screenShakeX = Math.sin(progress * 68) * intensity;
+      screenShakeY = Math.cos(progress * 88) * (intensity * 0.75);
+    } else if ((anim === 'punch' || anim === 'zoom') && progress >= 0 && progress < 0.28) {
+      screenScale = 1 + Math.sin((progress / 0.28) * Math.PI) * 0.08;
+    }
+  }
+
+  ctx.save();
+  if (screenShakeX !== 0 || screenShakeY !== 0 || screenScale !== 1) {
+    ctx.translate(width / 2 + screenShakeX, height / 2 + screenShakeY);
+    ctx.scale(screenScale, screenScale);
+    ctx.translate(-width / 2, -height / 2);
+  }
+
   // Draw background video directly onto the canvas so Linux / WebKitGTK
   // compositing bugs cannot hide the video underneath transparent overlays.
   if (options.backgroundVideo && options.backgroundVideo.readyState >= 2) {
@@ -1160,8 +1200,12 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
       const video = options.backgroundVideo;
       const sourceWidth = video.videoWidth || width;
       const sourceHeight = video.videoHeight || height;
-      const fit = options.backgroundFit ?? 'contain';
-      if (fit === 'stretch' || sourceWidth <= 0 || sourceHeight <= 0) {
+      const motion = options.backgroundMotion ?? 'none';
+      const motionActive = motion !== 'none';
+      // Camera moves need extra pixels outside the frame, so they always use
+      // a cover crop. A still frame keeps the project's fit setting.
+      const fit = motionActive ? 'cover' : options.backgroundFit ?? 'contain';
+      if (!motionActive && (fit === 'stretch' || sourceWidth <= 0 || sourceHeight <= 0)) {
         ctx.drawImage(video, 0, 0, width, height);
       } else {
         const scale =
@@ -1171,26 +1215,37 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
         const drawWidth = sourceWidth * scale;
         const drawHeight = sourceHeight * scale;
         ctx.save();
-        if (fit === 'cover') {
-          ctx.beginPath();
-          ctx.rect(0, 0, width, height);
-          ctx.clip();
+        ctx.beginPath();
+        ctx.rect(0, 0, width, height);
+        ctx.clip();
+        if (motionActive) {
+          const motionState = resolveBackgroundMotion(
+            motion,
+            options.backgroundMotionAmount ?? 0.12,
+            options.time,
+            options.duration ?? 0
+          );
+          const maxShiftX = Math.max(0, (drawWidth * motionState.scale - width) / 2);
+          const maxShiftY = Math.max(0, (drawHeight * motionState.scale - height) / 2);
+          ctx.translate(
+            width / 2 + motionState.shiftX * maxShiftX,
+            height / 2 + motionState.shiftY * maxShiftY
+          );
+          ctx.scale(motionState.scale, motionState.scale);
+          ctx.drawImage(video, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
+        } else {
+          ctx.drawImage(
+            video,
+            (width - drawWidth) / 2,
+            (height - drawHeight) / 2,
+            drawWidth,
+            drawHeight
+          );
         }
-        ctx.drawImage(
-          video,
-          (width - drawWidth) / 2,
-          (height - drawHeight) / 2,
-          drawWidth,
-          drawHeight
-        );
         ctx.restore();
       }
     } catch {}
   }
-
-  const visibleItems = items.filter((item) => !item.hidden);
-  const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');
-  const activeVoice = activeVoiceAt(visibleItems, time);
 
   const images = isTrackVisible(tracks, 'image')
     ? visibleItems.filter(
@@ -1262,6 +1317,22 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
         });
         ctx.restore();
       }
+    }
+  }
+
+  // Restore screen shake and punch zoom transform
+  ctx.restore();
+
+  // White flash overlay
+  if (activeVoice) {
+    const anim = activeVoice.anim || '';
+    const progress = time - activeVoice.startTime;
+    if (anim === 'flash' && progress >= 0 && progress < 0.25) {
+      const flashAlpha = Math.max(0, (1 - progress / 0.25) * 0.88);
+      ctx.save();
+      ctx.fillStyle = `rgba(255, 255, 255, ${flashAlpha})`;
+      ctx.fillRect(0, 0, width, height);
+      ctx.restore();
     }
   }
 

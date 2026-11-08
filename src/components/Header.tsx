@@ -20,6 +20,7 @@ import {
   FileWarning,
   MoreHorizontal,
   RefreshCw,
+  FolderGit2,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -41,6 +42,7 @@ interface HeaderProps {
   onOpenCharacterSettings: () => void;
   onOpenSettings?: () => void;
   onOpenProjectSettings?: () => void;
+  onOpenGitHistory?: () => void;
   onExportVideo: () => void;
   onOpenAiVideoGenerator: () => void;
   hasVideo: boolean;
@@ -73,6 +75,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenCharacterSettings,
   onOpenSettings,
   onOpenProjectSettings,
+  onOpenGitHistory,
   onExportVideo,
   onOpenAiVideoGenerator,
   hasVideo,
@@ -331,6 +334,16 @@ export const Header: React.FC<HeaderProps> = ({
               <Settings2 className="w-3.5 h-3.5" />
             </button>
           )}
+          {onOpenGitHistory && (
+            <button
+              type="button"
+              onClick={onOpenGitHistory}
+              className="p-1 rounded hover:bg-[#222427] text-[#8e918f] hover:text-[#8ab4f8] transition"
+              title="Git Version History & GitHub Sync"
+            >
+              <FolderGit2 className="w-3.5 h-3.5" />
+            </button>
+          )}
           {onOpenAssets && (
             <button
               type="button"
@@ -433,6 +446,26 @@ export const Header: React.FC<HeaderProps> = ({
                 role="menu"
                 className="absolute right-0 top-full mt-2 z-[70] w-64 bg-[#16181b] border border-[#2c2e32] rounded-sm overflow-hidden"
               >
+                {onOpenGitHistory && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsMoreOpen(false);
+                      onOpenGitHistory();
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[#202226] transition border-b border-[#242629]"
+                    title="Git snapshots & GitHub synchronization"
+                  >
+                    <span className="flex items-center gap-2 text-[11px] text-[#e3e3e3]">
+                      <FolderGit2 className="w-3 h-3 text-[#8ab4f8] flex-shrink-0" />
+                      Git Version History
+                    </span>
+                    <span className="block mt-0.5 pl-[20px] text-[10px] font-mono text-[#6f7276]">
+                      Snapshots, GitHub push & rollback
+                    </span>
+                  </button>
+                )}
                 <button
                   type="button"
                   role="menuitem"

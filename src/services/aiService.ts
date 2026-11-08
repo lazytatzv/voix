@@ -107,6 +107,32 @@ export function formatSpeechWithPersona(characterName: string, text: string): st
     return res;
   }
 
+  // 5. 博麗霊夢 (巫女・ツッコミ: 〜よ、〜わね、私)
+  if (name.includes('霊夢') || name.includes('reimu')) {
+    let res = text.replace(/ボク|わたくし|あーし|オレ/g, '私');
+    res = res.replace(/なのだ|のだ/g, 'よ');
+    res = res.replace(/ですわ|でございます/g, 'よ');
+    res = res.replace(/です([！!。.]|$)/g, 'よ$1');
+    res = res.replace(/ます([！!。.]|$)/g, 'るわ$1');
+    if (!res.includes('よ') && !res.includes('わ')) {
+      res = res.replace(/[!！。.]*$/, '') + 'よ！';
+    }
+    return res;
+  }
+
+  // 6. 霧雨魔理沙 (魔法使い・相方: 〜だぜ、〜だな、〜のか？)
+  if (name.includes('魔理沙') || name.includes('marisa')) {
+    let res = text.replace(/ボク|わたくし|あーし/g, '私');
+    res = res.replace(/なのだ|のだ|ですわ/g, 'だぜ');
+    res = res.replace(/です([！!。.]|$)/g, 'だぜ$1');
+    res = res.replace(/ます([！!。.]|$)/g, 'るぜ$1');
+    res = res.replace(/ですか([！!？?。.]|$)/g, 'のか$1');
+    if (!res.includes('ぜ') && !res.includes('な')) {
+      res = res.replace(/[!！。.]*$/, '') + 'だぜ！';
+    }
+    return res;
+  }
+
   return text;
 }
 

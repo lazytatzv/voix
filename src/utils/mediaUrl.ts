@@ -1,5 +1,6 @@
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { isTauriRuntime } from '../services/audioCache';
+import { soundEffectManager } from './soundEffects';
 
 // WebKitGTK cannot stream Tauri's custom `asset:` scheme, so <video>/<audio>
 // elements fail with MEDIA_ERR_SRC_NOT_SUPPORTED. Previously we downloaded the
@@ -38,6 +39,12 @@ function pathFromLocalUrl(src: string): string | null {
 }
 
 async function resolveMediaUrl(src: string): Promise<string> {
+  if (src.startsWith('se:')) {
+    const blob = await soundEffectManager.renderWavBlob(src.slice(3));
+    if (blob) {
+      return URL.createObjectURL(blob);
+    }
+  }
   if (!isTauriRuntime()) return src;
   if (/^(blob:|data:)/i.test(src)) return src;
   if (/^https?:\/\//i.test(src) && !/^https?:\/\/asset\.localhost\//i.test(src)) {

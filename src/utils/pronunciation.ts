@@ -1,10 +1,32 @@
-// ルビ・読み仮名アノテーションエンジン (例: France(フランス) -> 字幕: France / 音声: フランス)
+// ルビ・読み仮名アノテーションエンジン & テロップ装飾ハイライトパーサー
+// 例: France(フランス) -> 字幕: France / 音声: フランス
+// 例: **大爆発** or [赤]危険[/赤] -> 字幕: ハイライト彩色 / 音声: 大爆発, 危険
 import { COMMON_WORD_DICT } from './englishToVoicevox';
 
 export interface PronunciationToken {
   text: string;
   reading?: string;
+  highlightColor?: string;
 }
+
+const HIGHLIGHT_COLOR_MAP: Record<string, string> = {
+  赤: '#ef4444',
+  red: '#ef4444',
+  金: '#facc15',
+  gold: '#facc15',
+  黄: '#fde047',
+  yellow: '#fde047',
+  青: '#38bdf8',
+  blue: '#38bdf8',
+  緑: '#22c55e',
+  green: '#22c55e',
+  紫: '#c084fc',
+  purple: '#c084fc',
+  桃: '#f472b6',
+  pink: '#f472b6',
+  白: '#ffffff',
+  white: '#ffffff',
+};
 
 // 読み仮名パターン正規表現:
 // 1. 英単語/漢字/カタカナ + (よみ) or （よみ）: 例 France(フランス), 漢字（かんじ）
@@ -24,18 +46,14 @@ function isKanaOrPhonetic(str: string): boolean {
   return /^[\u3040-\u309f\u30a0-\u30ff\u31f0-\u31ff\uff66-\uff9fa-zA-Z0-9\sー・]+$/.test(trimmed);
 }
 
-/**
- * テキストをトークン分割し、表示用テキストと読み仮名を抽出する
- */
-export function parsePronunciationTokens(text: string): PronunciationToken[] {
-  if (!text) return [];
-
+function parsePronunciationInSpan(rawSpan: string, highlightColor?: string): PronunciationToken[] {
+  if (!rawSpan) return [];
   const tokens: PronunciationToken[] = [];
   let lastIndex = 0;
   const regex = new RegExp(PRONUNCIATION_REGEX.source, 'g');
   let match: RegExpExecArray | null;
 
-  while ((match = regex.exec(text)) !== null) {
+  while ((match = regex.exec(rawSpan)) !== null) {
     const rawMatch = match[0];
     const baseWord = match[1] || match[3] || match[4];
     const reading = match[2] || match[5];
@@ -43,25 +61,82 @@ export function parsePronunciationTokens(text: string): PronunciationToken[] {
 
     if (baseWord && reading && isKanaOrPhonetic(reading)) {
       if (index > lastIndex) {
-        tokens.push({ text: text.slice(lastIndex, index) });
+        tokens.push({
+          text: rawSpan.slice(lastIndex, index),
+          highlightColor,
+        });
       }
       tokens.push({
         text: baseWord,
         reading: reading.trim(),
+        highlightColor,
       });
       lastIndex = index + rawMatch.length;
     }
   }
 
-  if (lastIndex < text.length) {
-    tokens.push({ text: text.slice(lastIndex) });
+  if (lastIndex < rawSpan.length) {
+    tokens.push({
+      text: rawSpan.slice(lastIndex),
+      highlightColor,
+    });
   }
 
   return tokens;
 }
 
 /**
- * 字幕・画面表示用のクリーンなテキストを取得 (例: "France(フランス)" -> "France")
+ * テキストをトークン分割し、表示用テキスト・読み仮名・ハイライトカラーを抽出する
+ */
+export function parsePronunciationTokens(text: string): PronunciationToken[] {
+  if (!text) return [];
+
+  // ハイライト構文:
+  // 1. **強調ワード**
+  // 2. [赤]ワード[/赤], [金]ワード[/金], [color=#ff0000]ワード[/color]
+  const HIGHLIGHT_REGEX =
+    /\*\*([^\*]+)\*\*|\[(赤|red|金|gold|黄|yellow|青|blue|緑|green|紫|purple|桃|pink|white|白|color=(?:#[0-9a-fA-F]{3,8}))\]([\s\S]*?)\[\/(?:\2|color)\]/gi;
+
+  const result: PronunciationToken[] = [];
+  let lastIdx = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = HIGHLIGHT_REGEX.exec(text)) !== null) {
+    const matchIdx = match.index;
+    if (matchIdx > lastIdx) {
+      result.push(...parsePronunciationInSpan(text.slice(lastIdx, matchIdx)));
+    }
+
+    let color = '#facc15'; // ** の既定ゴールド
+    let innerText = '';
+
+    if (match[1] !== undefined) {
+      // **強調**
+      innerText = match[1];
+      color = '#facc15';
+    } else {
+      const tag = match[2];
+      innerText = match[3] || '';
+      if (tag.toLowerCase().startsWith('color=')) {
+        color = tag.slice(6);
+      } else {
+        color = HIGHLIGHT_COLOR_MAP[tag.toLowerCase()] || '#facc15';
+      }
+    }
+
+    result.push(...parsePronunciationInSpan(innerText, color));
+    lastIdx = matchIdx + match[0].length;
+  }
+
+  if (lastIdx < text.length) {
+    result.push(...parsePronunciationInSpan(text.slice(lastIdx)));
+  }
+
+  return result;
+}
+
+/**
+ * 字幕・画面表示用のクリーンなテキストを取得 (例: "France(フランス)" -> "France", "**注目**" -> "注目")
  */
 export function getSubtitleDisplayText(text: string): string {
   if (!text) return '';
@@ -70,7 +145,7 @@ export function getSubtitleDisplayText(text: string): string {
 }
 
 /**
- * 音声合成 (VOICEVOX / TTS) 用の読み上げテキストを取得 (例: "France(フランス)" -> "フランス")
+ * 音声合成 (VOICEVOX / TTS) 用の読み上げテキストを取得 (例: "France(フランス)" -> "フランス", "**注目**" -> "注目")
  */
 export function getTtsSpokenText(text: string): string {
   if (!text) return '';
@@ -94,18 +169,12 @@ export function extractPronunciations(text: string): { word: string; reading: st
  */
 export function autoAnnotatePronunciations(text: string): string {
   if (!text) return '';
-  
-  // 既に読み仮名アノテーションがある部分は退避
   const tokens = parsePronunciationTokens(text);
-  
   return tokens
     .map((tok) => {
-      // 既に読みが設定されている場合はそのまま表記
       if (tok.reading) {
         return `${tok.text}(${tok.reading})`;
       }
-
-      // プレーンテキスト内の英単語を検索
       return tok.text.replace(/\b([a-zA-Z]+)\b/g, (match, word) => {
         const lower = word.toLowerCase();
         if (COMMON_WORD_DICT[lower]) {

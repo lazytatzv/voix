@@ -3,22 +3,17 @@ import {
   Trash2,
   Volume2,
   Loader2,
-  Send,
   Sliders,
   Copy,
   Scissors,
-  Languages,
-  Wand2,
-  Tag,
   Check,
   Plus,
   ChevronDown,
   Zap,
 } from 'lucide-react';
-import { Character, VoiceItem } from '../types';
+import { Character, Marker, VoiceItem } from '../types';
 import { CustomSelect } from './CustomSelect';
-import { processAiAction, AiAction } from '../services/aiService';
-import { extractPronunciations, autoAnnotatePronunciations } from '../utils/pronunciation';
+import { extractPronunciations } from '../utils/pronunciation';
 import {
   itemsToRawText,
   parseScriptWithConfig,
@@ -30,6 +25,7 @@ import {
 interface ScriptEditorProps {
   items: VoiceItem[];
   characters: Character[];
+  markers?: Marker[];
   currentTime: number;
   selectedItemId?: string | null;
   isPlaying?: boolean;
@@ -210,14 +206,8 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   const lastRequestedYamlRef = useRef<string | null>(null);
   const syncChainRef = useRef<Promise<void>>(Promise.resolve());
 
-  const [inputText, setInputText] = useState('');
-  const [selectedCharacterId, setSelectedCharacterId] = useState<string>(characters[0]?.id || '');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isAiProcessing, setIsAiProcessing] = useState(false);
-  const [isAiMenuOpen, setIsAiMenuOpen] = useState(false);
   const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
   const [isInsertMenuOpen, setIsInsertMenuOpen] = useState(false);
-  const aiMenuRef = useRef<HTMLDivElement | null>(null);
   const insertMenuRef = useRef<HTMLDivElement | null>(null);
 
   // 再生中または選択中のアクティブなセリフアイテムを特定
@@ -283,9 +273,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
     return () => clearTimeout(timer);
   }, [selectedItemId, tab, scrollToTargetItem]);
 
-  const activeCharId = characters.some((c) => c.id === selectedCharacterId)
-    ? selectedCharacterId
-    : characters[0]?.id || '';
 
   // Cards -> YAML 自動同期: Cards編集時、YAMLテキストを自動更新
   useEffect(() => {
@@ -475,13 +462,9 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
   };
 
   useEffect(() => {
-    if (!isAiMenuOpen && !isInsertMenuOpen) return;
+    if (!isInsertMenuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (isAiMenuOpen && aiMenuRef.current && !aiMenuRef.current.contains(e.target as Node)) {
-        setIsAiMenuOpen(false);
-      }
       if (
-        isInsertMenuOpen &&
         insertMenuRef.current &&
         !insertMenuRef.current.contains(e.target as Node)
       ) {
@@ -492,56 +475,12 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
       if (e.key === 'Escape') setIsInsertMenuOpen(false);
     };
     document.addEventListener('mousedown', handleClickOutside);
-    if (isInsertMenuOpen) {
-      document.addEventListener('keydown', handleEscape);
-    }
+    document.addEventListener('keydown', handleEscape);
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('keydown', handleEscape);
     };
-  }, [isAiMenuOpen, isInsertMenuOpen]);
-
-  const handleAdd = async (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputText.trim()) return;
-
-    setIsSubmitting(true);
-    try {
-      let startTime = currentTime;
-      if (items.length > 0) {
-        const lastItem = items[items.length - 1];
-        const lastEndTime = lastItem.startTime + lastItem.duration;
-        startTime = Math.max(currentTime, lastEndTime);
-      }
-
-      await onAddItem(activeCharId, inputText.trim(), startTime);
-      setInputText('');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleAdd();
-    }
-  };
-
-  // Script action execution
-  const handleTriggerAi = async (action: AiAction) => {
-    setIsAiProcessing(true);
-    setIsAiMenuOpen(false);
-    try {
-      const targetText = inputText.trim() || 'みなさんこんにちは！今日は注目の技術について解説していくのだ！';
-      const result = await processAiAction({ action, text: targetText });
-      setInputText(result);
-    } finally {
-      setIsAiProcessing(false);
-    }
-  };
-
-  const selectedChar = characters.find((c) => c.id === activeCharId) || characters[0];
+  }, [isInsertMenuOpen]);
 
   return (
     <div className="flex flex-col h-full bg-[#18191b] border border-[#2e3135] rounded-none overflow-hidden">
@@ -582,6 +521,29 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               YAML
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const input = document.getElementById('quick-dialogue-input') as HTMLInputElement | null;
+              if (input) {
+                input.focus();
+                input.select();
+              } else if (characters.length > 0) {
+                let startTime = currentTime;
+                if (items.length > 0) {
+                  const lastItem = items[items.length - 1];
+                  startTime = Math.max(currentTime, lastItem.startTime + lastItem.duration);
+                }
+                onAddItem(characters[0].id, 'New line', startTime);
+              }
+            }}
+            className="flex items-center gap-1 px-2 py-1 text-[11px] font-sans font-medium bg-[#1e232a] hover:bg-[#252b34] text-[#8ab4f8] border border-[#2e3846] rounded transition cursor-pointer"
+            title="Focus quick dialogue input bar (Enter to add)"
+          >
+            <Plus className="w-3 h-3" />
+            <span>+ Line</span>
+          </button>
         </div>
 
         {/* Right: Sync Status & Timestamp */}
@@ -738,14 +700,13 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
           </div>
         </div>
       ) : (
-        <>
-          {/* Main Content: Dialogue Cards List */}
-          <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5">
+        /* Main Content: Dialogue Cards List */
+        <div className="flex-1 overflow-y-auto p-3.5 space-y-2.5">
             {items.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-8 text-[#8e918f]">
                 <p className="text-sm font-medium text-[#c4c7c5]">No dialogue clips yet</p>
                 <p className="text-xs mt-1.5 text-[#8e918f] max-w-xs leading-relaxed">
-                  Type dialogue below and press Enter, or edit via the YAML tab.
+                  Enter dialogue in the Quick Dialogue Bar below and press Enter, or edit via the YAML tab.
                 </p>
               </div>
             ) : (
@@ -969,131 +930,6 @@ export const ScriptEditor: React.FC<ScriptEditorProps> = ({
               })
             )}
           </div>
-
-          {/* Footer: Prompt Input Bar */}
-          <div className="p-3.5 bg-[#141517] border-t border-[#242628] space-y-2">
-            <div className="flex items-center gap-2 overflow-x-auto pb-0.5">
-              {characters.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  onClick={() => setSelectedCharacterId(c.id)}
-                  className={`px-2.5 py-1 rounded-none border text-[10px] font-mono tracking-wide transition flex-shrink-0 ${
-                    activeCharId === c.id
-                      ? 'bg-[#2a2c30] text-[#e3e3e3] border-[#4a4f56]'
-                      : 'bg-[#1a1c1f] text-[#c4c7c5] border-[#2e3135] hover:text-white hover:border-[#4a4f56]'
-                  }`}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={handleAdd} className="relative flex items-center">
-              {/* Script tools popover */}
-              <div ref={aiMenuRef} className="absolute left-2 z-20">
-                <button
-                  type="button"
-                  onClick={() => setIsAiMenuOpen(!isAiMenuOpen)}
-                  disabled={isAiProcessing}
-                  className="p-1.5 rounded-lg bg-[#202124] hover:bg-[#282a2e] text-[#8ab4f8] border border-[#2e3135] transition flex items-center gap-1 text-[11px] font-medium"
-                  title="Script tools"
-                >
-                  {isAiProcessing ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Wand2 className="w-3.5 h-3.5" />
-                  )}
-                </button>
-
-                {/* Script tools menu */}
-                {isAiMenuOpen && (
-                  <div className="absolute bottom-10 left-0 w-64 bg-[#141518] border border-[#26282c] rounded-sm p-1.5 space-y-1 animate-in fade-in duration-100 z-50 select-none">
-                    <span className="text-[10px] font-mono text-[#8e918f] uppercase px-2.5 py-1 block tracking-wider">
-                      Script tools
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerAi('zundamon')}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
-                    >
-                      <span className="text-sm">🥑</span>
-                      <span>Convert to Zundamon Style</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerAi('metan')}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
-                    >
-                      <span className="text-sm">🌸</span>
-                      <span>Convert to Metan Style</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerAi('reaction')}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
-                    >
-                      <Wand2 className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Generate Reaction (Japanese)</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerAi('shorten')}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
-                    >
-                      <Scissors className="w-3.5 h-3.5 text-rose-400" />
-                      <span>Summarize for Subtitles</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTriggerAi('translate_ja')}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
-                    >
-                      <Languages className="w-3.5 h-3.5 text-[#8ab4f8]" />
-                      <span>Refine to Natural Japanese</span>
-                    </button>
-                    <div className="border-t border-[#26282c] my-1" />
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (inputText.trim()) {
-                          setInputText(autoAnnotatePronunciations(inputText));
-                        }
-                        setIsAiMenuOpen(false);
-                      }}
-                      className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-sm text-xs text-[#e3e3e3] hover:bg-[#1f2228] hover:text-white transition text-left"
-                    >
-                      <Tag className="w-3.5 h-3.5 text-emerald-400" />
-                      <span>Auto Furigana / Ruby</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              <input
-                type="text"
-                placeholder={`Enter dialogue for ${selectedChar?.name || 'speaker'} (Enter to add)...`}
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={handleKeyDown}
-                disabled={isSubmitting}
-                className="w-full bg-[#101113] border border-[#26282c] focus:border-[#3b82f6] rounded-sm pl-11 pr-12 py-2 text-sm text-[#e3e3e3] placeholder-[#8e918f] outline-none transition shadow-inner font-sans"
-              />
-
-              <button
-                type="submit"
-                disabled={!inputText.trim() || isSubmitting}
-                className="absolute right-1 px-3 py-1.5 rounded-none bg-[#004a77] hover:bg-[#005a92] text-[#c2e7ff] border border-[#005a92] transition disabled:opacity-30 disabled:bg-[#1f2228] disabled:text-[#8e918f]"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-3.5 h-3.5" />
-                )}
-              </button>
-            </form>
-          </div>
-        </>
       )}
     </div>
   );

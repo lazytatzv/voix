@@ -45,6 +45,8 @@ export function getCharacterShortPrefix(char: Character, index: number): string 
   const name = char.name.trim();
   if (name.includes('ずんだ') || name.toLowerCase().includes('zunda')) return 'z';
   if (name.includes('めたん') || name.toLowerCase().includes('metan')) return 'm';
+  if (name.includes('霊夢') || name.toLowerCase().includes('reimu')) return 're';
+  if (name.includes('魔理沙') || name.toLowerCase().includes('marisa')) return 'ma';
   if (name.includes('つむぎ') || name.toLowerCase().includes('tsumugi')) return 't';
   if (name.includes('リツ') || name.toLowerCase().includes('ritsu')) return 'r';
   if (name.length > 0) return name[0].toLowerCase();
@@ -537,6 +539,14 @@ export function matchCharacter(
   }
 
   // 2. 短縮記号・イニシャル完全一致
+  if (query === 're' || query === 'れいむ' || query === '霊夢' || query === 'reimu') {
+    const r = characters.find((c) => c.id === 'reimu' || c.name.includes('霊夢'));
+    if (r) return r;
+  }
+  if (query === 'ma' || query === 'まりさ' || query === '魔理沙' || query === 'marisa') {
+    const m = characters.find((c) => c.id === 'marisa' || c.name.includes('魔理沙'));
+    if (m) return m;
+  }
   if (query === 'z' || query === 'ず') {
     const z = characters.find(
       (c) => c.id === 'zundamon' || c.name.includes('ずんだ') || c.speakerId === 3

@@ -12,6 +12,11 @@ import {
   VoiceItem,
 } from '../types';
 import { DEFAULT_DUCKING, normalizeDucking } from './audioDucking';
+import {
+  DEFAULT_BACKGROUND_MOTION_AMOUNT,
+  normalizeBackgroundMotion,
+  normalizeBackgroundMotionAmount,
+} from './backgroundMotion';
 import { normalizeKeyframes } from '../render/keyframes';
 import { normalizeItemEffects } from '../render/itemEffects';
 import { normalizeBlendMode } from '../render/blendModes';
@@ -62,6 +67,8 @@ export function createEmptyProject(name = 'Untitled Project'): VoixProject {
       videoSpeed: 1,
       videoOffset: 0,
       videoFit: 'contain',
+      videoMotion: 'none',
+      videoMotionAmount: DEFAULT_BACKGROUND_MOTION_AMOUNT,
       ducking: { ...DEFAULT_DUCKING },
     },
     characters: [],
@@ -435,6 +442,8 @@ export function normalizeProject(raw: unknown, fallbackName = 'Untitled Project'
           : timeline.videoFit === 'stretch'
             ? 'stretch'
             : 'contain',
+      videoMotion: normalizeBackgroundMotion(timeline.videoMotion),
+      videoMotionAmount: normalizeBackgroundMotionAmount(timeline.videoMotionAmount),
       ducking: normalizeDucking(timeline.ducking),
     },
     characters: Array.isArray(root.characters)

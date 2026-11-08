@@ -23,6 +23,7 @@ import { getSubtitleDisplayText } from '../utils/pronunciation';
 import { collectVoiceIntervals } from '../utils/audioDucking';
 import { buildVoiceTtsOptions } from './tts/voiceParams';
 import { isTrackMuted, isTrackVisible } from '../utils/tracks';
+import { soundEffectManager } from '../utils/soundEffects';
 
 export { blobToBase64 };
 
@@ -90,6 +91,9 @@ interface StreamExportPayload {
   video_offset: number;
   video_speed: number;
   video_fit: string;
+  video_motion: string;
+  video_motion_amount: number;
+  timeline_duration: number;
   audio_clips: AudioClipPayload[];
 }
 
@@ -146,6 +150,13 @@ async function sourceToWavPath(
     return writeJobAudio(jobDir, `clip_${index}.wav`, await blobToBase64(audioBlob));
   }
   if (!src) return null;
+
+  if (src.startsWith('se:')) {
+    const seBlob = await soundEffectManager.renderWavBlob(src.slice(3));
+    if (seBlob) {
+      return writeJobAudio(jobDir, `clip_${index}.wav`, await blobToBase64(seBlob));
+    }
+  }
 
   if (src.startsWith('data:')) {
     const mime = src.slice(5, src.indexOf(';')) || 'audio/wav';
@@ -308,6 +319,29 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
                 ? Math.min(clipDuration, Math.max(0, item.fadeOut ?? 0))
                 : 0,
           });
+
+          if (item.se && item.startTime >= exportStart - 0.5 && item.startTime <= exportEnd) {
+            try {
+              const seBlob = await soundEffectManager.renderWavBlob(item.se, item.volumeScale ?? 1);
+              if (seBlob) {
+                const sePath = await writeJobAudio(jobDir, `se_${i}.wav`, await blobToBase64(seBlob));
+                const seStart = Math.max(0, item.startTime - exportStart);
+                audioClips.push({
+                  path: sePath,
+                  start: seStart,
+                  duration: Math.min(1.5, Math.max(0.1, seBlob.size / 88200)),
+                  volume: Math.max(0, (item.volumeScale ?? 1) * 0.9),
+                  offset: 0,
+                  speed: 1,
+                  loop_audio: false,
+                  fade_in: 0,
+                  fade_out: 0,
+                });
+              }
+            } catch (seErr) {
+              console.warn('[export] se preparation failed:', item.se, seErr);
+            }
+          }
         } catch (err) {
           console.warn('[export] voice preparation failed:', item.text, err);
         }
@@ -387,6 +421,9 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
       video_offset: Math.max(0, project.timeline.videoOffset ?? 0),
       video_speed: Math.max(0.25, Math.min(4, project.timeline.videoSpeed ?? 1)),
       video_fit: project.timeline.videoFit ?? 'contain',
+      video_motion: project.timeline.videoMotion ?? 'none',
+      video_motion_amount: project.timeline.videoMotionAmount ?? 0.12,
+      timeline_duration: Math.max(0.1, project.timeline.duration),
       audio_clips: audioClips,
     };
     await invoke('begin_stream_export', { payload });

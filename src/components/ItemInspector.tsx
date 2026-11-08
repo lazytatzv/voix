@@ -42,6 +42,7 @@ import {
 } from '../render/keyframes';
 import { normalizeItemEffects } from '../render/itemEffects';
 import { BLEND_MODES } from '../render/blendModes';
+import { SOUND_EFFECT_PRESETS, soundEffectManager } from '../utils/soundEffects';
 
 interface ItemInspectorProps {
   isOpen: boolean;
@@ -725,11 +726,16 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                       onChange={(e) => patch({ anim: e.target.value } as Partial<TimelineItem>)}
                       className={inputClass}
                     >
-                      {['bounce', 'pop', 'shake', 'nod', 'slide', 'fade', 'none'].map((a) => (
-                        <option key={a} value={a}>
-                          {a}
-                        </option>
-                      ))}
+                      <option value="bounce">Bounce</option>
+                      <option value="screen-shake">Screen Shake</option>
+                      <option value="flash">White Flash</option>
+                      <option value="punch">Punch-in Zoom</option>
+                      <option value="pop">Pop</option>
+                      <option value="shake">Char Shake</option>
+                      <option value="nod">Nod</option>
+                      <option value="slide">Slide In</option>
+                      <option value="fade">Fade</option>
+                      <option value="none">None</option>
                     </select>
                   </Field>
                   <SliderField
@@ -811,12 +817,34 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                     onChange={(value) => patch({ scale: value } as Partial<TimelineItem>)}
                   />
                   <Field label="Sound effect">
-                    <input
-                      value={voice.se || ''}
-                      onChange={(e) => patch({ se: e.target.value || undefined } as Partial<TimelineItem>)}
-                      className={inputClass}
-                      placeholder="pop / chime / typing"
-                    />
+                    <div className="flex items-center gap-1.5">
+                      <select
+                        value={voice.se || ''}
+                        onChange={(e) => {
+                          const val = e.target.value || undefined;
+                          patch({ se: val } as Partial<TimelineItem>);
+                          if (val) soundEffectManager.play(val);
+                        }}
+                        className={inputClass}
+                      >
+                        <option value="">(None)</option>
+                        {SOUND_EFFECT_PRESETS.map((se) => (
+                          <option key={se.id} value={se.id}>
+                            {se.icon} {se.name}
+                          </option>
+                        ))}
+                      </select>
+                      {voice.se && (
+                        <button
+                          type="button"
+                          onClick={() => soundEffectManager.play(voice.se!)}
+                          className="px-2 py-1.5 bg-[#202226] hover:bg-[#2c3035] text-[#8ab4f8] rounded-sm text-xs flex-shrink-0"
+                          title="Play sound effect"
+                        >
+                          ▶
+                        </button>
+                      )}
+                    </div>
                   </Field>
                   <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
                     <input
@@ -1236,7 +1264,7 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                       onChange={(e) => patchStyle({ vertical: e.target.checked })}
                       className="accent-[#3b82f6]"
                     />
-                    Vertical writing (縦書き)
+                    Vertical writing
                   </label>
                   </div>
                 </section>
@@ -1581,7 +1609,42 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
             const audio = item as AudioItem;
             return (
               <section className="border-t border-[#242629] pt-4 space-y-3">
-                <Field label="Source">
+                <Field label="Preset sound effect">
+                  <div className="flex gap-2">
+                    <select
+                      value={audio.src.startsWith('se:') ? audio.src.slice(3) : ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) {
+                          patch({
+                            src: `se:${val}`,
+                            name: `SE: ${val}`,
+                          } as Partial<TimelineItem>);
+                          soundEffectManager.play(val);
+                        }
+                      }}
+                      className={inputClass}
+                    >
+                      <option value="">(Custom audio file)</option>
+                      {SOUND_EFFECT_PRESETS.map((se) => (
+                        <option key={se.id} value={se.id}>
+                          {se.icon} {se.name}
+                        </option>
+                      ))}
+                    </select>
+                    {audio.src.startsWith('se:') && (
+                      <button
+                        type="button"
+                        onClick={() => soundEffectManager.play(audio.src.slice(3))}
+                        className="px-2 bg-[#202226] hover:bg-[#2c3035] text-[#8ab4f8] rounded-sm text-xs flex-shrink-0"
+                        title="Play preset"
+                      >
+                        ▶
+                      </button>
+                    )}
+                  </div>
+                </Field>
+                <Field label="Source file">
                   <div className="flex gap-2">
                     <input
                       value={audio.src}

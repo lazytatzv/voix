@@ -13,7 +13,7 @@ import {
   RefreshCw,
   AlertTriangle,
 } from 'lucide-react';
-import { AudioItem, Character, DuckingSettings, TimelineItem, TrackState } from '../types';
+import { AudioItem, BackgroundMotion, Character, DuckingSettings, TimelineItem, TrackState } from '../types';
 import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
 import { computeItemMotion } from '../render/itemMotion';
 import { resolveItemTransform } from '../render/keyframes';
@@ -69,6 +69,10 @@ interface VideoPreviewProps {
   videoSpeed?: number;
   /** How the background video fills the preview frame. */
   videoFit?: 'contain' | 'cover' | 'stretch';
+  /** Ken Burns style camera move for the background video. */
+  videoMotion?: BackgroundMotion;
+  /** Strength of the background camera move (0.02 - 0.5). */
+  videoMotionAmount?: number;
   /** Project background colour shown when no video is attached. */
   backgroundColor?: string;
   /** Error from URL resolution (media server / missing file). */
@@ -160,6 +164,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoOffset = 0,
   videoSpeed = 1,
   videoFit = 'contain',
+  videoMotion = 'none',
+  videoMotionAmount = 0.12,
   backgroundColor,
   loadError,
   loading = false,
@@ -455,14 +461,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   const handleVideoError = () => {
     const video = videoRef.current;
     const err = video?.error;
-    let message = '動画の読み込みに失敗しました';
+    let message = 'Failed to load video';
     if (err) {
       if (err.code === MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED) {
-        message = '動画フォーマットまたはコーデックがサポートされていないか、ファイルにアクセスできません';
+        message = 'Video format or codec is not supported, or file is inaccessible';
       } else if (err.code === MediaError.MEDIA_ERR_DECODE) {
-        message = '動画のデコード中にエラーが発生しました';
+        message = 'An error occurred while decoding video stream';
       } else if (err.code === MediaError.MEDIA_ERR_NETWORK) {
-        message = '動画データの通信・読み込みエラーが発生しました';
+        message = 'Network / I/O error occurred while reading video data';
       }
     }
     appLog('VideoPreview', `error: code=${err?.code}, msg=${err?.message}, src=${videoSrc}`);
@@ -1061,8 +1067,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       showSafeArea,
       backgroundVideo: videoTrackHidden ? null : videoRef.current,
       backgroundFit: videoFit,
+      backgroundMotion: videoMotion,
+      backgroundMotionAmount: videoMotionAmount,
+      duration,
     });
-  }, [displayCharacters, displayItems, currentTime, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height, videoFit, videoTrackHidden]);
+  }, [displayCharacters, displayItems, currentTime, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height, videoFit, videoMotion, videoMotionAmount, duration, videoTrackHidden]);
 
   renderFrameRef.current = renderFrame;
 
@@ -1255,15 +1264,15 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             {!videoTrackHidden && (videoError || loadError) && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 p-6 text-center select-none pointer-events-auto">
                 <AlertTriangle className="w-6 h-6 text-amber-400 mb-2" />
-                <p className="text-red-400 font-medium text-sm mb-2">{videoError || '動画を開けません'}</p>
+                <p className="text-red-400 font-medium text-sm mb-2">{videoError || 'Cannot open video'}</p>
                 {loadError && (
                   <p className="text-[11px] font-mono text-neutral-400 max-w-md break-words">
                     {loadError}
                   </p>
                 )}
                 <p className="mt-2 text-xs text-neutral-400 max-w-md">
-                  Tauri上の動画再生にはH.264 / VP9 / AV1などの標準フォーマットが推奨されます。
-                  MKVはコーデックによって再生できない場合があります。
+                  Standard formats such as H.264 / VP9 / AV1 are recommended for Tauri desktop video playback.
+                  Some MKV containers or high-profile codecs may require transcoding.
                 </p>
                 <div className="mt-4 flex items-center gap-2">
                   <button
@@ -1296,7 +1305,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
             ) : loadError ? (
               <>
                 <AlertTriangle className="w-6 h-6 text-amber-400 mb-2" />
-                <p className="text-red-400 text-sm mb-2">動画を開けません</p>
+                <p className="text-red-400 text-sm mb-2">Cannot open video</p>
                 <p className="max-w-md break-words text-[11px] font-mono text-neutral-400">
                   {loadError}
                 </p>

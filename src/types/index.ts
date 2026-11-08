@@ -335,6 +335,16 @@ export interface DuckingSettings {
 
 export type VideoFit = 'contain' | 'cover' | 'stretch';
 
+/** Slow camera moves applied to the background video. */
+export type BackgroundMotion =
+  | 'none'
+  | 'zoom-in'
+  | 'zoom-out'
+  | 'pan-left'
+  | 'pan-right'
+  | 'pan-up'
+  | 'pan-down';
+
 export interface TimelineSettings {
   duration: number;
   fps: 30 | 60;
@@ -353,6 +363,10 @@ export interface TimelineSettings {
   videoOffset?: number;
   /** How the background video fills the project frame. */
   videoFit?: VideoFit;
+  /** Ken Burns style move applied across the timeline. */
+  videoMotion?: BackgroundMotion;
+  /** Strength of the move: 0.02 - 0.5 (fraction of the frame). */
+  videoMotionAmount?: number;
   /** BGM ducking under voice lines. */
   ducking?: DuckingSettings;
 }

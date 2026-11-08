@@ -17,6 +17,10 @@ target/
 
 # Generated media
 *.mp4
+*.mkv
+*.mov
+*.webm
+*.avi
 *.wav
 *.myymmp
 

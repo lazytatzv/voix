@@ -379,6 +379,10 @@ enum RangeSpec {
     Unsatisfiable,
 }
 
+/// 1回のRangeリクエストで転送する最大チャンクサイズ (8 MB)。
+/// 開放型Range (bytes=0-) で巨大ファイル全体を一度に読み込んでUIをフリーズさせるのを防ぐ。
+const MAX_RANGE_CHUNK: u64 = 8 * 1024 * 1024;
+
 fn parse_range(header_value: Option<&str>, file_len: u64) -> RangeSpec {
     if file_len == 0 {
         return RangeSpec::Full;
@@ -424,7 +428,7 @@ fn parse_range(header_value: Option<&str>, file_len: u64) -> RangeSpec {
     }
 
     let end = if end_raw.is_empty() {
-        file_len - 1
+        (start + MAX_RANGE_CHUNK - 1).min(file_len - 1)
     } else {
         let Ok(end) = end_raw.parse::<u64>() else {
             return RangeSpec::Full;

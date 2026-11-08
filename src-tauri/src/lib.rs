@@ -1,4 +1,5 @@
 mod media_server;
+mod git_service;
 
 use serde::{Deserialize, Serialize};
 use std::fs::{self, File};
@@ -284,6 +285,10 @@ fn probe_media(path: String) -> Result<MediaInfo, String> {
         .args([
             "-v",
             "error",
+            "-analyzeduration",
+            "10000000",
+            "-probesize",
+            "10000000",
             "-print_format",
             "json",
             "-show_format",
@@ -929,6 +934,16 @@ pub struct ExportJobPayload {
     /// `contain`, `cover`, or `stretch`.
     #[serde(default = "default_video_fit")]
     pub video_fit: String,
+    /// Ken Burns style background move: `none`, `zoom-in`, `zoom-out`,
+    /// `pan-left`, `pan-right`, `pan-up`, or `pan-down`.
+    #[serde(default = "default_video_motion")]
+    pub video_motion: String,
+    /// Strength of the background move (0.02 - 0.5).
+    #[serde(default = "default_video_motion_amount")]
+    pub video_motion_amount: f64,
+    /// Full project duration, used to pace the background move.
+    #[serde(default = "default_timeline_duration")]
+    pub timeline_duration: f64,
     pub audio_clips: Vec<ExportAudioClip>,
 }
 
@@ -938,6 +953,18 @@ fn default_speed() -> f64 {
 
 fn default_video_fit() -> String {
     "contain".to_string()
+}
+
+fn default_video_motion() -> String {
+    "none".to_string()
+}
+
+fn default_video_motion_amount() -> f64 {
+    0.12
+}
+
+fn default_timeline_duration() -> f64 {
+    0.0
 }
 
 #[derive(Clone, Serialize)]
@@ -1202,18 +1229,58 @@ fn prepare_export_command(payload: &ExportJobPayload) -> Result<(Command, String
     } else {
         String::new()
     };
-    let fit_chain = match payload.video_fit.as_str() {
-        "cover" => format!(
-            "scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
+    let motion = payload.video_motion.as_str();
+    let motion_amount = payload.video_motion_amount.clamp(0.0, 0.5);
+    let motion_active = motion != "none" && motion_amount > 0.0001;
+    let fit_chain = if motion_active {
+        // Camera moves need pixels outside the visible frame, so they always
+        // scale to cover and then let zoompan animate the crop window.
+        let timeline_duration = payload.timeline_duration.max(0.1);
+        let fps_f = fps as f64;
+        let progress = format!(
+            "min(max(({start:.4}+on/{fps:.4})/{total:.4},0),1)",
+            start = payload.start_time.max(0.0),
+            fps = fps_f,
+            total = timeline_duration
+        );
+        let zoom_expr = match motion {
+            "zoom-in" => format!("1+{:.5}*({})", motion_amount, progress),
+            "zoom-out" => format!("1+{:.5}*(1-({}))", motion_amount, progress),
+            _ => format!("1+{:.5}", motion_amount),
+        };
+        let x_expr = match motion {
+            "pan-left" => format!("(iw-iw/zoom)*(1-({}))", progress),
+            "pan-right" => format!("(iw-iw/zoom)*({})", progress),
+            _ => "iw/2-(iw/zoom/2)".to_string(),
+        };
+        let y_expr = match motion {
+            "pan-up" => format!("(ih-ih/zoom)*(1-({}))", progress),
+            "pan-down" => format!("(ih-ih/zoom)*({})", progress),
+            _ => "ih/2-(ih/zoom/2)".to_string(),
+        };
+        format!(
+            "scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h},zoompan=z='{z}':x='{x}':y='{y}':d=1:s={w}x{h}:fps={fps}",
             w = width,
-            h = height
-        ),
-        "stretch" => format!("scale={w}:{h}", w = width, h = height),
-        _ => format!(
-            "scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black",
-            w = width,
-            h = height
-        ),
+            h = height,
+            z = zoom_expr,
+            x = x_expr,
+            y = y_expr,
+            fps = fps
+        )
+    } else {
+        match payload.video_fit.as_str() {
+            "cover" => format!(
+                "scale={w}:{h}:force_original_aspect_ratio=increase,crop={w}:{h}",
+                w = width,
+                h = height
+            ),
+            "stretch" => format!("scale={w}:{h}", w = width, h = height),
+            _ => format!(
+                "scale={w}:{h}:force_original_aspect_ratio=decrease,pad={w}:{h}:(ow-iw)/2:(oh-ih)/2:color=black",
+                w = width,
+                h = height
+            ),
+        }
     };
     filter.push_str(&format!(
         "[0:v]{pts}{chain},setsar=1,tpad=stop_mode=clone:stop_duration={d}[bgv];",
@@ -1586,7 +1653,13 @@ pub fn run() {
             cancel_export_job,
             finish_stream_export,
             media_stream_url,
-            app_log
+            app_log,
+            git_service::git_get_status,
+            git_service::git_get_history,
+            git_service::git_commit_snapshot,
+            git_service::git_init_repository,
+            git_service::git_push_remote,
+            git_service::git_read_file_at_commit
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

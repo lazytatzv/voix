@@ -16,6 +16,12 @@ import {
 } from 'lucide-react';
 import { TimelineItem, TrackKind, TrackState, VoixProject, DuckingSettings } from '../types';
 import { DEFAULT_DUCKING } from '../utils/audioDucking';
+import {
+  BACKGROUND_MOTION_PRESETS,
+  DEFAULT_BACKGROUND_MOTION_AMOUNT,
+  normalizeBackgroundMotion,
+  normalizeBackgroundMotionAmount,
+} from '../utils/backgroundMotion';
 
 interface ProjectSettingsModalProps {
   isOpen: boolean;
@@ -167,6 +173,8 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
         timeline.videoFit === 'cover' || timeline.videoFit === 'stretch'
           ? timeline.videoFit
           : 'contain',
+      videoMotion: normalizeBackgroundMotion(timeline.videoMotion),
+      videoMotionAmount: normalizeBackgroundMotionAmount(timeline.videoMotionAmount),
       ducking: {
         enabled: Boolean(timeline.ducking?.enabled ?? DEFAULT_DUCKING.enabled),
         level: Math.max(0, Math.min(1, Number(timeline.ducking?.level ?? DEFAULT_DUCKING.level))),
@@ -412,6 +420,61 @@ export const ProjectSettingsModal: React.FC<ProjectSettingsModalProps> = ({
                 <option value="stretch">Stretch to frame</option>
               </select>
             </label>
+
+            <label className="space-y-1">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                Video motion
+              </span>
+              <select
+                value={timeline.videoMotion ?? 'none'}
+                onChange={(e) =>
+                  setTimeline((prev) => ({
+                    ...prev,
+                    videoMotion: e.target.value as VoixProject['timeline']['videoMotion'],
+                  }))
+                }
+                className={inputClass}
+              >
+                {BACKGROUND_MOTION_PRESETS.map((preset) => (
+                  <option key={preset.id} value={preset.id} title={preset.description}>
+                    {preset.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label
+              className={`space-y-1 ${
+                (timeline.videoMotion ?? 'none') === 'none' ? 'opacity-45' : ''
+              }`}
+            >
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#8e918f]">
+                Motion strength (
+                {Math.round(
+                  (timeline.videoMotionAmount ?? DEFAULT_BACKGROUND_MOTION_AMOUNT) * 100
+                )}
+                %)
+              </span>
+              <input
+                type="range"
+                min={0.02}
+                max={0.5}
+                step={0.01}
+                value={timeline.videoMotionAmount ?? DEFAULT_BACKGROUND_MOTION_AMOUNT}
+                disabled={(timeline.videoMotion ?? 'none') === 'none'}
+                onChange={(e) =>
+                  setTimeline((prev) => ({
+                    ...prev,
+                    videoMotionAmount: Number(e.target.value),
+                  }))
+                }
+                className="w-full accent-[#3b82f6]"
+              />
+            </label>
+            <p className="col-span-2 text-[10px] font-mono text-[#6f7276] -mt-1">
+              Camera moves crop the video to fill the frame. Preview and export use the same
+              timeline pacing.
+            </p>
 
             <div className="col-span-2 flex items-center justify-between bg-[#101113] border border-[#242629] rounded-sm px-3 py-2">
               <div className="min-w-0">

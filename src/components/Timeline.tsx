@@ -24,6 +24,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowLeftToLine,
+  Bell,
 } from 'lucide-react';
 import { Character, ItemType, Marker, TimelineItem, TrackKind, TrackState } from '../types';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
@@ -59,6 +60,8 @@ interface TimelineProps {
   markers?: Marker[];
   onAddMarker?: () => void;
   onDeleteMarker?: (id: string) => void;
+  onOpenJumpCut?: () => void;
+  onOpenSePalette?: () => void;
 }
 
 interface RowDef {
@@ -71,8 +74,7 @@ interface RowDef {
 
 const ROWS: RowDef[] = [
   { kind: 'video', label: 'Video', height: 38, icon: Film },
-  { kind: 'character', label: 'Characters', height: 38, icon: MessageSquare },
-  { kind: 'voice', label: 'Voice', height: 46, icon: MessageSquare, addType: 'voice' },
+  { kind: 'voice', label: 'Dialogue', height: 46, icon: MessageSquare, addType: 'voice' },
   { kind: 'text', label: 'Text', height: 38, icon: Type, addType: 'text' },
   { kind: 'image', label: 'Images', height: 38, icon: ImageIcon, addType: 'image' },
   { kind: 'shape', label: 'Shapes', height: 38, icon: Square, addType: 'shape' },
@@ -179,18 +181,48 @@ export const Timeline: React.FC<TimelineProps> = ({
   markers = [],
   onAddMarker,
   onDeleteMarker,
+  onOpenJumpCut,
+  onOpenSePalette,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [zoom, setZoom] = useState(1);
   const [draggingItemId, setDraggingItemId] = useState<string | null>(null);
   const [hoveredItemId, setHoveredItemId] = useState<string | null>(null);
   const [snapGuideTime, setSnapGuideTime] = useState<number | null>(null);
+  const [scrollLeft, setScrollLeft] = useState(0);
+  const [viewportWidth, setViewportWidth] = useState(1200);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const update = () => {
+      setViewportWidth(el.clientWidth);
+      setScrollLeft(el.scrollLeft);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const handleTimelineScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollLeft((e.currentTarget as HTMLDivElement).scrollLeft);
+  }, []);
 
   const totalDuration = Math.max(duration, 10);
   const pxPerSecond = 50 * zoom;
   const timelineWidth = Math.max(totalDuration * pxPerSecond + 40, 900);
   const step = rulerStep(pxPerSecond);
   const totalRowsHeight = ROWS.reduce((sum, row) => sum + row.height, 0);
+
+  const minVisibleTime = Math.max(0, (scrollLeft - 100) / pxPerSecond);
+  const maxVisibleTime = Math.min(totalDuration, (scrollLeft + viewportWidth + 100) / pxPerSecond);
+  const startTickIndex = Math.max(0, Math.floor(minVisibleTime / step));
+  const endTickIndex = Math.min(
+    Math.floor(totalDuration / step),
+    Math.ceil(maxVisibleTime / step)
+  );
+  const visibleTickCount = Math.max(0, endTickIndex - startTickIndex + 1);
 
   const timeToX = (time: number) => time * pxPerSecond;
   const xToTime = (x: number) => Math.max(0, Math.min(x / pxPerSecond, totalDuration));
@@ -340,7 +372,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
   const fitToWindow = () => {
     const width = scrollRef.current?.clientWidth || 1000;
-    setZoom(Math.max(0.15, Math.min(8, (width - 180) / Math.max(totalDuration, 1) / 50)));
+    setZoom(Math.max(0.01, Math.min(8, (width - 180) / Math.max(totalDuration, 1) / 50)));
   };
 
   useEffect(() => {
@@ -365,7 +397,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       const timeAtPointer = Math.max(0, pointerX / pxPerSecond);
       const factor = event.deltaY < 0 ? 1.15 : 1 / 1.15;
       setZoom((previous) => {
-        const next = Math.max(0.15, Math.min(8, previous * factor));
+        const next = Math.max(0.01, Math.min(8, previous * factor));
         const nextPx = 50 * next;
         requestAnimationFrame(() => {
           container.scrollLeft = Math.max(
@@ -498,7 +530,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   };
 
   const visibleItemsForRow = (kind: TrackKind): TimelineItem[] => {
-    if (kind === 'character' || kind === 'voice') return items.filter((item) => item.type === 'voice');
+    if (kind === 'voice') return items.filter((item) => item.type === 'voice');
     if (kind === 'text') return items.filter((item) => item.type === 'text');
     if (kind === 'image') return items.filter((item) => item.type === 'image');
     if (kind === 'shape') return items.filter((item) => item.type === 'shape');
@@ -633,11 +665,33 @@ export const Timeline: React.FC<TimelineProps> = ({
               )}
             </button>
           )}
+          {onOpenJumpCut && hasVideo && (
+            <button
+              type="button"
+              onClick={onOpenJumpCut}
+              className="px-2 py-0.5 rounded text-[10px] bg-[#1a2330] hover:bg-[#223044] text-[#8ab4f8] hover:text-[#b4d0fc] border border-[#2d3f57] flex items-center gap-1 font-semibold transition"
+              title="Auto-detect silence, speech intervals, and generate jump cut markers / voices"
+            >
+              <Scissors className="w-3 h-3 text-[#8ab4f8]" />
+              Jump Cut
+            </button>
+          )}
+          {onOpenSePalette && (
+            <button
+              type="button"
+              onClick={onOpenSePalette}
+              className="px-2 py-0.5 rounded text-[10px] bg-[#24211a] hover:bg-[#302b21] text-amber-300 hover:text-amber-200 border border-[#473c24] flex items-center gap-1 font-semibold transition"
+              title="Open Sound Effects Soundboard (18 presets)"
+            >
+              <Bell className="w-3 h-3 text-amber-300" />
+              SE Palette
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-1.5 bg-[#0e0f11] px-2 py-0.5 rounded-sm border border-[#242629]">
           <button
-            onClick={() => setZoom((z) => Math.max(0.15, z - 0.15))}
+            onClick={() => setZoom((z) => Math.max(0.01, z > 0.3 ? z - 0.15 : z * 0.7))}
             className="p-1 rounded-sm hover:bg-[#202226] text-[#8e918f] hover:text-white transition"
             title="Zoom Out"
           >
@@ -665,6 +719,7 @@ export const Timeline: React.FC<TimelineProps> = ({
 
       <div
         ref={scrollRef}
+        onScroll={handleTimelineScroll}
         className="flex-1 overflow-auto min-h-0 relative"
         onDragOver={(e) => {
           e.preventDefault();
@@ -763,7 +818,8 @@ export const Timeline: React.FC<TimelineProps> = ({
               onMouseDown={beginScrub}
               title="Click or drag to scrub"
             >
-              {Array.from({ length: Math.floor(totalDuration / step) + 2 }).map((_, index) => {
+              {Array.from({ length: visibleTickCount }).map((_, i) => {
+                const index = startTickIndex + i;
                 const time = index * step;
                 if (time > totalDuration) return null;
                 return (
@@ -836,11 +892,16 @@ export const Timeline: React.FC<TimelineProps> = ({
                     </span>
                   </div>
                 )}
-                {visibleItemsForRow(row.kind).map((item) => (
-                  <React.Fragment key={`${row.kind}_${item.id}`}>
-                    {renderItem(item, row.kind)}
-                  </React.Fragment>
-                ))}
+                {visibleItemsForRow(row.kind)
+                  .filter((item) => {
+                    const itemEnd = item.startTime + item.duration;
+                    return itemEnd >= minVisibleTime && item.startTime <= maxVisibleTime;
+                  })
+                  .map((item) => (
+                    <React.Fragment key={`${row.kind}_${item.id}`}>
+                      {renderItem(item, row.kind)}
+                    </React.Fragment>
+                  ))}
               </div>
             ))}
 

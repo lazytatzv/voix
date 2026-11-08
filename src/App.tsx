@@ -17,6 +17,10 @@ import { SettingsModal } from './components/SettingsModal';
 import { ProjectSettingsModal } from './components/ProjectSettingsModal';
 import { AssetAuditModal } from './components/AssetAuditModal';
 import { ItemInspector } from './components/ItemInspector';
+import { QuickDialogueBar } from './components/QuickDialogueBar';
+import { SoundEffectPaletteModal } from './components/SoundEffectPaletteModal';
+import { JumpCutModal } from './components/JumpCutModal';
+import { GitHistoryModal } from './components/GitHistoryModal';
 import { addSnapshotKeyframe } from './render/keyframes';
 import { parseSrt } from './utils/srt';
 import { nudgeTimelineItems, rippleDeleteTimelineItems } from './utils/timelineEdit';
@@ -109,7 +113,11 @@ function mergeCharacter(c: Character): Character {
   const isMetan =
     c.id === 'metan' ||
     (c.speakerId === 2 && (c.name.includes('めたん') || c.name.toLowerCase().includes('metan')));
-  const id = isZunda ? 'zundamon' : isMetan ? 'metan' : c.id;
+  const isReimu =
+    c.id === 'reimu' || c.name.includes('霊夢') || c.name.toLowerCase().includes('reimu');
+  const isMarisa =
+    c.id === 'marisa' || c.name.includes('魔理沙') || c.name.toLowerCase().includes('marisa');
+  const id = isZunda ? 'zundamon' : isMetan ? 'metan' : isReimu ? 'reimu' : isMarisa ? 'marisa' : c.id;
   const def = defaultCharacters.find((d) => d.id === id);
   if (!def) return { ...c, id };
   const idleIsLargeBase64 = c.avatar?.idle?.startsWith('data:') && c.avatar.idle.length > 500;
@@ -251,6 +259,9 @@ export function App() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
   const [isProjectSettingsOpen, setIsProjectSettingsOpen] = useState(false);
   const [isAssetAuditOpen, setIsAssetAuditOpen] = useState(false);
+  const [isSePaletteOpen, setIsSePaletteOpen] = useState(false);
+  const [isJumpCutOpen, setIsJumpCutOpen] = useState(false);
+  const [isGitModalOpen, setIsGitModalOpen] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
   const [isGeneratingAiVideo, setIsGeneratingAiVideo] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -1326,7 +1337,7 @@ export function App() {
           startTime: currentTimeRef.current,
           duration: 3,
           name: 'Text',
-          text: 'テキスト',
+          text: 'Text',
           style: {
             ...DEFAULT_SUBTITLE_STYLE,
             fontSize: 72,
@@ -1436,6 +1447,128 @@ export function App() {
     handleSelectItem(item.id);
     await ensureVoiceAudio(item.id);
   };
+
+  const handleQuickAddVoiceLine = useCallback(
+    async (
+      characterId: string,
+      text: string,
+      options?: { expression?: string; se?: string; anim?: string }
+    ): Promise<number> => {
+      const current = projectRef.current;
+      const character = current.characters.find((c) => c.id === characterId) || current.characters[0];
+      if (!character) return 1.5;
+
+      const item: VoiceItem = {
+        id: newId('voice'),
+        type: 'voice',
+        layer: 2,
+        name: `${character.name}: ${text.slice(0, 14)}`,
+        characterId: character.id,
+        text,
+        expression: options?.expression || 'default',
+        se: options?.se,
+        anim: options?.anim || 'bounce',
+        startTime: Number(currentTimeRef.current.toFixed(2)),
+        duration: 1.5,
+        speedScale: 1,
+        pitchScale: 0,
+        volumeScale: 1,
+        isSynthesizing: true,
+      };
+
+      commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
+      handleSelectItem(item.id);
+      await ensureVoiceAudio(item.id);
+
+      const updated = projectRef.current.items.find((it) => it.id === item.id) as VoiceItem | undefined;
+      return updated?.duration ?? 1.5;
+    },
+    [commitProject, ensureVoiceAudio, handleSelectItem]
+  );
+
+  const handleInsertSeItem = useCallback(
+    (presetId: string, name: string, duration: number) => {
+      const item: AudioItem = {
+        id: newId('audio'),
+        type: 'audio',
+        layer: 1,
+        startTime: Number(currentTimeRef.current.toFixed(2)),
+        duration: Math.max(0.3, duration),
+        name: `SE: ${name}`,
+        src: `se:${presetId}`,
+        volume: 0.8,
+        isBgm: false,
+        loop: false,
+        fadeIn: 0,
+        fadeOut: 0,
+      };
+      commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
+      handleSelectItem(item.id);
+      setToast(`Added sound effect: ${name}`);
+    },
+    [commitProject, handleSelectItem]
+  );
+
+  const handleApplySeToSelectedVoice = useCallback(
+    (presetId: string) => {
+      const selectedId = selectedItemIdRef.current;
+      if (!selectedId) return;
+      updateItem(selectedId, { se: presetId });
+      setToast(`Applied sound effect: ${presetId}`);
+    },
+    [updateItem]
+  );
+
+  const handleApplySpeechMarkers = useCallback(
+    (segments: { start: number; end: number }[]) => {
+      const newMarkers: Marker[] = segments.map((seg, i) => ({
+        id: newId('marker'),
+        time: seg.start,
+        label: `Talk ${i + 1}`,
+        color: '#34d399',
+      }));
+      commitProject((previous) => ({
+        ...previous,
+        markers: [...(previous.markers || []), ...newMarkers].sort((a, b) => a.time - b.time),
+      }));
+      setToast(`Added ${newMarkers.length} speech markers`);
+      setIsJumpCutOpen(false);
+    },
+    [commitProject]
+  );
+
+  const handleApplyVoicePlaceholders = useCallback(
+    (segments: { start: number; end: number }[]) => {
+      const current = projectRef.current;
+      const char1 = current.characters[0] || defaultCharacters[0];
+      const char2 = current.characters[1] || defaultCharacters[1] || char1;
+      const newItems: VoiceItem[] = segments.map((seg, i) => {
+        const char = i % 2 === 0 ? char1 : char2;
+        return {
+          id: newId('voice'),
+          type: 'voice',
+          layer: 2,
+          startTime: seg.start,
+          duration: Math.max(0.8, Number((seg.end - seg.start).toFixed(2))),
+          name: `${char.name}: [Talk ${i + 1}]`,
+          characterId: char.id,
+          text: `Line ${i + 1}`,
+          expression: 'default',
+          speedScale: 1,
+          pitchScale: 0,
+          volumeScale: 1,
+          anim: 'bounce',
+        };
+      });
+      commitProject((previous) => ({
+        ...previous,
+        items: [...previous.items, ...newItems],
+      }));
+      setToast(`Generated ${newItems.length} dialogue items`);
+      setIsJumpCutOpen(false);
+    },
+    [commitProject]
+  );
 
   const handleSynthesizeItem = async (id: string) => {
     await ensureVoiceAudio(id, true);
@@ -2628,6 +2761,7 @@ export function App() {
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
+        onOpenGitHistory={() => setIsGitModalOpen(true)}
         onOpenAssets={() => setIsAssetAuditOpen(true)}
         onExportVideo={() => setIsExportModalOpen(true)}
         onOpenAiVideoGenerator={() => setIsAiVideoModalOpen(true)}
@@ -2677,6 +2811,8 @@ export function App() {
             videoOffset={project.timeline.videoOffset ?? 0}
             videoSpeed={project.timeline.videoSpeed ?? 1}
             videoFit={project.timeline.videoFit ?? 'contain'}
+            videoMotion={project.timeline.videoMotion ?? 'none'}
+            videoMotionAmount={project.timeline.videoMotionAmount ?? 0.12}
             backgroundColor={project.timeline.backgroundColor}
             onCharacterMove={(id, x, y) =>
               handleUpdateCharacter(id, {
@@ -2714,6 +2850,7 @@ export function App() {
             <ScriptEditor
               items={voiceItems}
               characters={characters}
+              markers={project.markers ?? []}
               currentTime={currentTime}
               selectedItemId={selectedItemId}
               isPlaying={isPlaying}
@@ -2740,6 +2877,14 @@ export function App() {
           </button>
         )}
       </main>
+
+      <QuickDialogueBar
+        characters={characters}
+        currentTime={currentTime}
+        onAddVoiceLine={handleQuickAddVoiceLine}
+        onSeek={handleSeek}
+        onOpenSePalette={() => setIsSePaletteOpen(true)}
+      />
 
       {!isTimelineCollapsed && (
         <div
@@ -2820,6 +2965,8 @@ export function App() {
             markers={project.markers ?? []}
             onAddMarker={handleAddMarker}
             onDeleteMarker={handleDeleteMarker}
+            onOpenJumpCut={() => setIsJumpCutOpen(true)}
+            onOpenSePalette={() => setIsSePaletteOpen(true)}
           />
         </div>
       ) : (
@@ -2927,6 +3074,38 @@ export function App() {
         project={projectForExport}
         videoPath={rawVideoPath}
         videoDuration={videoDuration}
+      />
+
+      <SoundEffectPaletteModal
+        isOpen={isSePaletteOpen}
+        onClose={() => setIsSePaletteOpen(false)}
+        currentTime={currentTime}
+        onInsertSeItem={handleInsertSeItem}
+        onApplySeToSelectedVoice={handleApplySeToSelectedVoice}
+        hasSelectedVoice={Boolean(project.items.find((it) => it.id === selectedItemId && it.type === 'voice'))}
+      />
+
+      <JumpCutModal
+        isOpen={isJumpCutOpen}
+        onClose={() => setIsJumpCutOpen(false)}
+        videoPath={rawVideoPath}
+        videoDuration={videoDuration || totalDuration}
+        onApplySpeechMarkers={handleApplySpeechMarkers}
+        onApplyVoicePlaceholders={handleApplyVoicePlaceholders}
+      />
+
+      <GitHistoryModal
+        isOpen={isGitModalOpen}
+        onClose={() => setIsGitModalOpen(false)}
+        projectPath={projectPath}
+        project={project}
+        onRestoreProject={(restored) => {
+          commitProject(() => restored);
+        }}
+        onSaveCurrentProject={async () => {
+          await handleSaveProject(false);
+        }}
+        onShowToast={(msg) => setToast(msg)}
       />
 
       {toast && (
