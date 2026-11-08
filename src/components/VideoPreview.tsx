@@ -1440,16 +1440,51 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           </span>
         </div>
 
-        <div className="flex-1 flex items-center px-2">
-          <input
-            type="range"
-            min={0}
-            max={Math.max(duration, 0.1)}
-            step={0.05}
-            value={currentTime}
-            onChange={(e) => onSeek(parseFloat(e.target.value))}
-            className="w-full h-1 bg-[#25272c] rounded-none appearance-none cursor-pointer accent-[#3b82f6] transition-colors"
-          />
+        <div
+          tabIndex={0}
+          role="slider"
+          aria-label="Seek bar"
+          aria-valuemin={0}
+          aria-valuemax={Math.max(duration, 0.1)}
+          aria-valuenow={currentTime}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft') {
+              e.preventDefault();
+              onSeek(Math.max(0, currentTime - (e.shiftKey ? 1 : 0.1)));
+            } else if (e.key === 'ArrowRight') {
+              e.preventDefault();
+              onSeek(Math.min(duration, currentTime + (e.shiftKey ? 1 : 0.1)));
+            }
+          }}
+          onPointerDown={(e) => {
+            if (e.button !== 0) return;
+            const bar = e.currentTarget;
+            const updateTime = (clientX: number) => {
+              const rect = bar.getBoundingClientRect();
+              const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(1, rect.width)));
+              const targetTime = Number((ratio * Math.max(duration, 0.1)).toFixed(2));
+              onSeek(targetTime);
+            };
+            updateTime(e.clientX);
+            const onPointerMove = (ev: PointerEvent) => updateTime(ev.clientX);
+            const onPointerUp = () => {
+              window.removeEventListener('pointermove', onPointerMove);
+              window.removeEventListener('pointerup', onPointerUp);
+            };
+            window.addEventListener('pointermove', onPointerMove);
+            window.addEventListener('pointerup', onPointerUp);
+          }}
+          className="flex-1 flex items-center px-2 py-2 cursor-pointer group focus:outline-none"
+          title="Click or drag to seek"
+        >
+          <div className="w-full h-1 bg-[#25272c] relative overflow-hidden group-hover:h-2 transition-all">
+            <div
+              className="absolute left-0 top-0 bottom-0 bg-[#3b82f6]"
+              style={{
+                width: `${Math.min(100, Math.max(0, (currentTime / Math.max(duration, 0.1)) * 100))}%`,
+              }}
+            />
+          </div>
         </div>
 
         <div className="flex items-center gap-1.5">

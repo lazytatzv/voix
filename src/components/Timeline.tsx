@@ -277,7 +277,7 @@ export const Timeline: React.FC<TimelineProps> = ({
       const x = clientX - rect.left + container.scrollLeft - HEADER_WIDTH; // label column width
       onSeek(snapTime(xToTime(x), !disableSnap, markers));
     },
-    [onSeek, pxPerSecond, markers]
+    [onSeek, pxPerSecond, markers, totalDuration]
   );
 
   const beginScrub = (e: React.MouseEvent) => {
@@ -320,7 +320,13 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (!wasSelected) onSelectItem(item.id, additive);
 
     const trackKind: TrackKind = item.type === 'voice' ? 'voice' : item.type;
-    if (item.locked || tracks.find((track) => track.id === trackKind)?.locked) return;
+    const isLocked = item.locked || tracks.find((track) => track.id === trackKind)?.locked;
+    if (isLocked) {
+      if (mode === 'move') {
+        seekFromClientX(e.clientX, e.altKey);
+      }
+      return;
+    }
 
     const activeIds = new Set(
       wasSelected
@@ -344,10 +350,11 @@ export const Timeline: React.FC<TimelineProps> = ({
     const snapTargets = collectSnapTargets(new Set(movableItems.map((entry) => entry.id)));
     let moved = false;
     let historyStarted = false;
+    const DRAG_THRESHOLD = 6;
 
     const onMove = (event: MouseEvent) => {
       const delta = (event.clientX - startX) / pxPerSecond;
-      if (!moved && Math.abs(event.clientX - startX) > 2) {
+      if (!moved && Math.abs(event.clientX - startX) > DRAG_THRESHOLD) {
         moved = true;
         setDraggingItemId(item.id);
       }
@@ -396,7 +403,9 @@ export const Timeline: React.FC<TimelineProps> = ({
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
       if (!moved) {
-        onSeek(item.startTime);
+        if (mode === 'move') {
+          seekFromClientX(startX, e.altKey);
+        }
         if (wasSelected) onSelectItem(item.id, additive);
       }
     };
@@ -877,7 +886,11 @@ export const Timeline: React.FC<TimelineProps> = ({
           </div>
 
           {/* Sequence */}
-          <div className="relative flex-1 bg-[#0a0a0c]" style={{ width: timelineWidth }}>
+          <div
+            className="relative flex-1 bg-[#0a0a0c] flex flex-col min-h-full"
+            style={{ width: timelineWidth }}
+            onMouseDown={beginScrub}
+          >
             {/* Ruler */}
             <div
               className="h-6 w-full border-b border-[#222426] relative bg-[#111214] cursor-ew-resize"
@@ -944,9 +957,15 @@ export const Timeline: React.FC<TimelineProps> = ({
                   const barWidth = Math.max(0, (barEnd - barStart) * pxPerSecond);
                   return (
                     <div
-                      onClick={(e) => {
+                      onDoubleClick={(e) => {
                         e.stopPropagation();
                         onPickVideo?.();
+                      }}
+                      onClick={(e) => {
+                        if (!hasVideo) {
+                          e.stopPropagation();
+                          onPickVideo?.();
+                        }
                       }}
                       className={`absolute top-1 bottom-1 rounded-[2px] flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap cursor-pointer transition-colors ${
                         hasVideo ? 'hover:brightness-125' : 'hover:bg-[#26282c]'
@@ -958,7 +977,7 @@ export const Timeline: React.FC<TimelineProps> = ({
                         color: hasVideo ? '#e3e3e3' : '#8e918f',
                         border: '1px solid #33363a',
                       }}
-                      title={hasVideo ? `${videoName || 'Video'} (Click to change video)` : 'Click to select video file'}
+                      title={hasVideo ? `${videoName || 'Video'} (Double-click to change video, click to seek)` : 'Click to select video file'}
                     >
                       <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#8e918f]" />
                       <span className="text-[11px]">
@@ -979,6 +998,13 @@ export const Timeline: React.FC<TimelineProps> = ({
                   ))}
               </div>
             ))}
+
+            {/* Empty space below track lanes */}
+            <div
+              className="flex-1 min-h-[48px] cursor-ew-resize"
+              onMouseDown={beginScrub}
+              title="Click or drag to scrub"
+            />
 
             {markers.map((marker) => (
               <div
@@ -1002,8 +1028,8 @@ export const Timeline: React.FC<TimelineProps> = ({
 
             {/* Playhead */}
             <div
-              className="absolute top-0 w-[2px] bg-[#c4c7c5] z-30 pointer-events-none"
-              style={{ left: timeToX(currentTime), height: RULER_HEIGHT + totalRowsHeight }}
+              className="absolute top-0 bottom-0 w-[2px] bg-[#c4c7c5] z-30 pointer-events-none"
+              style={{ left: timeToX(currentTime), minHeight: RULER_HEIGHT + totalRowsHeight }}
             >
               <div className="w-2.5 h-3 bg-[#c4c7c5] -translate-x-[4px]" />
             </div>
