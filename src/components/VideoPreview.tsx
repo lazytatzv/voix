@@ -15,6 +15,8 @@ import {
 } from 'lucide-react';
 import { AudioItem, Character, DuckingSettings, TimelineItem, TrackState } from '../types';
 import { CharacterLayout, drawOverlayFrame, getCharacterLayouts } from '../render/overlayRenderer';
+import { computeItemMotion } from '../render/itemMotion';
+import { resolveItemTransform } from '../render/keyframes';
 import { loadImage, collectCharacterImageSources, clearImageCache } from '../render/imageCache';
 import { mediaUrlFor } from '../utils/mediaUrl';
 import { appLog } from '../utils/appLog';
@@ -45,6 +47,10 @@ interface VideoPreviewProps {
   ducking?: DuckingSettings;
   /** Persist a dragged tachie position in project coordinates. */
   onCharacterMove?: (characterId: string, x: number, y: number) => void;
+  /** Persist a dragged image/shape position in project coordinates. */
+  onVisualItemMove?: (itemId: string, x: number, y: number) => void;
+  /** Open the inspector for an image/shape double-clicked in the preview. */
+  onVisualItemInspect?: (itemId: string) => void;
   /** Persist a tachie size change made with the corner handle. */
   onCharacterScale?: (
     characterId: string,
@@ -103,6 +109,10 @@ type ScaleDragAnchor = {
   rightInset: number;
 };
 
+/** Axis-aligned rectangle used for preview hit-testing and outlines. */
+type VisualItemBounds = { left: number; top: number; width: number; height: number };
+type VisualItemHit = { item: TimelineItem; bounds: VisualItemBounds };
+
 /**
  * New image origin that keeps the grabbed content corner (and the feet) fixed
  * while the scale changes. Transparent margins scale with the image, so anchor
@@ -139,6 +149,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   ducking,
   onCharacterMove,
   onCharacterScale,
+  onVisualItemMove,
+  onVisualItemInspect,
   onReloadVideo,
   onPickVideo,
   videoInfo,
@@ -199,6 +211,24 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     rightInset: number;
     lastScale: number;
     moved: boolean;
+  } | null>(null);
+  const [hoveredVisualItemId, setHoveredVisualItemId] = useState<string | null>(null);
+  // Live position while dragging an image or shape in the preview. The project
+  // is only updated on pointer release so undo history gets one entry.
+  const [visualDrag, setVisualDrag] = useState<{ id: string; x: number; y: number } | null>(null);
+  const visualDragRef = useRef<{
+    id: string;
+    grabX: number;
+    grabY: number;
+    width: number;
+    height: number;
+    offsetX: number;
+    offsetY: number;
+    startClientX: number;
+    startClientY: number;
+    moved: boolean;
+    x: number;
+    y: number;
   } | null>(null);
   const characterDragRef = useRef<{
     id: string;
@@ -509,6 +539,15 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     });
   }, [characters, characterDrag, characterScaleDrag]);
 
+  const displayItems = useMemo(() => {
+    if (!visualDrag) return items;
+    return items.map((item) =>
+      item.id === visualDrag.id && (item.type === 'image' || item.type === 'shape')
+        ? { ...item, x: visualDrag.x, y: visualDrag.y }
+        : item
+    );
+  }, [items, visualDrag]);
+
   const scalingLayout = useMemo(() => {
     if (!characterScaleDrag) return null;
     return (
@@ -584,42 +623,181 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     [projectPoint, width, height, currentTime, displayCharacters, items, tracks, showAvatar]
   );
 
+  const visualItemBoundsAt = useCallback(
+    (item: TimelineItem): VisualItemBounds | null => {
+      if (item.type !== 'image' && item.type !== 'shape') return null;
+      const transform = resolveItemTransform(item, currentTime);
+      const motion = computeItemMotion(item, currentTime);
+      if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return null;
+      const scale = Math.max(0.001, transform.scale * motion.scale);
+      const visibleWidth = Math.max(1, item.width * scale);
+      const visibleHeight = Math.max(1, item.height * scale);
+      return {
+        left: transform.x + item.width / 2 - visibleWidth / 2 + motion.offsetX,
+        top: transform.y + item.height / 2 - visibleHeight / 2 + motion.offsetY,
+        width: visibleWidth,
+        height: visibleHeight,
+      };
+    },
+    [currentTime]
+  );
+
+  const hitTestVisualItem = useCallback(
+    (clientX: number, clientY: number, mode: 'drag' | 'inspect' = 'drag'): VisualItemHit | null => {
+      const point = projectPoint(clientX, clientY);
+      let best: VisualItemHit | null = null;
+      let bestLayer = -Infinity;
+      for (const item of displayItems) {
+        if (item.type !== 'image' && item.type !== 'shape') continue;
+        if (item.hidden || !isTrackVisible(tracks, item.type)) continue;
+        if (currentTime < item.startTime || currentTime >= item.startTime + item.duration) {
+          continue;
+        }
+        if (mode === 'drag') {
+          if (item.locked) continue;
+          if ((item.keyframes?.length ?? 0) > 0) continue;
+          if (tracks?.find((track) => track.id === item.type)?.locked) continue;
+        }
+        const bounds = visualItemBoundsAt(item);
+        if (!bounds) continue;
+        if (
+          point.x < bounds.left ||
+          point.x > bounds.left + bounds.width ||
+          point.y < bounds.top ||
+          point.y > bounds.top + bounds.height
+        ) {
+          continue;
+        }
+        const layer = item.layer ?? 0;
+        if (layer >= bestLayer) {
+          best = { item, bounds };
+          bestLayer = layer;
+        }
+      }
+      return best;
+    },
+    [projectPoint, displayItems, tracks, currentTime, visualItemBoundsAt]
+  );
+
+  const hoveredVisualItem = useMemo(() => {
+    if (!hoveredVisualItemId) return null;
+    return displayItems.find((item) => item.id === hoveredVisualItemId) ?? null;
+  }, [displayItems, hoveredVisualItemId]);
+
   const handleCanvasPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0) return;
     const hit = hitTestCharacter(event.clientX, event.clientY);
-    if (!hit) return;
+    if (hit) {
+      event.preventDefault();
+      event.stopPropagation();
+      suppressCanvasClickRef.current = true;
+      const point = projectPoint(event.clientX, event.clientY);
+      characterDragRef.current = {
+        id: hit.character.id,
+        grabX: point.x - hit.x,
+        grabY: point.y - hit.y,
+        width: hit.width,
+        height: hit.height,
+        contentOffsetX: hit.x - hit.imageX,
+        contentOffsetY: hit.y - hit.imageY,
+        moved: false,
+        x: hit.imageX,
+        y: hit.imageY,
+        startClientX: event.clientX,
+        startClientY: event.clientY,
+      };
+      setHoveredCharacterId(null);
+      setHoveredVisualItemId(null);
+      setCharacterDrag({ id: hit.character.id, x: hit.imageX, y: hit.imageY });
+      try {
+        event.currentTarget.setPointerCapture(event.pointerId);
+      } catch {}
+      return;
+    }
+
+    const visualHit = hitTestVisualItem(event.clientX, event.clientY);
+    if (!visualHit) return;
+    const item = visualHit.item;
+    if (item.type !== 'image' && item.type !== 'shape') return;
     event.preventDefault();
     event.stopPropagation();
     suppressCanvasClickRef.current = true;
     const point = projectPoint(event.clientX, event.clientY);
-    characterDragRef.current = {
-      id: hit.character.id,
-      grabX: point.x - hit.x,
-      grabY: point.y - hit.y,
-      width: hit.width,
-      height: hit.height,
-      contentOffsetX: hit.x - hit.imageX,
-      contentOffsetY: hit.y - hit.imageY,
-      moved: false,
-      x: hit.imageX,
-      y: hit.imageY,
+    visualDragRef.current = {
+      id: item.id,
+      grabX: point.x - visualHit.bounds.left,
+      grabY: point.y - visualHit.bounds.top,
+      width: visualHit.bounds.width,
+      height: visualHit.bounds.height,
+      offsetX: item.x - visualHit.bounds.left,
+      offsetY: item.y - visualHit.bounds.top,
       startClientX: event.clientX,
       startClientY: event.clientY,
+      moved: false,
+      x: item.x,
+      y: item.y,
     };
     setHoveredCharacterId(null);
-    setCharacterDrag({ id: hit.character.id, x: hit.imageX, y: hit.imageY });
+    setHoveredVisualItemId(item.id);
+    setVisualDrag({ id: item.id, x: item.x, y: item.y });
     try {
       event.currentTarget.setPointerCapture(event.pointerId);
     } catch {}
   };
 
   const handleCanvasPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const movingVisual = visualDragRef.current;
+    if (movingVisual) {
+      if (
+        !movingVisual.moved &&
+        Math.hypot(
+          event.clientX - movingVisual.startClientX,
+          event.clientY - movingVisual.startClientY
+        ) > 3
+      ) {
+        movingVisual.moved = true;
+      }
+      const point = projectPoint(event.clientX, event.clientY);
+      let nextLeft = Math.max(
+        -movingVisual.width * 0.9,
+        Math.min(width - movingVisual.width * 0.1, point.x - movingVisual.grabX)
+      );
+      let nextTop = Math.max(
+        -movingVisual.height * 0.9,
+        Math.min(height - movingVisual.height * 0.1, point.y - movingVisual.grabY)
+      );
+      const xTargets = [0, (width - movingVisual.width) / 2, width - movingVisual.width];
+      for (const target of xTargets) {
+        if (Math.abs(nextLeft - target) < 14) nextLeft = target;
+      }
+      const yTargets = [0, (height - movingVisual.height) / 2, height - movingVisual.height];
+      for (const target of yTargets) {
+        if (Math.abs(nextTop - target) < 14) nextTop = target;
+      }
+      movingVisual.x = nextLeft + movingVisual.offsetX;
+      movingVisual.y = nextTop + movingVisual.offsetY;
+      setVisualDrag({
+        id: movingVisual.id,
+        x: Math.round(movingVisual.x),
+        y: Math.round(movingVisual.y),
+      });
+      return;
+    }
+
     const drag = characterDragRef.current;
     if (!drag) {
       const hit = hitTestCharacter(event.clientX, event.clientY);
       setHoveredCharacterId((previous) =>
         previous === (hit?.character.id ?? null) ? previous : (hit?.character.id ?? null)
       );
+      if (!hit) {
+        const visualHit = hitTestVisualItem(event.clientX, event.clientY);
+        setHoveredVisualItemId((previous) =>
+          previous === (visualHit?.item.id ?? null) ? previous : (visualHit?.item.id ?? null)
+        );
+      } else {
+        setHoveredVisualItemId(null);
+      }
       return;
     }
 
@@ -657,6 +835,22 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   };
 
   const handleCanvasPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const movingVisual = visualDragRef.current;
+    if (movingVisual) {
+      visualDragRef.current = null;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {}
+      setVisualDrag(null);
+      if (movingVisual.moved) {
+        onVisualItemMove?.(
+          movingVisual.id,
+          Math.round(movingVisual.x),
+          Math.round(movingVisual.y)
+        );
+      }
+      return;
+    }
     const drag = characterDragRef.current;
     if (!drag) return;
     characterDragRef.current = null;
@@ -670,6 +864,14 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   };
 
   const handleCanvasPointerCancel = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (visualDragRef.current) {
+      visualDragRef.current = null;
+      try {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      } catch {}
+      setVisualDrag(null);
+      return;
+    }
     if (!characterDragRef.current) return;
     characterDragRef.current = null;
     try {
@@ -780,16 +982,23 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   const handleCanvasDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
     const hit = hitTestCharacter(event.clientX, event.clientY);
-    if (!hit) return;
-    event.preventDefault();
-    event.stopPropagation();
-    if ((event.shiftKey || event.altKey) && onCharacterMove) {
-      onCharacterMove(hit.character.id, undefined as unknown as number, undefined as unknown as number);
+    if (hit) {
+      event.preventDefault();
+      event.stopPropagation();
+      if ((event.shiftKey || event.altKey) && onCharacterMove) {
+        onCharacterMove(hit.character.id, undefined as unknown as number, undefined as unknown as number);
+        return;
+      }
+      if (onToggleCharacterFlip) {
+        onToggleCharacterFlip(hit.character.id);
+      }
       return;
     }
-    if (onToggleCharacterFlip) {
-      onToggleCharacterFlip(hit.character.id);
-    }
+    const visualHit = hitTestVisualItem(event.clientX, event.clientY, 'inspect');
+    if (!visualHit) return;
+    event.preventDefault();
+    event.stopPropagation();
+    onVisualItemInspect?.(visualHit.item.id);
   };
 
   const renderFrame = useCallback(() => {
@@ -803,7 +1012,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       height,
       time: currentTime,
       characters: displayCharacters,
-      items,
+      items: displayItems,
       tracks,
       isPlaying,
       showCharacters: showAvatar,
@@ -812,7 +1021,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       backgroundVideo: videoTrackHidden ? null : videoRef.current,
       backgroundFit: videoFit,
     });
-  }, [displayCharacters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height, videoFit, videoTrackHidden]);
+  }, [displayCharacters, displayItems, currentTime, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height, videoFit, videoTrackHidden]);
 
   renderFrameRef.current = renderFrame;
 
@@ -912,6 +1121,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
   const characterOutline = scalingLayout ?? hoveredLayout;
   const scaleHandle = characterOutline ? getScaleHandleGeometry(characterOutline, width) : null;
+  const visualOutlineItem = visualDrag
+    ? displayItems.find((item) => item.id === visualDrag.id) ?? null
+    : hoveredVisualItem;
+  const visualOutline = visualOutlineItem ? visualItemBoundsAt(visualOutlineItem) : null;
 
   return (
     <div className="flex flex-col bg-[#111214] rounded-none overflow-hidden border border-[#26282c]">
@@ -924,8 +1137,9 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           e.stopPropagation();
         }}
         onPointerLeave={() => {
-          if (!characterDragRef.current && !characterScaleDragRef.current) {
+          if (!characterDragRef.current && !characterScaleDragRef.current && !visualDragRef.current) {
             setHoveredCharacterId(null);
+            setHoveredVisualItemId(null);
           }
         }}
         onDrop={(e) => {
@@ -1079,7 +1293,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           width={width}
           height={height}
           className={`absolute inset-0 w-full h-full object-contain select-none ${
-            hoveredCharacterId ? 'cursor-move' : 'cursor-pointer'
+            hoveredCharacterId || hoveredVisualItemId ? 'cursor-move' : 'cursor-pointer'
           }`}
           onClick={() => {
             if (suppressCanvasClickRef.current) {
@@ -1093,8 +1307,19 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           onPointerUp={handleCanvasPointerUp}
           onPointerCancel={handleCanvasPointerCancel}
           onDoubleClick={handleCanvasDoubleClick}
-          aria-label="Preview: click to play or pause, drag a character to reposition it, drag its corner handle to resize, double-click a character to flip it"
+          aria-label="Preview: click to play or pause, drag a character, image or shape to reposition it, drag a character's corner handle to resize, double-click a character to flip it or an image/shape to inspect it"
         />
+        {visualOutline && (
+          <div
+            className="absolute pointer-events-none border border-dashed border-[#8ab4f8]/90 rounded-sm"
+            style={{
+              left: `${(visualOutline.left / Math.max(1, width)) * 100}%`,
+              top: `${(visualOutline.top / Math.max(1, height)) * 100}%`,
+              width: `${(visualOutline.width / Math.max(1, width)) * 100}%`,
+              height: `${(visualOutline.height / Math.max(1, height)) * 100}%`,
+            }}
+          />
+        )}
         {characterOutline && scaleHandle && (
           <>
             <div

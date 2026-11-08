@@ -5,7 +5,7 @@ import {
   resolveItemTransform,
   sampleKeyframes,
 } from '../keyframes';
-import { ImageItem, TextItem, TransformKeyframe } from '../../types';
+import { ImageItem, ShapeItem, TextItem, TransformKeyframe } from '../../types';
 
 const base = { x: 50, y: 50, scale: 1, rotation: 0, opacity: 1 };
 
@@ -64,7 +64,7 @@ describe('keyframes', () => {
     expect(sampleKeyframes(keys, 9, base).x).toBe(20);
   });
 
-  it('resolves text and image bases in their native units', () => {
+  it('resolves text, image and shape bases in their native units', () => {
     const text = {
       id: 't',
       type: 'text',
@@ -105,6 +105,29 @@ describe('keyframes', () => {
       height: 50,
     } as ImageItem;
     expect(getItemBaseTransform(image)).toMatchObject({ x: 100, y: 200, scale: 1 });
+
+    const shape = {
+      id: 's',
+      type: 'shape',
+      layer: 1,
+      startTime: 0,
+      duration: 2,
+      name: 's',
+      shape: 'ellipse',
+      x: 30,
+      y: 40,
+      width: 50,
+      height: 50,
+      rotation: 15,
+      opacity: 0.5,
+    } as ShapeItem;
+    expect(getItemBaseTransform(shape)).toMatchObject({
+      x: 30,
+      y: 40,
+      scale: 1,
+      rotation: 15,
+      opacity: 0.5,
+    });
   });
 
   it('normalizes YAML input defensively', () => {

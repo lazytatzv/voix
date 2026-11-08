@@ -2687,6 +2687,11 @@ export function App() {
             onCharacterScale={(id, scale, position) =>
               handleUpdateCharacter(id, { scale, ...position })
             }
+            onVisualItemMove={(id, x, y) => updateItem(id, { x, y })}
+            onVisualItemInspect={(id) => {
+              handleSelectItem(id);
+              setInspectedItemId(id);
+            }}
           />
         </div>
 
