@@ -99,6 +99,10 @@ export interface SubtitleStyle {
   letterSpacing?: number;
   /** Draw text in italic. */
   italic?: boolean;
+  /** Draw a line under the visible characters. */
+  underline?: boolean;
+  /** Draw a line through the visible characters. */
+  strikethrough?: boolean;
   /** Wrap long lines at the item width. False keeps explicit newlines only. */
   wordWrap?: boolean;
   /** Draw Japanese-style vertical text (columns run top to bottom). */

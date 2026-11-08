@@ -326,6 +326,8 @@ function toTextItem(
       lineHeight,
       letterSpacing,
       italic: Boolean(raw.Italic),
+      underline: Boolean(raw.Underline),
+      strikethrough: Boolean(raw.Strikethrough),
       wordWrap:
         raw.WordWrap !== undefined
           ? String(raw.WordWrap).toLowerCase() !== 'nowrap'

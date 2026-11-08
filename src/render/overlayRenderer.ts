@@ -291,6 +291,20 @@ function drawVerticalStyledText(
       } else {
         ctx.fillStyle = style.textColor || '#ffffff';
         ctx.fillText(glyph.char, glyph.x, y);
+        if (style.underline || style.strikethrough) {
+          const thickness = Math.max(1, fontSize * 0.055);
+          if (style.underline) {
+            ctx.fillRect(
+              glyph.x + fontSize * 0.46,
+              y - charAdvance / 2,
+              thickness,
+              charAdvance
+            );
+          }
+          if (style.strikethrough) {
+            ctx.fillRect(glyph.x - thickness / 2, y - charAdvance / 2, thickness, charAdvance);
+          }
+        }
       }
     });
   };
@@ -503,6 +517,21 @@ function drawStyledText(ctx: CanvasRenderingContext2D, options: StyledTextOption
           } else {
             ctx.fillStyle = style.textColor || '#ffffff';
             ctx.fillText(drawText, drawX, lineY);
+            if (style.underline || style.strikethrough) {
+              const decorationWidth = ctx.measureText(drawText).width;
+              const thickness = Math.max(1, (style.fontSize || 48) * 0.055);
+              if (style.underline) {
+                ctx.fillRect(
+                  drawX,
+                  lineY + (style.fontSize || 48) * 0.39,
+                  decorationWidth,
+                  thickness
+                );
+              }
+              if (style.strikethrough) {
+                ctx.fillRect(drawX, lineY - thickness / 2, decorationWidth, thickness);
+              }
+            }
           }
         }
 

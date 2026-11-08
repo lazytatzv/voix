@@ -1165,6 +1165,24 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
                   <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
                     <input
                       type="checkbox"
+                      checked={Boolean(style.underline)}
+                      onChange={(e) => patchStyle({ underline: e.target.checked })}
+                      className="accent-[#3b82f6]"
+                    />
+                    Underline
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={Boolean(style.strikethrough)}
+                      onChange={(e) => patchStyle({ strikethrough: e.target.checked })}
+                      className="accent-[#3b82f6]"
+                    />
+                    Strikethrough
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] font-mono text-[#c4c7c5] self-end pb-1.5 cursor-pointer">
+                    <input
+                      type="checkbox"
                       checked={style.wordWrap !== false}
                       onChange={(e) => patchStyle({ wordWrap: e.target.checked })}
                       className="accent-[#3b82f6]"

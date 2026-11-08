@@ -178,6 +178,9 @@ function normalizeStyle(raw: unknown, fallback: SubtitleStyle = DEFAULT_SUBTITLE
         ? Math.max(-20, Math.min(80, Number(rec.letterSpacing)))
         : fallback.letterSpacing,
     italic: rec.italic !== undefined ? Boolean(rec.italic) : fallback.italic,
+    underline: rec.underline !== undefined ? Boolean(rec.underline) : fallback.underline,
+    strikethrough:
+      rec.strikethrough !== undefined ? Boolean(rec.strikethrough) : fallback.strikethrough,
     wordWrap: rec.wordWrap !== undefined ? Boolean(rec.wordWrap) : fallback.wordWrap,
     vertical: rec.vertical !== undefined ? Boolean(rec.vertical) : fallback.vertical,
     strokeColor: String(rec.strokeColor ?? fallback.strokeColor),

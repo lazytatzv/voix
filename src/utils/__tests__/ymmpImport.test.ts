@@ -66,6 +66,8 @@ function makeYmmp() {
             Style: 'Outline',
             Bold: true,
             Italic: true,
+            Underline: true,
+            Strikethrough: true,
             DisplayInterval: 0.05,
             DisplayDirection: 'FromLast',
             HideInterval: 0.08,
@@ -181,6 +183,8 @@ describe('parseYmmpProject', () => {
       expect(text.style.lineHeight).toBe(1.5);
       expect(text.style.letterSpacing).toBe(64);
       expect(text.style.italic).toBe(true);
+      expect(text.style.underline).toBe(true);
+      expect(text.style.strikethrough).toBe(true);
       expect(text.style.wordWrap).toBe(false);
       expect(text.displayInterval).toBe(0.05);
       expect(text.displayDirection).toBe('from-last');
