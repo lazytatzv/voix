@@ -101,7 +101,7 @@ export class VoiceAudioPlayer {
     sourceNode.buffer = buffer;
 
     const gainNode = ctx.createGain();
-    const requestedVolume = Math.max(0, Math.min(1, volume));
+    const requestedVolume = Math.max(0, Math.min(2, volume));
     const targetVolume = this.isMuted ? 0 : requestedVolume;
     gainNode.gain.setValueAtTime(targetVolume, ctx.currentTime);
 

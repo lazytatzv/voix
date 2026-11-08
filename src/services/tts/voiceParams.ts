@@ -21,7 +21,10 @@ export function buildVoiceTtsOptions(item: VoiceTuning): TTSOptions {
   return {
     speedScale: item.speedScale ?? 1,
     pitchScale: item.pitchScale ?? 0,
-    volumeScale: item.volumeScale ?? 1,
+    // Volume is applied as a playback gain so the slider stays live. Baking it
+    // into the WAV as well would apply the setting twice and make loudness
+    // depend on whether the clip was already cached.
+    volumeScale: 1,
     intonationScale: item.intonationScale ?? 1,
     prePhonemeLength: item.prePhonemeLength ?? 0.1,
     postPhonemeLength: item.postPhonemeLength ?? 0.2,

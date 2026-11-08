@@ -96,16 +96,16 @@ describe('VoiceAudioPlayer mute handling', () => {
     expect(context.gains[0].gain.value).toBeCloseTo(0.75);
   });
 
-  it('clamps the restored volume to the safe 0-1 range', async () => {
+  it('clamps the restored volume to the safe 0-2 range', async () => {
     const player = new VoiceAudioPlayer();
     vi.spyOn(player, 'getAudioBuffer').mockResolvedValue({ duration: 2 } as AudioBuffer);
 
-    await player.playVoice('line-3', 'blob:test', 1.8);
+    await player.playVoice('line-3', 'blob:test', 2.8);
     const context = FakeAudioContext.latest!;
-    expect(context.gains[0].gain.value).toBe(1);
+    expect(context.gains[0].gain.value).toBe(2);
 
     player.setMuted(true);
     player.setMuted(false);
-    expect(context.gains[0].gain.value).toBe(1);
+    expect(context.gains[0].gain.value).toBe(2);
   });
 });

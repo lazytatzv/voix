@@ -587,6 +587,19 @@ export function App() {
         let phonemes = item.phonemes;
         let audioKey = item.audioKey;
 
+        // A saved key describes the exact synthesis parameters. If the item
+        // was tuned after saving (or an older cache baked in the volume), the
+        // key no longer matches and the clip must be synthesized again.
+        const expectedKey = ttsManager.getCacheKey(
+          character.ttsProviderId,
+          character.speakerId,
+          item.text,
+          buildVoiceTtsOptions(item)
+        );
+        if (audioKey && audioKey !== expectedKey) {
+          audioKey = undefined;
+        }
+
         if (!force && audioKey) {
           const cached = await loadCachedAudio(audioKey);
           if (cached && cached.blob.size > 0) {

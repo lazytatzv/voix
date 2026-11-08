@@ -169,6 +169,19 @@ async function ensureVoiceWavPath(
 ): Promise<string | null> {
   let blob = item.audioBlob;
   let key = item.audioKey;
+  const character = characters.find((c) => c.id === item.characterId) || characters[0];
+
+  // Ignore cache entries synthesized with different tuning parameters. Older
+  // projects in particular could have the voice volume baked into the WAV.
+  if (key && character) {
+    const expectedKey = ttsManager.getCacheKey(
+      character.ttsProviderId,
+      character.speakerId,
+      item.text,
+      buildVoiceTtsOptions(item)
+    );
+    if (key !== expectedKey) key = undefined;
+  }
 
   if (!blob && key) {
     const cached = await loadCachedAudio(key);
@@ -176,7 +189,6 @@ async function ensureVoiceWavPath(
   }
 
   if (!blob) {
-    const character = characters.find((c) => c.id === item.characterId) || characters[0];
     if (!character) return null;
     const result = await ttsManager.synthesize(
       character.ttsProviderId,

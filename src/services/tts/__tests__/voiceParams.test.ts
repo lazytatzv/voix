@@ -28,11 +28,16 @@ describe('buildVoiceTtsOptions', () => {
     ).toEqual({
       speedScale: 1.4,
       pitchScale: -0.2,
-      volumeScale: 0.7,
+      volumeScale: 1,
       intonationScale: 0,
       prePhonemeLength: 0,
       postPhonemeLength: 0,
       pauseLengthScale: 0.5,
     });
+  });
+
+  it('keeps synthesis volume at unity so playback applies it once', () => {
+    expect(buildVoiceTtsOptions({ volumeScale: 0.7 }).volumeScale).toBe(1);
+    expect(buildVoiceTtsOptions({ volumeScale: 2 }).volumeScale).toBe(1);
   });
 });

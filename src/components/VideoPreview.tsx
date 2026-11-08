@@ -809,10 +809,10 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       showCharacters: showAvatar,
       showTerminal,
       showSafeArea,
-      backgroundVideo: videoRef.current,
+      backgroundVideo: videoTrackHidden ? null : videoRef.current,
       backgroundFit: videoFit,
     });
-  }, [displayCharacters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height, videoFit]);
+  }, [displayCharacters, currentTime, items, tracks, isPlaying, showAvatar, showTerminal, showSafeArea, imageVersion, width, height, videoFit, videoTrackHidden]);
 
   renderFrameRef.current = renderFrame;
 
