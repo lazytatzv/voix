@@ -561,7 +561,7 @@ fn base64_decode_simple(data: &str) -> Result<Vec<u8>, String> {
 
 #[tauri::command]
 fn extract_video_keyframes(video_path: String, count: Option<u32>) -> Result<Vec<String>, String> {
-    let num_frames = count.unwrap_or(4).clamp(2, 8);
+    let num_frames = count.unwrap_or(6).clamp(2, 12);
     let temp_dir = std::env::temp_dir().join("voix_keyframes");
     let _ = fs::create_dir_all(&temp_dir);
 
@@ -598,9 +598,9 @@ fn extract_video_keyframes(video_path: String, count: Option<u32>) -> Result<Vec
                 "-vframes",
                 "1",
                 "-vf",
-                "scale=640:-1",
+                "scale=960:-2",
                 "-q:v",
-                "4",
+                "3",
                 out_img.to_str().unwrap(),
             ])
             .output();

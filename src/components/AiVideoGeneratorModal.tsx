@@ -24,8 +24,8 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   rawVideoPath,
   hasVideo,
 }) => {
-  const [topic, setTopic] = useState('Arch Linuxのターミナル快適化とNeovim設定');
-  const [style, setStyle] = useState<'gaming' | 'tech_review' | 'linux_tech' | 'comedy_banter' | 'shorts_hook'>('linux_tech');
+  const [topic, setTopic] = useState('');
+  const [style, setStyle] = useState<'gaming' | 'tech_review' | 'linux_tech' | 'comedy_banter' | 'shorts_hook' | 'general'>('general');
   const [lineCount, setLineCount] = useState<number>(6);
   const [selectedCharIds, setSelectedCharIds] = useState<string[]>(() =>
     characters.slice(0, 2).map((c) => c.id)
@@ -61,11 +61,11 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
   if (!isOpen) return null;
 
   const quickTopics = [
-    { label: 'Terminal: Arch & Fastfetch', text: 'Arch Linuxの爆速化設定とおすすめCLIツール解説' },
-    { label: 'Tech: AI Studio Tools', text: '最新AI技術と動画編集ソフトVoixの便利な使い方解説' },
-    { label: 'Comedy: Zundamon & Metan', text: 'ずんだもんと四国めたんのクスッと笑える日常コント掛け合い' },
-    { label: 'Gaming: Epic Highlights', text: '白熱したゲーム実況とハプニング・神プレイのリアクション' },
-    { label: 'Dev: Terminal Hacks', text: '現役エンジニアの9割が知らないターミナル便利ショートカット裏技' },
+    { label: 'Auto (Video Vision)', text: '' },
+    { label: 'Gaming Reactions', text: 'ゲーム実況で画面のハプニングや好プレイにリアルタイムで驚くリアクション' },
+    { label: 'Educational / Commentary', text: '画面で何が行われているかを視聴者に分かりやすく説明・ツッコミする解説動画' },
+    { label: 'Comedy Banter', text: '映像の出来事にクスッと笑えるツッコミやボケを入れる掛け合い' },
+    { label: 'Tech & Linux', text: '画面内の操作やターミナルコマンド、設定の解説' },
   ];
 
   const handleToggleChar = (id: string) => {
@@ -93,7 +93,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
         try {
           keyframes = await invoke<string[]>('extract_video_keyframes', {
             videoPath: rawVideoPath,
-            count: 6,
+            count: 8,
           });
         } catch (e) {
           console.warn('Keyframe extraction warning:', e);
@@ -291,7 +291,7 @@ export const AiVideoGeneratorModal: React.FC<AiVideoGeneratorModalProps> = ({
               rows={2}
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g. Exciting commentary reacting to finding diamonds in Minecraft..."
+              placeholder="（空欄でOK：動画の画面・文字・出来事をAIがじっくり観察して自動実況・解説します。特定のシチュエーションや追加の指示があれば入力してください）"
               className="w-full bg-[#131314] border border-[#3c4043] focus:border-[#8ab4f8] rounded-lg p-3 text-xs text-[#e3e3e3] outline-none transition resize-none font-normal"
             />
 
