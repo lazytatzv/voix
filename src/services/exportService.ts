@@ -21,6 +21,7 @@ import {
 import { makeCacheKey } from '../utils/hash';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
 import { collectVoiceIntervals } from '../utils/audioDucking';
+import { buildVoiceTtsOptions } from './tts/voiceParams';
 
 export { blobToBase64 };
 
@@ -186,11 +187,7 @@ async function ensureVoiceWavPath(
       character.ttsProviderId,
       character.speakerId,
       item.text,
-      {
-        speedScale: item.speedScale ?? 1,
-        pitchScale: item.pitchScale ?? 0,
-        volumeScale: item.volumeScale ?? 1,
-      }
+      buildVoiceTtsOptions(item)
     );
     blob = result.audioBlob;
     key = result.audioKey;

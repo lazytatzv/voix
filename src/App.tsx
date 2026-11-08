@@ -67,6 +67,7 @@ import { ScriptLinePrompt, formatSpeechWithPersona } from './services/aiService'
 import { matchCharacter, ParsedScriptLine, ParsedYamlConfig, DEFAULT_LINE_GAP } from './utils/scriptParser';
 import { soundEffectManager } from './utils/soundEffects';
 import { voiceAudioPlayer } from './services/voicePlayer';
+import { buildVoiceTtsOptions } from './services/tts/voiceParams';
 
 const AUTOSAVE_LOCAL_KEY = 'voix_project_autosave_v2';
 const RECENT_PROJECTS_KEY = 'voix_recent_projects_v1';
@@ -599,15 +600,7 @@ export function App() {
             character.ttsProviderId,
             character.speakerId,
             item.text,
-            {
-              speedScale: item.speedScale ?? 1,
-              pitchScale: item.pitchScale ?? 0,
-              volumeScale: item.volumeScale ?? 1,
-              intonationScale: item.intonationScale ?? 1,
-              prePhonemeLength: item.prePhonemeLength ?? 0.1,
-              postPhonemeLength: item.postPhonemeLength ?? 0.2,
-              pauseLengthScale: item.pauseLengthScale ?? 1,
-            },
+            buildVoiceTtsOptions(item),
             !force
           );
           blob = result.audioBlob;

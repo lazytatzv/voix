@@ -15,6 +15,8 @@ interface ActiveVoice {
   startedAtContextTime: number;
   offset: number;
   duration: number;
+  /** Per-line target gain, restored when the voice track is unmuted. */
+  volume: number;
 }
 
 export class VoiceAudioPlayer {
@@ -99,7 +101,8 @@ export class VoiceAudioPlayer {
     sourceNode.buffer = buffer;
 
     const gainNode = ctx.createGain();
-    const targetVolume = this.isMuted ? 0 : Math.max(0, Math.min(1, volume));
+    const requestedVolume = Math.max(0, Math.min(1, volume));
+    const targetVolume = this.isMuted ? 0 : requestedVolume;
     gainNode.gain.setValueAtTime(targetVolume, ctx.currentTime);
 
     sourceNode.connect(gainNode);
@@ -121,6 +124,7 @@ export class VoiceAudioPlayer {
         startedAtContextTime: ctx.currentTime,
         offset: playOffset,
         duration: buffer.duration,
+        volume: requestedVolume,
       });
       return true;
     } catch (err) {
@@ -191,7 +195,7 @@ export class VoiceAudioPlayer {
     if (this.ctx && this.ctx.state === 'running') {
       const now = this.ctx.currentTime;
       for (const voice of this.activeVoices.values()) {
-        voice.gainNode.gain.setValueAtTime(muted ? 0 : 1, now);
+        voice.gainNode.gain.setValueAtTime(muted ? 0 : voice.volume, now);
       }
     }
   }
