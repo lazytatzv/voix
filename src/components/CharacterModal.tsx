@@ -30,7 +30,7 @@ import { CustomSelect } from './CustomSelect';
 import { SUBTITLE_PRESETS } from '../utils/subtitlePresets';
 import { removeWhiteBackgroundFromDataUrl } from '../utils/imageUtils';
 import { SafeAvatarImg } from './SafeAvatarImg';
-import { defaultCharacters, TECH_GIRL_CHARACTER } from '../utils/defaultCharacters';
+import { defaultCharacters, TECH_GIRL_CHARACTER, DEV_GIRL_CHARACTER } from '../utils/defaultCharacters';
 import { VOICEVOX_CATALOG } from '../utils/voicevoxCatalog';
 import { COEIROINK_CATALOG } from '../utils/coeiroinkCatalog';
 import { VOICE_TONE_PRESETS } from '../utils/voiceTonePresets';
@@ -640,6 +640,24 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
             >
               <Scissors className="w-3.5 h-3.5 text-[#c084fc]" />
               Auto-Slice Sprite Sheet
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                const newId = `dev_girl_${Date.now()}`;
+                const newChar: Character = {
+                  ...DEV_GIRL_CHARACTER,
+                  id: newId,
+                };
+                onAddCharacter(newChar);
+                setSelectedCharId(newId);
+              }}
+              className="mt-1.5 w-full py-2 px-3 rounded-xl bg-[#132338] hover:bg-[#1a3350] text-[#38bdf8] text-xs font-medium flex items-center justify-center gap-1.5 border border-[#1e4976] transition cursor-pointer"
+              title="Add Maker Girl (20 poses with PCB, soldering, robot, schematic)"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-[#38bdf8]" />
+              + Maker Girl (20 Poses)
             </button>
 
             <button

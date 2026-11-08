@@ -52,7 +52,7 @@ export const SpriteSheetModal: React.FC<SpriteSheetModalProps> = ({
   const [previewSpriteIndex, setPreviewSpriteIndex] = useState<number>(0);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Initialize with Tech Girl sample
+  // Initialize with sample presets
   const loadTechGirlPreset = () => {
     setImageSrc('/characters/tech_girl/spritesheet.webp');
     setImageName('tech_girl_spritesheet.webp');
@@ -60,6 +60,21 @@ export const SpriteSheetModal: React.FC<SpriteSheetModalProps> = ({
     setRows(4);
     setCharName('Tech Girl');
     setThemeColor('#a855f7');
+    setSelectedProviderId('voicevox');
+    setSelectedSpeakerId(2);
+    setSelectedStyleId(2);
+  };
+
+  const loadMakerGirlPreset = () => {
+    setImageSrc('/characters/dev_girl/spritesheet.webp');
+    setImageName('dev_girl_spritesheet.webp');
+    setColumns(5);
+    setRows(4);
+    setCharName('Maker Girl');
+    setThemeColor('#38bdf8');
+    setSelectedProviderId('coeiroink');
+    setSelectedSpeakerId(0);
+    setSelectedStyleId(0);
   };
 
   useEffect(() => {
@@ -207,11 +222,19 @@ export const SpriteSheetModal: React.FC<SpriteSheetModalProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={loadMakerGirlPreset}
+                className="flex-1 py-1.5 px-3 rounded-lg bg-[#142338] hover:bg-[#1c324f] text-[#38bdf8] text-xs font-medium border border-[#1e4875] transition flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#38bdf8]" />
+                Maker Girl (20 Poses)
+              </button>
+              <button
+                type="button"
                 onClick={loadTechGirlPreset}
                 className="flex-1 py-1.5 px-3 rounded-lg bg-[#271d3b] hover:bg-[#352554] text-[#c084fc] text-xs font-medium border border-[#4c3275] transition flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                Load Tech Girl Preset (20 Poses)
+                Tech Girl (20 Poses)
               </button>
             </div>
 

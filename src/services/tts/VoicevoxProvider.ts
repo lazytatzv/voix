@@ -74,16 +74,16 @@ export class VoicevoxProvider implements TTSProvider {
   }
 
   async isAvailable(): Promise<boolean> {
-    // Probe common endpoints for VOICEVOX (/version) and COEIROINK (/v1/speakers, /docs, /version)
+    // Probe common endpoints for VOICEVOX (/docs, /version) and COEIROINK (/docs, /v1/speakers)
     const checkUrls = [
+      `${this.endpoint}/docs`,
       `${this.endpoint}/version`,
       `${this.endpoint}/v1/speakers`,
       `${this.endpoint}/speakers`,
-      `${this.endpoint}/docs`,
     ];
     for (const url of checkUrls) {
       try {
-        const res = await fetch(url, { signal: AbortSignal.timeout(1200) });
+        const res = await fetch(url, { signal: AbortSignal.timeout(2500) });
         if (res.ok) return true;
       } catch {
         // try next
@@ -141,6 +141,10 @@ export class VoicevoxProvider implements TTSProvider {
     const spokenAnnotated = getTtsSpokenText(text);
     // (b) 英文が含まれる場合は自動で発音カタカナに変換してVOICEVOXに渡す
     const speechText = containsEnglish(spokenAnnotated) ? convertEnglishToVoicevox(spokenAnnotated) : spokenAnnotated;
+
+    if (this.id === 'coeiroink') {
+      return this.synthesizeCoeiroink(speakerId, speechText, options);
+    }
 
     let audioQuery: VoicevoxAudioQuery | null = null;
     const queryUrls = [
@@ -265,6 +269,128 @@ export class VoicevoxProvider implements TTSProvider {
       await audioCtx.close();
     } catch {
       // フォールバック
+    }
+
+    return {
+      audioBlob,
+      duration: Math.max(actualDuration, 0.3),
+      phonemes,
+    };
+  }
+
+  /**
+   * COEIROINK v2 synthesis handler.
+   * COEIROINK v2 does not use /audio_query; instead it accepts a direct
+   * POST /v1/synthesis request with SynthesisParam (speakerUuid, styleId, text, etc.).
+   */
+  private async synthesizeCoeiroink(
+    speakerId: number,
+    text: string,
+    options?: TTSOptions
+  ): Promise<{
+    audioBlob: Blob;
+    duration: number;
+    phonemes: PhonemeTiming[];
+  }> {
+    // 1. Resolve speakerUuid from styleId
+    let speakerUuid: string | undefined;
+    try {
+      const metaRes = await fetch(
+        `${this.endpoint}/v1/style_id_to_speaker_meta?styleId=${speakerId}`,
+        {
+          method: 'POST',
+          signal: AbortSignal.timeout(2000),
+        }
+      );
+      if (metaRes.ok) {
+        const meta = (await metaRes.json()) as { speakerUuid?: string };
+        if (meta.speakerUuid) {
+          speakerUuid = meta.speakerUuid;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    if (!speakerUuid) {
+      for (const cat of COEIROINK_CATALOG_SPEAKERS) {
+        if (cat.styles.some((s) => s.id === speakerId)) {
+          speakerUuid = cat.id;
+          break;
+        }
+      }
+    }
+
+    if (!speakerUuid) {
+      speakerUuid = '3c37646f-3881-5374-2a83-149267990abc'; // Default Tsukuyomi-chan UUID
+    }
+
+    const payload = {
+      speakerUuid,
+      styleId: speakerId,
+      text,
+      speedScale: Math.max(0.1, options?.speedScale ?? 1.0),
+      volumeScale: Math.max(0.0, options?.volumeScale ?? 1.0),
+      pitchScale: options?.pitchScale ?? 0.0,
+      intonationScale: Math.max(0.0, options?.intonationScale ?? 1.0),
+      prePhonemeLength: Math.max(0.0, options?.prePhonemeLength ?? 0.1),
+      postPhonemeLength: Math.max(0.01, options?.postPhonemeLength ?? 0.2),
+      outputSamplingRate: 24000,
+    };
+
+    const synthRes = await fetch(`${this.endpoint}/v1/synthesis`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(payload),
+    });
+
+    if (!synthRes.ok) {
+      throw new Error(
+        `COEIROINK synthesis failed with status ${synthRes.status} for style ${speakerId}`
+      );
+    }
+
+    const audioBlob = await synthRes.blob();
+    let actualDuration = 1.0;
+
+    try {
+      const arrayBuffer = await audioBlob.slice(0).arrayBuffer();
+      if (arrayBuffer.byteLength >= 44) {
+        const view = new DataView(arrayBuffer);
+        const byteRate = view.getUint32(28, true);
+        const dataSize = view.getUint32(40, true);
+        if (byteRate > 0 && dataSize > 0) {
+          actualDuration = dataSize / byteRate;
+        }
+      }
+      if (
+        typeof window !== 'undefined' &&
+        (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext)
+      ) {
+        const audioCtx = new (window.AudioContext ||
+          (window as unknown as { webkitAudioContext: typeof AudioContext })
+            .webkitAudioContext)();
+        const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        actualDuration = decoded.duration;
+        await audioCtx.close();
+      }
+    } catch {
+      // fallback
+    }
+
+    // Generate basic mouth flap timing across the duration
+    const phonemes: PhonemeTiming[] = [];
+    const charCount = Math.max(1, text.length);
+    const step = actualDuration / (charCount + 1);
+    for (let i = 0; i < charCount; i++) {
+      phonemes.push({
+        time: (i + 1) * step,
+        vowel: 'a',
+      });
     }
 
     return {

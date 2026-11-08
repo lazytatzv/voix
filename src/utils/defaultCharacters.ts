@@ -364,7 +364,62 @@ export const TECH_GIRL_CHARACTER: Character = {
   flipH: false,
 };
 
+export const DEV_GIRL_CHARACTER: Character = {
+  id: 'dev_girl',
+  name: 'Maker Girl',
+  ttsProviderId: 'coeiroink',
+  speakerId: 0, // Tsukuyomi-chan (COEIROINK style 0)
+  styleId: 0,
+  avatar: {
+    idle: '/characters/dev_girl/wave.png',
+    speaking: '/characters/dev_girl/point_up.png',
+    expressions: {
+      idle: '/characters/dev_girl/wave.png',
+      wave: '/characters/dev_girl/wave.png',
+      surprised: '/characters/dev_girl/surprised.png',
+      point_up: '/characters/dev_girl/point_up.png',
+      laptop: '/characters/dev_girl/laptop.png',
+      laptop_typing: '/characters/dev_girl/laptop_typing.png',
+      pcb: '/characters/dev_girl/pcb.png',
+      soldering: '/characters/dev_girl/soldering.png',
+      robot: '/characters/dev_girl/robot.png',
+      robot_arm: '/characters/dev_girl/robot_arm.png',
+      tablet: '/characters/dev_girl/tablet.png',
+      pointing: '/characters/dev_girl/pointing.png',
+      thinking: '/characters/dev_girl/thinking.png',
+      sleeping: '/characters/dev_girl/sleeping.png',
+      stressed: '/characters/dev_girl/stressed.png',
+      shrug: '/characters/dev_girl/shrug.png',
+      nod: '/characters/dev_girl/nod.png',
+      thumbs_up: '/characters/dev_girl/thumbs_up.png',
+      schematic: '/characters/dev_girl/schematic.png',
+      wave_smile: '/characters/dev_girl/wave_smile.png',
+      success: '/characters/dev_girl/success.png',
+    },
+  },
+  subtitleStyle: {
+    textColor: '#ffffff',
+    fontSize: 42,
+    fontFamily: "'Google Sans', 'Noto Sans JP', sans-serif",
+    fontWeight: '900',
+    strokeColor: '#090a0c',
+    strokeWidth: 8,
+    outerStrokeColor: '#38bdf8', // Cyan / tech blue
+    outerStrokeWidth: 14,
+    hasShadow: true,
+    shadowColor: 'rgba(0, 0, 0, 0.85)',
+    shadowBlur: 8,
+    shadowOffsetY: 4,
+    bgStyle: 'none',
+    yOffsetPercent: 12,
+  },
+  position: 'left',
+  scale: 0.9,
+  flipH: false,
+};
+
 export const defaultCharacters: Character[] = [
+  DEV_GIRL_CHARACTER,
   TECH_GIRL_CHARACTER,
   {
     id: 'zundamon',

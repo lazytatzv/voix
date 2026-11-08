@@ -51,5 +51,10 @@ else
   echo "⚠️ Engine did not respond on 127.0.0.1:${INTERNAL_PORT} within 30s, proceeding to forward..."
 fi
 
-echo "📡 Exposing port ${EXTERNAL_PORT} on 0.0.0.0 via socat proxy..."
-exec socat TCP-LISTEN:${EXTERNAL_PORT},fork,reuseaddr TCP:127.0.0.1:${INTERNAL_PORT}
+if [ -f "/app/proxy.py" ]; then
+  echo "📡 Exposing port ${EXTERNAL_PORT} on 0.0.0.0 via CORS reverse proxy..."
+  exec python3 /app/proxy.py
+else
+  echo "📡 Exposing port ${EXTERNAL_PORT} on 0.0.0.0 via socat proxy..."
+  exec socat TCP-LISTEN:${EXTERNAL_PORT},fork,reuseaddr TCP:127.0.0.1:${INTERNAL_PORT}
+fi

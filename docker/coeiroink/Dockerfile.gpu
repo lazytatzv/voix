@@ -17,10 +17,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY download.py /app/download.py
-COPY entrypoint.sh /app/entrypoint.sh
-
-RUN pip3 install --no-cache-dir requests urllib3
 RUN python3 /app/download.py --gpu
+COPY proxy.py /app/proxy.py
+COPY entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 EXPOSE 50032
