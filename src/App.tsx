@@ -25,6 +25,7 @@ import {
   Character,
   ImageItem,
   Marker,
+  ShapeItem,
   TextItem,
   TimelineItem,
   TrackKind,
@@ -1353,6 +1354,34 @@ export function App() {
         return;
       }
 
+      if (type === 'shape') {
+        const width = current.timeline.width;
+        const height = current.timeline.height;
+        const item: ShapeItem = {
+          id: newId('shape'),
+          type: 'shape',
+          layer: 3,
+          startTime: currentTimeRef.current,
+          duration: 3,
+          name: 'Shape',
+          shape: 'rectangle',
+          x: Math.round(width / 2 - 200),
+          y: Math.round(height / 2 - 120),
+          width: 400,
+          height: 240,
+          fillColor: '#3b82f6',
+          strokeColor: '#ffffff',
+          strokeWidth: 0,
+          cornerRadius: 16,
+          opacity: 1,
+          rotation: 0,
+        };
+        commitProject((previous) => ({ ...previous, items: [...previous.items, item] }));
+        handleSelectItem(item.id);
+        setInspectedItemId(item.id);
+        return;
+      }
+
       if (type === 'audio') {
         void pickMediaPath('audio').then((path) => {
           if (path) void addAudioFromPath(path);
@@ -1657,17 +1686,20 @@ export function App() {
     setToast(`Marker added at ${time.toFixed(2)}s`);
   }, [commitProject]);
 
-  /** Add a transform keyframe at the playhead for the selected text/image item. */
+  /** Add a transform keyframe at the playhead for the selected visual item. */
   const handleAddKeyframeAtPlayhead = useCallback(() => {
     const selection = selectedItemIdsRef.current;
     const id = selection.length === 1 ? selection[0] : selectedItemIdRef.current;
     if (!id) {
-      setToast('Select a text or image item to add a keyframe.');
+      setToast('Select a text, image or shape item to add a keyframe.');
       return;
     }
     const item = projectRef.current.items.find((entry) => entry.id === id);
-    if (!item || (item.type !== 'text' && item.type !== 'image')) {
-      setToast('Keyframes are available for text and image items.');
+    if (
+      !item ||
+      (item.type !== 'text' && item.type !== 'image' && item.type !== 'shape')
+    ) {
+      setToast('Keyframes are available for text, image and shape items.');
       return;
     }
     const local = currentTimeRef.current - item.startTime;

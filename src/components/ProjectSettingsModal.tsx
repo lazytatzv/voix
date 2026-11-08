@@ -48,6 +48,7 @@ const TRACK_LABELS: Record<TrackKind, string> = {
   voice: 'Voice / Captions',
   text: 'Text / Telop',
   image: 'Images',
+  shape: 'Shapes',
   audio: 'BGM / SE',
 };
 
@@ -65,6 +66,23 @@ function scaleItems(items: TimelineItem[], scaleX: number, scaleY: number): Time
         y: Math.round(item.y * scaleY),
         width: Math.max(4, Math.round(item.width * scaleX)),
         height: Math.max(4, Math.round(item.height * scaleY)),
+      };
+    }
+    if (item.type === 'shape') {
+      return {
+        ...item,
+        x: Math.round(item.x * scaleX),
+        y: Math.round(item.y * scaleY),
+        width: Math.max(4, Math.round(item.width * scaleX)),
+        height: Math.max(4, Math.round(item.height * scaleY)),
+        strokeWidth:
+          item.strokeWidth !== undefined
+            ? Math.max(0, Math.round(item.strokeWidth * fontScale))
+            : undefined,
+        cornerRadius:
+          item.cornerRadius !== undefined
+            ? Math.max(0, Math.round(item.cornerRadius * fontScale))
+            : undefined,
       };
     }
     if (item.type === 'text') {

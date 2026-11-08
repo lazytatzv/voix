@@ -1,4 +1,4 @@
-import { Character, ImageItem, SubtitleStyle, TextItem, TimelineItem, TrackState, VoiceItem } from '../types';
+import { Character, ImageItem, ShapeItem, SubtitleStyle, TextItem, TimelineItem, TrackState, VoiceItem } from '../types';
 import { getCachedImage, getImageContentBounds } from './imageCache';
 import { computeItemMotion } from './itemMotion';
 import { resolveItemTransform } from './keyframes';
@@ -938,6 +938,61 @@ function drawCharacters(
   });
 }
 
+function drawShapeItem(
+  ctx: CanvasRenderingContext2D,
+  item: ShapeItem,
+  time: number
+): void {
+  const motion = computeItemMotion(item, time);
+  const transform = resolveItemTransform(item, time);
+  if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
+
+  const width = Math.max(1, item.width);
+  const height = Math.max(1, item.height);
+  const strokeWidth = Math.max(0, item.strokeWidth ?? 0);
+
+  ctx.save();
+  const filter = buildCanvasFilter(item.effects);
+  if (filter !== 'none') ctx.filter = filter;
+  ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
+  ctx.globalAlpha = transform.opacity * motion.alpha;
+  ctx.translate(
+    transform.x + width / 2 + motion.offsetX,
+    transform.y + height / 2 + motion.offsetY
+  );
+  if (transform.rotation) ctx.rotate((transform.rotation * Math.PI) / 180);
+  ctx.scale(motion.scale * transform.scale, motion.scale * transform.scale);
+
+  if (item.shape === 'ellipse') {
+    ctx.beginPath();
+    ctx.ellipse(0, 0, width / 2, height / 2, 0, 0, Math.PI * 2);
+  } else if (item.shape === 'triangle') {
+    ctx.beginPath();
+    ctx.moveTo(0, -height / 2);
+    ctx.lineTo(width / 2, height / 2);
+    ctx.lineTo(-width / 2, height / 2);
+    ctx.closePath();
+  } else {
+    const radius = Math.min(
+      Math.max(0, item.cornerRadius ?? 0),
+      Math.min(width, height) / 2
+    );
+    roundRectPath(ctx, -width / 2, -height / 2, width, height, radius);
+  }
+
+  if (item.fillColor && item.fillColor !== 'transparent' && item.fillColor !== 'none') {
+    ctx.fillStyle = item.fillColor;
+    ctx.fill();
+  }
+  if (strokeWidth > 0 && item.strokeColor) {
+    ctx.lineWidth = strokeWidth;
+    ctx.strokeStyle = item.strokeColor;
+    ctx.lineJoin = 'round';
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
 export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: OverlayRenderOptions): void {
   const { width, height, time, items, characters, tracks } = options;
   // Clear the whole backing store even when the caller renders with a scale
@@ -986,37 +1041,46 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
   const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');
   const activeVoice = activeVoiceAt(visibleItems, time);
 
-  if (isTrackVisible(tracks, 'image')) {
-    const images = visibleItems
-      .filter(
+  const images = isTrackVisible(tracks, 'image')
+    ? visibleItems.filter(
         (item): item is ImageItem =>
           item.type === 'image' && time >= item.startTime && time < item.startTime + item.duration
       )
-      .sort((a, b) => a.layer - b.layer);
-    images.forEach((item) => {
-      const img = getCachedImage(item.src);
-      if (!img) return;
-      const motion = computeItemMotion(item, time);
-      const transform = resolveItemTransform(item, time);
-      if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
-      ctx.save();
-      const filter = buildCanvasFilter(item.effects);
-      if (filter !== 'none') ctx.filter = filter;
-      ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
-      ctx.globalAlpha = transform.opacity * motion.alpha;
-      ctx.translate(
-        transform.x + item.width / 2 + motion.offsetX,
-        transform.y + item.height / 2 + motion.offsetY
-      );
-      if (transform.rotation) ctx.rotate((transform.rotation * Math.PI) / 180);
-      ctx.scale(
-        motion.scale * transform.scale * (item.flipH ? -1 : 1),
-        motion.scale * transform.scale
-      );
-      ctx.drawImage(img, -item.width / 2, -item.height / 2, item.width, item.height);
-      ctx.restore();
-    });
-  }
+    : [];
+  const shapes = isTrackVisible(tracks, 'shape')
+    ? visibleItems.filter(
+        (item): item is ShapeItem =>
+          item.type === 'shape' && time >= item.startTime && time < item.startTime + item.duration
+      )
+    : [];
+  const visuals = [...images, ...shapes].sort((a, b) => a.layer - b.layer);
+  visuals.forEach((item) => {
+    if (item.type === 'shape') {
+      drawShapeItem(ctx, item, time);
+      return;
+    }
+    const img = getCachedImage(item.src);
+    if (!img) return;
+    const motion = computeItemMotion(item, time);
+    const transform = resolveItemTransform(item, time);
+    if (motion.alpha <= 0.001 || transform.opacity <= 0.001) return;
+    ctx.save();
+    const filter = buildCanvasFilter(item.effects);
+    if (filter !== 'none') ctx.filter = filter;
+    ctx.globalCompositeOperation = canvasBlendMode(item.blendMode);
+    ctx.globalAlpha = transform.opacity * motion.alpha;
+    ctx.translate(
+      transform.x + item.width / 2 + motion.offsetX,
+      transform.y + item.height / 2 + motion.offsetY
+    );
+    if (transform.rotation) ctx.rotate((transform.rotation * Math.PI) / 180);
+    ctx.scale(
+      motion.scale * transform.scale * (item.flipH ? -1 : 1),
+      motion.scale * transform.scale
+    );
+    ctx.drawImage(img, -item.width / 2, -item.height / 2, item.width, item.height);
+    ctx.restore();
+  });
 
   if (isTrackVisible(tracks, 'character') && options.showCharacters !== false) {
     drawCharacters(ctx, options, activeVoice, voices);

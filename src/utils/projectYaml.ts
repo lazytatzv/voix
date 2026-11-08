@@ -3,6 +3,7 @@ import {
   Character,
   ItemAnimation,
   Marker,
+  ShapeKind,
   SubtitleStyle,
   TextItem,
   TimelineItem,
@@ -42,6 +43,7 @@ export const DEFAULT_TRACKS: TrackState[] = [
   { id: 'voice', name: 'Voice / Captions', visible: true, locked: false, muted: false },
   { id: 'text', name: 'Text / Telop', visible: true, locked: false, muted: false },
   { id: 'image', name: 'Images', visible: true, locked: false, muted: false },
+  { id: 'shape', name: 'Shapes', visible: true, locked: false, muted: false },
   { id: 'audio', name: 'BGM / SE', visible: true, locked: false, muted: false },
 ];
 
@@ -148,6 +150,14 @@ function normalizeAnimation(value: unknown): ItemAnimation | undefined {
     : undefined;
 }
 
+const SHAPE_KINDS: ShapeKind[] = ['rectangle', 'ellipse', 'triangle'];
+
+function normalizeShapeKind(value: unknown): ShapeKind {
+  return typeof value === 'string' && SHAPE_KINDS.includes(value as ShapeKind)
+    ? (value as ShapeKind)
+    : 'rectangle';
+}
+
 function normalizeMarker(raw: unknown, index: number): Marker | null {
   const rec = asRecord(raw);
   if (rec.time === undefined) return null;
@@ -229,7 +239,7 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
   const type = String(rec.type ?? 'voice') as TimelineItem['type'];
   const base = {
     id: String(rec.id ?? `${type}_${Date.now()}_${index}`),
-    layer: Number(rec.layer ?? (type === 'voice' ? 2 : type === 'text' ? 4 : type === 'image' ? 3 : type === 'audio' ? 1 : 0)),
+    layer: Number(rec.layer ?? (type === 'voice' ? 2 : type === 'text' ? 4 : type === 'image' || type === 'shape' ? 3 : type === 'audio' ? 1 : 0)),
     startTime: Math.max(0, Number(rec.startTime ?? 0)),
     duration: Math.max(0.05, Number(rec.duration ?? 1)),
     name: String(rec.name ?? type),
@@ -349,6 +359,27 @@ function normalizeItem(raw: unknown, index: number): TimelineItem | null {
       opacity: rec.opacity !== undefined ? Number(rec.opacity) : 1,
       rotation: rec.rotation !== undefined ? Number(rec.rotation) : 0,
       flipH: Boolean(rec.flipH),
+    };
+  }
+
+  if (type === 'shape') {
+    return {
+      ...base,
+      type: 'shape',
+      shape: normalizeShapeKind(rec.shape),
+      x: Number(rec.x ?? 0),
+      y: Number(rec.y ?? 0),
+      width: Math.max(4, Number(rec.width ?? 400)),
+      height: Math.max(4, Number(rec.height ?? 240)),
+      fillColor: rec.fillColor !== undefined ? String(rec.fillColor) : '#3b82f6',
+      strokeColor: rec.strokeColor !== undefined ? String(rec.strokeColor) : undefined,
+      strokeWidth:
+        rec.strokeWidth !== undefined ? Math.max(0, Number(rec.strokeWidth)) : 0,
+      cornerRadius:
+        rec.cornerRadius !== undefined ? Math.max(0, Number(rec.cornerRadius)) : 0,
+      opacity:
+        rec.opacity !== undefined ? Math.max(0, Math.min(1, Number(rec.opacity))) : 1,
+      rotation: rec.rotation !== undefined ? Number(rec.rotation) : 0,
     };
   }
 

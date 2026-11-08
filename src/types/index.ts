@@ -2,7 +2,10 @@
 // Voix Core Data Model (YMM4-class timeline)
 // ==========================================
 
-export type ItemType = 'voice' | 'video' | 'audio' | 'text' | 'image';
+export type ItemType = 'voice' | 'video' | 'audio' | 'text' | 'image' | 'shape';
+
+/** Primitive shapes that can be composited on the timeline. */
+export type ShapeKind = 'rectangle' | 'ellipse' | 'triangle';
 
 /** Canvas compositing modes exposed for text and image items. */
 export type BlendMode =
@@ -281,9 +284,27 @@ export interface ImageItem extends BaseTimelineItem {
   flipH?: boolean;
 }
 
-export type TimelineItem = VoiceItem | VideoItem | AudioItem | TextItem | ImageItem;
+export interface ShapeItem extends BaseTimelineItem {
+  type: 'shape';
+  shape: ShapeKind;
+  /** Position and size in project pixels. */
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Fill colour; omit or use `transparent` for an outline-only shape. */
+  fillColor?: string;
+  strokeColor?: string;
+  strokeWidth?: number;
+  /** Corner radius for rectangles, in project pixels. */
+  cornerRadius?: number;
+  opacity?: number;
+  rotation?: number;
+}
 
-export type TrackKind = 'video' | 'character' | 'voice' | 'text' | 'image' | 'audio';
+export type TimelineItem = VoiceItem | VideoItem | AudioItem | TextItem | ImageItem | ShapeItem;
+
+export type TrackKind = 'video' | 'character' | 'voice' | 'text' | 'image' | 'shape' | 'audio';
 
 export interface TrackState {
   id: TrackKind;

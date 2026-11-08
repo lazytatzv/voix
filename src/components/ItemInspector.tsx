@@ -25,6 +25,7 @@ import {
   ItemAnimation,
   ItemEffects,
   KeyframeEasing,
+  ShapeItem,
   SubtitleStyle,
   TextItem,
   TimelineItem,
@@ -142,7 +143,7 @@ const ColorField: React.FC<{
 );
 
 const EffectsSection: React.FC<{
-  item: TextItem | ImageItem;
+  item: TextItem | ImageItem | ShapeItem;
   onUpdate: (id: string, updates: Partial<TimelineItem>) => void;
 }> = ({ item, onUpdate }) => {
   const effects = item.effects ?? {};
@@ -266,7 +267,7 @@ const EASING_OPTIONS: Array<{ value: KeyframeEasing; label: string }> = [
  * the sampler fills the rest from the previous key or the item's base values.
  */
 const KeyframeSection: React.FC<{
-  item: TextItem | ImageItem;
+  item: TextItem | ImageItem | ShapeItem;
   currentTime: number;
   onUpdate: (id: string, updates: Partial<TimelineItem>) => void;
   onSeek: (time: number) => void;
@@ -1237,6 +1238,152 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
             );
           })()}
 
+          {item.type === 'shape' && (() => {
+            const shape = item as ShapeItem;
+            return (
+              <section className="border-t border-[#242629] pt-4 space-y-3">
+                <Field label="Shape">
+                  <select
+                    value={shape.shape}
+                    onChange={(e) =>
+                      patch({ shape: e.target.value as ShapeItem['shape'] } as Partial<TimelineItem>)
+                    }
+                    className={inputClass}
+                  >
+                    <option value="rectangle">Rectangle</option>
+                    <option value="ellipse">Ellipse</option>
+                    <option value="triangle">Triangle</option>
+                  </select>
+                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <NumberField
+                    label="X (px)"
+                    value={shape.x}
+                    step={1}
+                    onChange={(value) => patch({ x: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Y (px)"
+                    value={shape.y}
+                    step={1}
+                    onChange={(value) => patch({ y: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Width (px)"
+                    value={shape.width}
+                    step={1}
+                    min={1}
+                    onChange={(value) => patch({ width: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Height (px)"
+                    value={shape.height}
+                    step={1}
+                    min={1}
+                    onChange={(value) => patch({ height: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Corner radius (px)"
+                    value={shape.cornerRadius ?? 0}
+                    step={1}
+                    min={0}
+                    onChange={(value) => patch({ cornerRadius: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Stroke width (px)"
+                    value={shape.strokeWidth ?? 0}
+                    step={1}
+                    min={0}
+                    onChange={(value) => patch({ strokeWidth: value } as Partial<TimelineItem>)}
+                  />
+                  <NumberField
+                    label="Rotation (°)"
+                    value={shape.rotation ?? 0}
+                    step={1}
+                    onChange={(value) => patch({ rotation: value } as Partial<TimelineItem>)}
+                  />
+                  <SliderField
+                    label="Opacity"
+                    value={shape.opacity ?? 1}
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    onChange={(value) => patch({ opacity: value } as Partial<TimelineItem>)}
+                  />
+                </div>
+                <div className="grid grid-cols-1 gap-3">
+                  <ColorField
+                    label="Fill colour"
+                    value={shape.fillColor ?? ''}
+                    onChange={(value) => patch({ fillColor: value } as Partial<TimelineItem>)}
+                  />
+                  <ColorField
+                    label="Stroke colour"
+                    value={shape.strokeColor ?? ''}
+                    onChange={(value) => patch({ strokeColor: value } as Partial<TimelineItem>)}
+                  />
+                </div>
+                <div className="border-t border-[#242629] pt-4 space-y-3">
+                  <span className={labelClass}>Motion</span>
+                  <div className="grid grid-cols-2 gap-3">
+                    <NumberField
+                      label="Fade in (s)"
+                      value={shape.fadeIn ?? 0}
+                      step={0.05}
+                      min={0}
+                      onChange={(value) => patch({ fadeIn: value } as Partial<TimelineItem>)}
+                    />
+                    <NumberField
+                      label="Fade out (s)"
+                      value={shape.fadeOut ?? 0}
+                      step={0.05}
+                      min={0}
+                      onChange={(value) => patch({ fadeOut: value } as Partial<TimelineItem>)}
+                    />
+                    <Field label="In animation">
+                      <select
+                        value={shape.animIn || 'none'}
+                        onChange={(e) => {
+                          const value = e.target.value as ItemAnimation;
+                          patch({
+                            animIn: value,
+                            fadeIn: value === 'none' ? shape.fadeIn : shape.fadeIn || 0.35,
+                          } as Partial<TimelineItem>);
+                        }}
+                        className={inputClass}
+                      >
+                        {ANIMATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                    <Field label="Out animation">
+                      <select
+                        value={shape.animOut || 'none'}
+                        onChange={(e) => {
+                          const value = e.target.value as ItemAnimation;
+                          patch({
+                            animOut: value,
+                            fadeOut: value === 'none' ? shape.fadeOut : shape.fadeOut || 0.35,
+                          } as Partial<TimelineItem>);
+                        }}
+                        className={inputClass}
+                      >
+                        {ANIMATION_OPTIONS.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
+                  </div>
+                </div>
+              </section>
+            );
+          })()}
+
           {item.type === 'image' && (() => {
             const image = item as ImageItem;
             return (
@@ -1378,17 +1525,20 @@ export const ItemInspector: React.FC<ItemInspectorProps> = ({
             );
           })()}
 
-          {(item.type === 'text' || item.type === 'image') && (
+          {(item.type === 'text' || item.type === 'image' || item.type === 'shape') && (
             <KeyframeSection
-              item={item as TextItem | ImageItem}
+              item={item as TextItem | ImageItem | ShapeItem}
               currentTime={currentTime}
               onUpdate={onUpdate}
               onSeek={onSeek}
             />
           )}
 
-          {(item.type === 'text' || item.type === 'image') && (
-            <EffectsSection item={item as TextItem | ImageItem} onUpdate={onUpdate} />
+          {(item.type === 'text' || item.type === 'image' || item.type === 'shape') && (
+            <EffectsSection
+              item={item as TextItem | ImageItem | ShapeItem}
+              onUpdate={onUpdate}
+            />
           )}
 
           {item.type === 'audio' && (() => {

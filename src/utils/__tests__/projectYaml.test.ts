@@ -114,6 +114,28 @@ function makeProject(): VoixProject {
       rotation: -4,
       flipH: true,
     },
+    {
+      id: 'shape_1',
+      type: 'shape',
+      layer: 3,
+      startTime: 5,
+      duration: 2,
+      name: 'Highlight',
+      shape: 'ellipse',
+      x: 220,
+      y: 160,
+      width: 320,
+      height: 180,
+      fillColor: '#22c55e',
+      strokeColor: '#ffffff',
+      strokeWidth: 4,
+      cornerRadius: 12,
+      opacity: 0.75,
+      rotation: 8,
+      fadeIn: 0.2,
+      fadeOut: 0.3,
+      blendMode: 'add',
+    },
   ];
   return project;
 }
@@ -184,6 +206,25 @@ describe('project YAML roundtrip', () => {
 
     const audio = restored.items.find((item) => item.id === 'audio_1') as AudioItem;
     expect(audio).toMatchObject({ loop: true, isBgm: true, volume: 0.3, offset: 1.25, audioKey: 'bgm-key' });
+
+    const shape = restored.items.find((item) => item.id === 'shape_1');
+    expect(shape).toMatchObject({
+      type: 'shape',
+      shape: 'ellipse',
+      x: 220,
+      y: 160,
+      width: 320,
+      height: 180,
+      fillColor: '#22c55e',
+      strokeColor: '#ffffff',
+      strokeWidth: 4,
+      cornerRadius: 12,
+      opacity: 0.75,
+      rotation: 8,
+      fadeIn: 0.2,
+      fadeOut: 0.3,
+      blendMode: 'add',
+    });
   });
 
   it('strips volatile blobs before serializing', () => {
@@ -222,7 +263,7 @@ describe('normalization and legacy import', () => {
     expect(restored.name).toBe('Legacy');
     expect(restored.timeline.fps).toBe(30);
     expect(restored.timeline.overlayFps).toBe(15);
-    expect(restored.tracks).toHaveLength(6);
+    expect(restored.tracks).toHaveLength(7);
     expect(restored.items[0]).toMatchObject({ type: 'voice', text: 'hello', startTime: 1 });
   });
 
@@ -239,6 +280,7 @@ describe('normalization and legacy import', () => {
       'voice',
       'text',
       'image',
+      'shape',
       'audio',
     ]);
   });

@@ -9,14 +9,15 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 
 ## 主な機能
 
-- **マルチトラック・タイムライン** — 背景動画 / キャラクター / 音声・字幕 / テキスト / 画像 / BGM・SE の6レーン。ドラッグで移動、右端ドラッグで長さ変更、`S` で再生ヘッド位置に分割、波形表示、Altでスナップ解除。選択アイテムは `Alt+←/→` で1フレームずつ微調整でき、`Shift+Delete` のリップル削除で後続アイテムを詰めて空白を閉じられます。SRTファイルを字幕テキストとして読み込めます。また、音声アイテムのタイミングからSRTを書き出せます。ゆっくりMovieMaker4の `.ymmp` プロジェクトをヘッダーまたはドラッグ＆ドロップで読み込めます（声・テロップ・画像・音声・背景動画に対応、未対応アイテムは件数を表示してスキップ）。
+- **マルチトラック・タイムライン** — 背景動画 / キャラクター / 音声・字幕 / テキスト / 画像 / 図形 / BGM・SE の7レーン。ドラッグで移動、右端ドラッグで長さ変更、`S` で再生ヘッド位置に分割、波形表示、Altでスナップ解除。選択アイテムは `Alt+←/→` で1フレームずつ微調整でき、`Shift+Delete` のリップル削除で後続アイテムを詰めて空白を閉じられます。SRTファイルを字幕テキストとして読み込めます。また、音声アイテムのタイミングからSRTを書き出せます。ゆっくりMovieMaker4の `.ymmp` プロジェクトをヘッダーまたはドラッグ＆ドロップで読み込めます（声・テロップ・画像・図形・音声・背景動画に対応、未対応アイテムは件数を表示してスキップ）。
 - **マーカー** — タイムラインに名前付きの目印を置き、クリックでシーク。近くのアイテムはマーカーへスナップします。位置はYAMLに保存されます。
 - **WYSIWYGプレビュー** — プレビューと書き出しが同じ Canvas コンポジター（`src/render/overlayRenderer.ts`）を使うため、見た目と出力が一致します。立ち絵はプレビュー上で直接ドラッグ配置でき、枠・中央・下端へスナップします。
-- **テロップ・画像モーション** — フェードイン/アウトに加えて、スライド・ズーム・ポップの登場/退場アニメーションをアイテム単位で設定できます。タイミングはプレビューと書き出しで共通です。
-- **アイテム別ビジュアルエフェクト** — テロップ・画像ごとに明るさ・コントラスト・彩度・ぼかし・色相回転・グレースケール・セピア・反転を調整できます。Canvasフィルターとしてプレビューと書き出しの両方に適用されます。
-- **ブレンドモード** — テロップ・画像を乗算・スクリーン・オーバーレイ・加算などの合成モードで背景になじませられます。YMM4の`Blend`もインポート時に変換します。
+- **テロップ・画像・図形モーション** — フェードイン/アウトに加えて、スライド・ズーム・ポップの登場/退場アニメーションをアイテム単位で設定できます。タイミングはプレビューと書き出しで共通です。
+- **アイテム別ビジュアルエフェクト** — テロップ・画像・図形ごとに明るさ・コントラスト・彩度・ぼかし・色相回転・グレースケール・セピア・反転を調整できます。Canvasフィルターとしてプレビューと書き出しの両方に適用されます。
+- **ブレンドモード** — テロップ・画像・図形を乗算・スクリーン・オーバーレイ・加算などの合成モードで背景になじませられます。YMM4の`Blend`もインポート時に変換します。
+- **図形** — 四角形・楕円・三角形をタイムラインに追加し、位置・サイズ・塗り色・縁色・縁幅・角丸・回転・不透明度を編集できます。YMM4の`ShapeItem`（四角形・楕円・三角形）もインポートします。
 - **縦書き・行間・字間** — テロップは日本語の縦書き（縦組み）に対応し、行間と字間を数値で調整できます。プレビューと書き出しで同じレイアウトを使います。
-- **キーフレーム** — テロップ・画像の位置、拡大率、回転、不透明度を複数キーで打てます。線形・イーズイン/アウト・ホールドで補間し、`K` キーまたはインスペクターから追加。YAMLにも保存され、プレビューと書き出しで同じ補間を使います。
+- **キーフレーム** — テロップ・画像・図形の位置、拡大率、回転、不透明度を複数キーで打てます。線形・イーズイン/アウト・ホールドで補間し、`K` キーまたはインスペクターから追加。YAMLにも保存され、プレビューと書き出しで同じ補間を使います。
 - **音声・動画の速度調整** — BGM/SE は 0.25〜4× の再生速度、背景動画も開始オフセット・速度・フィット（contain / cover / stretch）をプロジェクト設定から調整できます。速度はプレビューとFFmpeg書き出しの両方に反映されます。
 - **BGMダッキング** — セリフ中だけBGMを自動で下げ、話し終わると滑らかに戻します。下げ幅・アタック・リリースはプロジェクト設定で調整でき、プレビューと書き出しの両方に同じカーブが適用されます。
 - **YAMLプロジェクト** — `.voix.yaml` が標準形式。手編集でき、コメントやキー順も保持されます。旧JSON（`.voix` / `.json`）も読み込み可能。
@@ -24,7 +25,7 @@ Tauri v2 + React 19 + TypeScript + Rust + FFmpeg で構成され、プロジェ�
 - **自動保存** — `~/.config/voix/autosave.voix.yaml` と localStorage の二重保存。次回起動時に復元します。
 - **音声キャッシュ** — 合成済みWAVを `~/.cache/voix/audio` に保存し、`audioKey` としてプロジェクトに記録。再起動後の再合成を不要にします。
 - **TTSプロバイダー** — VOICEVOX / COEIROINK / AivisSpeech など、VOICEVOX互換APIに対応。キャラクター設定ではエンジン・キャラクター・スタイルを個別に選べ、VOICEVOXの全話者・全スタイルをそのまま一覧表示します。**All voices** の試聴ブラウザでは、検索しながら各話者・各スタイルの ▶ を押すだけでその声を再生でき、**Play all** で一覧の全ボイスを順番に試聴できます。話者を変えると該当セリフの古い音声キャッシュを破棄して自動で再合成します。
-- **インスペクター** — 選択アイテムのセリフ・話速・音高・抑揚・句読点の間・前後の無音・音量・セリフのフェードイン/アウト・表情・テロップスタイル・画像座標・BGMフェードなどを数値編集。
+- **インスペクター** — 選択アイテムのセリフ・話速・音高・抑揚・句読点の間・前後の無音・音量・セリフのフェードイン/アウト・表情・テロップスタイル・画像座標・図形の形状/色・BGMフェードなどを数値編集。
 - **書き出し** — 透過オーバーレイPNGをフレーム合成し、Rust側でFFmpegに渡して背景動画・音声と結合。範囲指定・進捗表示・実行中キャンセルに対応します。
 - **Linuxフレンドリー** — XDG準拠の設定/キャッシュ/データディレクトリ、`~` 展開、xdg-open連携。WebKitGTKでも背景動画・BGMを再生できるよう blob URL 経由で読み込みます。
 
@@ -170,15 +171,15 @@ markers:
 | フィールド | 説明 |
 |---|---|
 | `id` | 一意なID（自動生成） |
-| `type` | `voice` / `text` / `image` / `audio` / `video` |
+| `type` | `voice` / `text` / `image` / `shape` / `audio` / `video` |
 | `layer` | 描画順（大きいほど手前） |
 | `startTime` / `duration` | タイムライン上の開始秒・長さ（秒） |
 | `name` | タイムライン表示名 |
 | `hidden` / `locked` | 個別の非表示・編集ロック |
-| `fadeIn` / `fadeOut` | フェード時間（秒）。テロップ・画像・音声・セリフに適用 |
+| `fadeIn` / `fadeOut` | フェード時間（秒）。テロップ・画像・図形・音声・セリフに適用 |
 | `animIn` / `animOut` | `fade` / `slide-up` / `slide-down` / `slide-left` / `slide-right` / `zoom` / `pop` |
 | `effects` | 描画フィルター: `blur`, `brightness`, `contrast`, `saturation`, `hueRotate`, `grayscale`, `sepia`, `invert` |
-| `blendMode` | `normal` / `multiply` / `screen` / `overlay` / `add` などの合成モード（テロップ・画像） |
+| `blendMode` | `normal` / `multiply` / `screen` / `overlay` / `add` などの合成モード（テロップ・画像・図形） |
 | `src` | 画像・音声・動画の絶対パス（`~` 可） |
 
 ### 種類別フィールド
@@ -186,6 +187,7 @@ markers:
 - **voice**: `characterId`, `text`, `subtitleText`, `expression`, `speedScale`, `pitchScale`, `volumeScale`, `intonationScale`, `prePhonemeLength`, `postPhonemeLength`, `pauseLengthScale`, `audioKey`, `phonemes`, `terminal: { cmd, output }`, `se`, `anim`, `flipH`, `scale`
 - **text**: `text`, `style`（`fontSize`, `fontFamily`, `textColor`, `strokeColor`, `strokeWidth`, `outerStrokeColor`, `outerStrokeWidth`, `lineHeight`, `letterSpacing`, `italic`, `underline`, `strikethrough`, `wordWrap`, `vertical`, `bgStyle`, `bgColor`, `hasShadow`, `rubyDisplay` など）, `xPercent`, `yPercent`, `widthPercent`, `align`, `rotation`, `opacity`, `displayInterval`, `displayDirection`, `hideInterval`, `hideDirection`
 - **image**: `x`, `y`, `width`, `height`, `rotation`, `opacity`, `flipH`
+- **shape**: `shape`（`rectangle` / `ellipse` / `triangle`）, `x`, `y`, `width`, `height`, `fillColor`, `strokeColor`, `strokeWidth`, `cornerRadius`, `rotation`, `opacity`
 - **audio**: `volume`, `speed`（0.25-4倍速）, `offset`（曲の頭出し秒）, `isBgm`, `loop`, `fadeIn`, `fadeOut`
 - **video**: `volume`, `offsetTime`
 
@@ -204,7 +206,7 @@ markers:
 
 ### キーフレーム
 
-テキスト・画像アイテムは `keyframes` 配列を持てます。`time` はアイテム先頭からの相対秒です。
+テキスト・画像・図形アイテムは `keyframes` 配列を持てます。`time` はアイテム先頭からの相対秒です。
 
 ```yaml
 keyframes:
@@ -225,7 +227,7 @@ keyframes:
 | フィールド | 説明 |
 |---|---|
 | `time` | アイテム先頭からの相対秒 |
-| `x` / `y` | テキストは画面％、画像はプロジェクト座標（px） |
+| `x` / `y` | テキストは画面％、画像・図形はプロジェクト座標（px） |
 | `scale` / `rotation` / `opacity` | 拡大率・回転角・不透明度 |
 | `easing` | `linear` / `ease-in` / `ease-out` / `ease-in-out` / `hold` |
 
@@ -245,8 +247,9 @@ keyframes:
 | TextItem | `text`。文字色・縁色・フォント・サイズ・位置・回転・不透明度に加え、行間（`LineHeight2`）・文字間隔（`LetterSpacing2`）・太字/斜体/下線/取り消し線・`WordWrap`・一文字ずつの表示/非表示（`DisplayInterval` / `HideInterval`）を変換します |
 | AudioItem | `audio`。音量・再生速度・頭出し・ループを引き継ぎます |
 | ImageItem | `image`。元画像の自然サイズとZoomから表示サイズを計算し、フレーム中心基準のX/Yを配置に変換します |
+| ShapeItem | `shape`（`Quadrilateral` → 四角形、`Ellipse` → 楕円、`Triangle` → 三角形）。サイズ・縦横比・Zoom・位置・回転・不透明度・縁色/縁幅と、単色ブラシの塗り色を変換します。未対応の形状はスキップします |
 | VideoItem（最初の1件） | プロジェクトの背景動画。音量・再生速度・`ContentOffset`（頭出し）も引き継ぎます |
-| TachieItem / ShapeItem / GroupItem など | 未対応として件数のみ表示し、スキップします |
+| TachieItem / GroupItem など | 未対応として件数のみ表示し、スキップします |
 
 - 相対パスの素材は `.ymmp` と同じディレクトリを基準に解決します。絶対パスはそのまま保存されます。
 - YMM4側の画面サイズとFPS（30/60）をプロジェクト設定へ反映します。

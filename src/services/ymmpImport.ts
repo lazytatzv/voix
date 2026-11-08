@@ -153,6 +153,7 @@ export function describeYmmpImport(stats: YmmpImportStats): string {
     `${stats.audio} audio`,
     `${stats.images} image`,
   ];
+  if (stats.shapes > 0) parts.push(`${stats.shapes} shape`);
   if (stats.videos > 0) parts.push(`${stats.videos} background video`);
   const suffix = stats.skipped > 0 ? ` · ${stats.skipped} unsupported skipped` : '';
   return `${parts.join(' / ')}${suffix}`;

@@ -2,6 +2,8 @@ import {
   AudioItem,
   Character,
   ImageItem,
+  ShapeItem,
+  ShapeKind,
   TextItem,
   TextRevealDirection,
   TimelineItem,
@@ -30,6 +32,7 @@ export interface YmmpImportStats {
   voices: number;
   texts: number;
   images: number;
+  shapes: number;
   audio: number;
   videos: number;
   skipped: number;
@@ -485,6 +488,100 @@ function toImageItem(
   };
 }
 
+function shapeKindOf(raw: unknown): ShapeKind | null {
+  const value = String(raw ?? '').toLowerCase();
+  if (!value) return null;
+  if (value.includes('ellipse') || value.includes('circle') || value.includes('oval')) {
+    return 'ellipse';
+  }
+  if (value.includes('triangle')) return 'triangle';
+  if (
+    value.includes('quadrilateral') ||
+    value.includes('rectangle') ||
+    value.includes('square')
+  ) {
+    return 'rectangle';
+  }
+  return null;
+}
+
+/** Read a WPF brush colour, using the first gradient stop as a fallback. */
+function brushColorOf(raw: unknown): string | undefined {
+  const brush = asRecord(raw);
+  const parameter = asRecord(brush.Parameter);
+  const candidates = [
+    parameter.Color,
+    ...asArray(parameter.Stops).map((stop) => asRecord(stop).Color),
+  ];
+  for (const candidate of candidates) {
+    if (typeof candidate !== 'string') continue;
+    const value = candidate.trim();
+    // Fully transparent brushes act as "no fill".
+    if (/^#[0-9a-fA-F]{8}$/.test(value) && value.slice(1, 3) === '00') continue;
+    const color = colorOf(value, '');
+    if (color) return color;
+  }
+  return undefined;
+}
+
+/**
+ * Convert a YMM4 shape. The editor stores either a size + aspect ratio or an
+ * explicit width/height pair; the imported rectangle is approximate because
+ * Voix renders shapes in project pixels while YMM4 applies its own zoom.
+ */
+function toShapeItem(
+  raw: Rec,
+  index: number,
+  fps: number,
+  frameWidth: number,
+  frameHeight: number
+): ShapeItem | null {
+  const shape = shapeKindOf(raw.ShapeType);
+  if (!shape) return null;
+  const parameter = asRecord(raw.ShapeParameter);
+  const zoom = Math.max(0.01, valueOf(raw.Zoom, 100) / 100);
+  const size = Math.max(1, valueOf(parameter.Size, 1000) * zoom);
+  const aspect = Math.abs(valueOf(parameter.AspectRate, 0));
+  const width = Math.max(4, Math.round(size));
+  const height = Math.max(4, Math.round(size * (aspect > 0.5 ? aspect / 100 : 1)));
+  const centerX = valueOf(raw.X, 0) * zoom;
+  const centerY = valueOf(raw.Y, 0) * zoom;
+  const strokeRaw = typeof parameter.Stroke === 'string' ? parameter.Stroke.trim() : '';
+  const strokeVisible = Boolean(strokeRaw) && !/^#00/i.test(strokeRaw);
+  const fillColor = brushColorOf(parameter.Brush) ?? 'none';
+
+  return {
+    id: `ymmp_shape_${index}`,
+    type: 'shape',
+    layer: asNumber(raw.Layer, 1) + 3,
+    startTime: Number((asNumber(raw.Frame) / fps).toFixed(3)),
+    duration: Number(Math.max(0.05, asNumber(raw.Length) / fps).toFixed(3)),
+    name: `YMM4 ${shape}`,
+    hidden: Boolean(raw.IsHidden),
+    locked: Boolean(raw.IsLocked),
+    fadeIn: Math.max(0, asNumber(raw.FadeIn, 0)),
+    fadeOut: Math.max(0, asNumber(raw.FadeOut, 0)),
+    blendMode: normalizeYmmpBlend(raw.Blend),
+    shape,
+    x: Math.round(frameWidth / 2 + centerX - width / 2),
+    y: Math.round(frameHeight / 2 + centerY - height / 2),
+    width,
+    height,
+    fillColor,
+    strokeColor: strokeVisible ? colorOf(strokeRaw, '#ffffff') : undefined,
+    // YMM4 stroke/font sizes use 1/100 px units.
+    strokeWidth: strokeVisible
+      ? Math.max(0, Math.round(valueOf(parameter.StrokeThickness, 0) / 100))
+      : 0,
+    cornerRadius:
+      shape === 'rectangle'
+        ? Math.max(0, Math.round(valueOf(parameter.Round, 0) / 100))
+        : 0,
+    opacity: Math.min(1, Math.max(0, valueOf(raw.Opacity, 100) / 100)),
+    rotation: valueOf(raw.Rotation, 0),
+  };
+}
+
 function timelineOf(root: Rec): Rec {
   const timelines = asArray(root.Timelines);
   if (timelines.length > 0) {
@@ -561,6 +658,12 @@ export function parseYmmpProject(content: string, options: YmmpImportOptions = {
       }
       return;
     }
+    if (type === 'ShapeItem') {
+      const item = toShapeItem(raw, index, fps, width, height);
+      if (item) items.push(item);
+      else skipped += 1;
+      return;
+    }
     if (type === 'VideoItem') {
       videos += 1;
       const src = resolveAssetPath(raw.FilePath, options.assetBaseDir);
@@ -593,6 +696,7 @@ export function parseYmmpProject(content: string, options: YmmpImportOptions = {
     voices: items.filter((item) => item.type === 'voice').length,
     texts: items.filter((item) => item.type === 'text').length,
     images: items.filter((item) => item.type === 'image').length,
+    shapes: items.filter((item) => item.type === 'shape').length,
     audio: items.filter((item) => item.type === 'audio').length,
     videos,
     skipped,
@@ -623,7 +727,7 @@ export function parseYmmpProject(content: string, options: YmmpImportOptions = {
     characters,
     items: items.sort((a, b) => a.startTime - b.startTime),
     tracks: DEFAULT_TRACKS.map((track: TrackState) => ({ ...track })),
-    notes: `Imported from YMM4: ${stats.voices} voice, ${stats.texts} text, ${stats.audio} audio, ${stats.images} image items. ${stats.skipped} unsupported item(s) skipped.`,
+    notes: `Imported from YMM4: ${stats.voices} voice, ${stats.texts} text, ${stats.audio} audio, ${stats.images} image, ${stats.shapes} shape items. ${stats.skipped} unsupported item(s) skipped.`,
   };
 
   return { project, stats, imagePlacements };

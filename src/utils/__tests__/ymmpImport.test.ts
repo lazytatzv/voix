@@ -147,6 +147,7 @@ describe('parseYmmpProject', () => {
       voices: 1,
       texts: 1,
       images: 1,
+      shapes: 0,
       audio: 1,
       videos: 1,
       skipped: 3,
@@ -310,6 +311,99 @@ describe('parseYmmpProject', () => {
     // The background video is not a timeline item, but its span must still
     // keep the project long enough for the whole recording.
     expect(result.project.timeline.duration).toBeGreaterThanOrEqual(10);
+  });
+
+  it('imports shape items with size, aspect, stroke and brush colours', () => {
+    const content = JSON.stringify({
+      Timeline: {
+        Name: 'Shapes',
+        VideoInfo: { FPS: 30, Width: 1920, Height: 1080 },
+        Items: [
+          {
+            $type: 'YukkuriMovieMaker.Project.Items.ShapeItem, YukkuriMovieMaker',
+            ShapeType: 'Quadrilateral',
+            ShapeParameter: {
+              $type:
+                'YukkuriMovieMaker.Project.Items.RectangleShapeParameter, YukkuriMovieMaker',
+              SizeMode: 'SizeAspect',
+              Size: { Values: [{ Value: 400 }] },
+              AspectRate: { Values: [{ Value: 50 }] },
+              StrokeThickness: { Values: [{ Value: 800 }] },
+              Stroke: '#FFFFFFFF',
+              Brush: {
+                Type: 'SolidColorBrush',
+                Parameter: { Color: '#FF3366CC' },
+              },
+            },
+            X: { Values: [{ Value: 100 }] },
+            Y: { Values: [{ Value: 50 }] },
+            Zoom: { Values: [{ Value: 200 }] },
+            Opacity: { Values: [{ Value: 80 }] },
+            Rotation: { Values: [{ Value: 15 }] },
+            FadeIn: 0.2,
+            Blend: 'Add',
+            Frame: 30,
+            Length: 60,
+            Layer: 2,
+          },
+          {
+            $type: 'YukkuriMovieMaker.Project.Items.ShapeItem, YukkuriMovieMaker',
+            ShapeType: 'Triangle',
+            ShapeParameter: {
+              $type:
+                'YukkuriMovieMaker.Project.Items.TriangleShapeParameter, YukkuriMovieMaker',
+              SizeMode: 'SizeAspect',
+              Size: { Values: [{ Value: 250 }] },
+              AspectRate: { Values: [{ Value: 0 }] },
+              StrokeThickness: { Values: [{ Value: 0 }] },
+              Stroke: '#00FFFFFF',
+            },
+            Frame: 0,
+            Length: 30,
+          },
+          {
+            $type: 'YukkuriMovieMaker.Project.Items.ShapeItem, YukkuriMovieMaker',
+            ShapeType: 'Star',
+            ShapeParameter: { Size: { Values: [{ Value: 200 }] } },
+            Frame: 0,
+            Length: 30,
+          },
+        ],
+      },
+    });
+    const result = parseYmmpProject(content);
+
+    expect(result.stats).toMatchObject({ shapes: 2, skipped: 1, total: 3 });
+    const rectangle = result.project.items.find((item) => item.id === 'ymmp_shape_0');
+    expect(rectangle).toMatchObject({
+      type: 'shape',
+      shape: 'rectangle',
+      startTime: 1,
+      duration: 2,
+      x: 760,
+      y: 440,
+      width: 800,
+      height: 400,
+      fillColor: '#3366cc',
+      strokeColor: '#ffffff',
+      strokeWidth: 8,
+      opacity: 0.8,
+      rotation: 15,
+      fadeIn: 0.2,
+      blendMode: 'add',
+    });
+    const triangle = result.project.items.find((item) => item.id === 'ymmp_shape_1');
+    expect(triangle).toMatchObject({
+      type: 'shape',
+      shape: 'triangle',
+      width: 250,
+      height: 250,
+      fillColor: 'none',
+      strokeColor: undefined,
+      strokeWidth: 0,
+    });
+    expect(result.project.items.some((item) => item.type === 'shape')).toBe(true);
+    expect(result.project.notes).toContain('2 shape items');
   });
 
   it('creates characters from YMM4 names and colours', () => {

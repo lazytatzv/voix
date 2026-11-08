@@ -6,6 +6,7 @@ import {
   MessageSquare,
   Type,
   Image as ImageIcon,
+  Square,
   Music,
   Plus,
   Eye,
@@ -74,6 +75,7 @@ const ROWS: RowDef[] = [
   { kind: 'voice', label: 'Voice', height: 46, icon: MessageSquare, addType: 'voice' },
   { kind: 'text', label: 'Text', height: 38, icon: Type, addType: 'text' },
   { kind: 'image', label: 'Images', height: 38, icon: ImageIcon, addType: 'image' },
+  { kind: 'shape', label: 'Shapes', height: 38, icon: Square, addType: 'shape' },
   { kind: 'audio', label: 'BGM / SE', height: 38, icon: Music, addType: 'audio' },
 ];
 
@@ -84,6 +86,7 @@ const ITEM_COLORS: Record<string, { bg: string; border: string; text: string }> 
   voice: { bg: '#1e3341', border: '#4f7386', text: '#e3e3e3' },
   text: { bg: '#2c2438', border: '#6b5a80', text: '#eeeeee' },
   image: { bg: '#1f3532', border: '#5b7f79', text: '#eeeeee' },
+  shape: { bg: '#2b2f24', border: '#75834f', text: '#f0f1e6' },
   audio: { bg: '#3a2c1c', border: '#7a6548', text: '#f0e6d2' },
   video: { bg: '#24272b', border: '#5f6368', text: '#e3e3e3' },
 };
@@ -391,6 +394,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (item.type === 'text') label = item.text;
     if (item.type === 'audio') label = item.name || item.src.split('/').pop() || 'Audio';
     if (item.type === 'image') label = item.name || item.src.split('/').pop() || 'Image';
+    if (item.type === 'shape') label = item.name || `${item.shape} shape`;
 
     const waveform =
       item.type === 'voice' && item.audioBlob ? (
@@ -445,7 +449,7 @@ export const Timeline: React.FC<TimelineProps> = ({
         }`}
       >
         {waveform}
-        {(item.type === 'text' || item.type === 'image') &&
+        {(item.type === 'text' || item.type === 'image' || item.type === 'shape') &&
           (item.keyframes?.length ?? 0) > 0 && (
             <div className="absolute inset-x-0 bottom-0.5 z-20 h-2 pointer-events-none">
               {item.keyframes!.map((key) => (
@@ -497,6 +501,7 @@ export const Timeline: React.FC<TimelineProps> = ({
     if (kind === 'character' || kind === 'voice') return items.filter((item) => item.type === 'voice');
     if (kind === 'text') return items.filter((item) => item.type === 'text');
     if (kind === 'image') return items.filter((item) => item.type === 'image');
+    if (kind === 'shape') return items.filter((item) => item.type === 'shape');
     if (kind === 'audio') return items.filter((item) => item.type === 'audio');
     if (kind === 'video') return items.filter((item) => item.type === 'video');
     return [];

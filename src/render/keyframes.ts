@@ -1,6 +1,7 @@
 import {
   ImageItem,
   KeyframeEasing,
+  ShapeItem,
   TextItem,
   TransformKeyframe,
 } from '../types';
@@ -20,7 +21,7 @@ export function isKeyframeEasing(value: unknown): value is KeyframeEasing {
   return typeof value === 'string' && EASINGS.includes(value as KeyframeEasing);
 }
 
-export function getItemBaseTransform(item: TextItem | ImageItem): ItemTransform {
+export function getItemBaseTransform(item: TextItem | ImageItem | ShapeItem): ItemTransform {
   if (item.type === 'text') {
     return {
       x: Number.isFinite(item.xPercent) ? (item.xPercent as number) : 50,
@@ -127,9 +128,9 @@ export function sampleKeyframes(
   return last.value;
 }
 
-/** Resolve the base plus animated transform for text and image items. */
+/** Resolve the base plus animated transform for text, image and shape items. */
 export function resolveItemTransform(
-  item: TextItem | ImageItem,
+  item: TextItem | ImageItem | ShapeItem,
   time: number
 ): ItemTransform {
   const localTime = Math.max(0, Math.min(item.duration, time - item.startTime));
@@ -156,7 +157,7 @@ export interface SnapshotKeyframeResult {
  * produce identical keys.
  */
 export function addSnapshotKeyframe(
-  item: TextItem | ImageItem,
+  item: TextItem | ImageItem | ShapeItem,
   absoluteTime: number
 ): SnapshotKeyframeResult {
   const localTime = Math.max(0, Math.min(item.duration, absoluteTime - item.startTime));
