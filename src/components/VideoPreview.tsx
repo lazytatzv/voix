@@ -20,6 +20,7 @@ import { mediaUrlFor } from '../utils/mediaUrl';
 import { appLog } from '../utils/appLog';
 import { MediaInfo } from '../services/mediaProbe';
 import { collectVoiceIntervals, DEFAULT_DUCKING, duckingGainAt } from '../utils/audioDucking';
+import { isTrackMuted, isTrackVisible } from '../utils/tracks';
 
 interface VideoPreviewProps {
   videoSrc: string | null;
@@ -62,6 +63,8 @@ interface VideoPreviewProps {
   videoSpeed?: number;
   /** How the background video fills the preview frame. */
   videoFit?: 'contain' | 'cover' | 'stretch';
+  /** Project background colour shown when no video is attached. */
+  backgroundColor?: string;
   /** Error from URL resolution (media server / missing file). */
   loadError?: string | null;
   /** True while the media URL is being resolved. */
@@ -142,6 +145,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   videoOffset = 0,
   videoSpeed = 1,
   videoFit = 'contain',
+  backgroundColor,
   loadError,
   loading = false,
 }) => {
@@ -245,6 +249,8 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     [items]
   );
   const duckingSettings = ducking ?? DEFAULT_DUCKING;
+  const videoTrackHidden = !isTrackVisible(tracks, 'video');
+  const videoTrackMuted = isTrackMuted(tracks, 'video');
   const duckingIntervals = useMemo(
     () =>
       collectVoiceIntervals(items, {
@@ -306,6 +312,12 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !videoSrc) return;
+    // A hidden video track stops decoding entirely; unhiding resumes from the
+    // playhead because the effect re-runs with the current timeline time.
+    if (videoTrackHidden) {
+      video.pause();
+      return;
+    }
     if (isPlaying) {
       if (video.readyState >= 1) {
         try {
@@ -320,7 +332,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
     } else {
       video.pause();
     }
-  }, [isPlaying, videoSrc, videoTargetTime]);
+  }, [isPlaying, videoSrc, videoTargetTime, videoTrackHidden]);
 
   // Reset video error on new source.
   useEffect(() => {
@@ -906,7 +918,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       <div
         ref={containerRef}
         className="relative w-full bg-[#0a0a0c] flex items-center justify-center overflow-hidden"
-        style={{ aspectRatio: `${width} / ${height}` }}
+        style={{ aspectRatio: `${width} / ${height}`, backgroundColor: backgroundColor || '#0a0a0c' }}
         onDragOver={(e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -931,8 +943,11 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               src={videoSrc}
               crossOrigin="anonymous"
               className="absolute inset-0 w-full h-full pointer-events-none select-none"
-              style={{ objectFit: videoFit === 'stretch' ? 'fill' : videoFit }}
-              muted={isMuted}
+              style={{
+                objectFit: videoFit === 'stretch' ? 'fill' : videoFit,
+                visibility: videoTrackHidden ? 'hidden' : 'visible',
+              }}
+              muted={isMuted || videoTrackMuted || videoTrackHidden}
               playsInline
               loop
               preload="metadata"
@@ -957,7 +972,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               }}
               onError={handleVideoError}
             />
-            {!videoError && !loadError && (!isMetadataReady || loading) && (
+            {!videoTrackHidden && !videoError && !loadError && (!isMetadataReady || loading) && (
               <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 p-6 text-center select-none pointer-events-none">
                 <Loader2 className="w-5 h-5 text-[#8ab4f8] animate-spin mb-2" />
                 <p className="text-xs font-mono text-[#c4c7c5]">Loading video…</p>
@@ -972,13 +987,13 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
                 </p>
               </div>
             )}
-            {isMetadataReady && isBuffering && isPlaying && !videoError && (
+            {!videoTrackHidden && isMetadataReady && isBuffering && isPlaying && !videoError && (
               <div className="absolute top-3 left-3 z-20 flex items-center gap-1.5 rounded-sm border border-[#2e3135] bg-black/70 px-2 py-1 pointer-events-none">
                 <Loader2 className="w-3 h-3 animate-spin text-[#8ab4f8]" />
                 <span className="text-[10px] font-mono text-[#c4c7c5]">Buffering…</span>
               </div>
             )}
-            {(videoError || loadError) && (
+            {!videoTrackHidden && (videoError || loadError) && (
               <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 p-6 text-center select-none pointer-events-auto">
                 <AlertTriangle className="w-6 h-6 text-amber-400 mb-2" />
                 <p className="text-red-400 font-medium text-sm mb-2">{videoError || '動画を開けません'}</p>

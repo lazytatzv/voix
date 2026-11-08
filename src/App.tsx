@@ -2616,6 +2616,7 @@ export function App() {
             videoOffset={project.timeline.videoOffset ?? 0}
             videoSpeed={project.timeline.videoSpeed ?? 1}
             videoFit={project.timeline.videoFit ?? 'contain'}
+            backgroundColor={project.timeline.backgroundColor}
             onCharacterMove={(id, x, y) =>
               handleUpdateCharacter(id, {
                 customX: typeof x === 'number' && !Number.isNaN(x) ? x : undefined,

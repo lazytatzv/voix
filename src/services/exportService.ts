@@ -22,6 +22,7 @@ import { makeCacheKey } from '../utils/hash';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
 import { collectVoiceIntervals } from '../utils/audioDucking';
 import { buildVoiceTtsOptions } from './tts/voiceParams';
+import { isTrackMuted, isTrackVisible } from '../utils/tracks';
 
 export { blobToBase64 };
 
@@ -126,12 +127,6 @@ export async function cancelActiveExport(): Promise<void> {
   } catch (err) {
     console.warn('[export] cancel failed:', err);
   }
-}
-
-function trackFlag(project: VoixProject, id: string, flag: 'visible' | 'muted'): boolean {
-  const track = project.tracks?.find((t) => t.id === id);
-  if (!track) return false;
-  return flag === 'visible' ? track.visible : track.muted;
 }
 
 async function writeJobAudio(jobDir: string, name: string, base64: string): Promise<string> {
@@ -250,9 +245,10 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
 
     // 2. Collect audio clips (voice + BGM/SE).
     const audioClips: AudioClipPayload[] = [];
-    const voiceMuted = trackFlag(project, 'voice', 'muted');
-    const musicMuted = trackFlag(project, 'audio', 'muted');
-    const videoMuted = trackFlag(project, 'video', 'muted');
+    const voiceMuted = isTrackMuted(project.tracks, 'voice');
+    const musicMuted = isTrackMuted(project.tracks, 'audio');
+    const videoMuted = isTrackMuted(project.tracks, 'video');
+    const videoHidden = !isTrackVisible(project.tracks, 'video');
     const duckingSettings = project.timeline.ducking;
     const voiceIntervals =
       duckingSettings?.enabled && !voiceMuted
@@ -356,7 +352,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
     const payload: StreamExportPayload = {
       job_dir: jobDir,
       output_path: outputPath,
-      background_path: options.backgroundPath || null,
+      background_path: videoHidden ? null : options.backgroundPath || null,
       background_color: project.timeline.backgroundColor || '#0f0f11',
       width,
       height,
@@ -366,7 +362,7 @@ export async function executeExportVideo(options: ExecuteExportOptions): Promise
       start_time: exportStart,
       crf: settings.crf,
       preset: settings.preset,
-      background_volume: videoMuted
+      background_volume: videoMuted || videoHidden
         ? 0
         : options.backgroundVolume ?? project.timeline.videoVolume ?? 1,
       video_offset: Math.max(0, project.timeline.videoOffset ?? 0),

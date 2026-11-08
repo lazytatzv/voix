@@ -6,6 +6,7 @@ import { buildCanvasFilter } from './itemEffects';
 import { getSubtitleDisplayText, parsePronunciationTokens, PronunciationToken } from '../utils/pronunciation';
 import { computeTextRevealRange, textRevealCharacterCount } from '../utils/textReveal';
 import type { TextRevealTiming } from '../utils/textReveal';
+import { isTrackVisible } from '../utils/tracks';
 
 export interface OverlayRenderOptions {
   width: number;
@@ -69,11 +70,6 @@ function roundRectPath(
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
-}
-
-function trackVisible(tracks: TrackState[] | undefined, id: string): boolean {
-  if (!tracks) return true;
-  return tracks.find((t) => t.id === id)?.visible !== false;
 }
 
 function fontPrefix(style: SubtitleStyle): string {
@@ -866,7 +862,7 @@ function computeCharacterLayout(
  */
 export function getCharacterLayouts(options: OverlayRenderOptions): CharacterLayout[] {
   if (options.showCharacters === false) return [];
-  if (!trackVisible(options.tracks, 'character')) return [];
+  if (!isTrackVisible(options.tracks, 'character')) return [];
   const visibleItems = options.items.filter((item) => !item.hidden);
   const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');
   const activeVoice = activeVoiceAt(visibleItems, options.time);
@@ -960,7 +956,7 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
   const voices = visibleItems.filter((item): item is VoiceItem => item.type === 'voice');
   const activeVoice = activeVoiceAt(visibleItems, time);
 
-  if (trackVisible(tracks, 'image')) {
+  if (isTrackVisible(tracks, 'image')) {
     const images = visibleItems
       .filter(
         (item): item is ImageItem =>
@@ -991,11 +987,11 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
     });
   }
 
-  if (trackVisible(tracks, 'character') && options.showCharacters !== false) {
+  if (isTrackVisible(tracks, 'character') && options.showCharacters !== false) {
     drawCharacters(ctx, options, activeVoice, voices);
   }
 
-  if (trackVisible(tracks, 'text')) {
+  if (isTrackVisible(tracks, 'text')) {
     const texts = visibleItems
       .filter(
         (item): item is TextItem =>
@@ -1041,7 +1037,7 @@ export function drawOverlayFrame(ctx: CanvasRenderingContext2D, options: Overlay
     drawTerminalWindow(ctx, width, activeVoice.terminal);
   }
 
-  if (trackVisible(tracks, 'voice') && activeVoice) {
+  if (isTrackVisible(tracks, 'voice') && activeVoice) {
     const speaker = characters.find((c) => c.id === activeVoice.characterId);
     const style: SubtitleStyle = {
       ...FALLBACK_STYLE,
