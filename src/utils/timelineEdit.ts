@@ -1,4 +1,4 @@
-import { TimelineItem } from '../types';
+import { TimelineItem, VoiceItem } from '../types';
 
 /**
  * Pure timeline edit helpers used by keyboard shortcuts and the timeline
@@ -102,4 +102,52 @@ export function rippleDeleteTimelineItems(
   });
 
   return { items: shifted, removed: removedItems.length, removedDuration };
+}
+
+/**
+ * Ensures all consecutive voice items on the timeline have at least `minGap` (default 0.5s)
+ * between them so voices don't crowd or overlap.
+ */
+export function respaceVoiceItems(
+  items: TimelineItem[],
+  minGap = 0.5
+): { items: TimelineItem[]; shiftedCount: number } {
+  const voices = items
+    .filter((it): it is VoiceItem => it.type === 'voice')
+    .sort((a, b) => a.startTime - b.startTime);
+
+  if (voices.length <= 1) return { items, shiftedCount: 0 };
+
+  const newStarts = new Map<string, number>();
+  let cursor = voices[0].startTime;
+  let shiftedCount = 0;
+
+  for (let i = 0; i < voices.length; i++) {
+    const v = voices[i];
+    if (i === 0) {
+      newStarts.set(v.id, v.startTime);
+      cursor = v.startTime + Math.max(0.1, v.duration);
+    } else {
+      const minStart = roundTime(cursor + minGap);
+      if (v.startTime < minStart - 0.01) {
+        newStarts.set(v.id, minStart);
+        cursor = minStart + Math.max(0.1, v.duration);
+        shiftedCount++;
+      } else {
+        newStarts.set(v.id, v.startTime);
+        cursor = v.startTime + Math.max(0.1, v.duration);
+      }
+    }
+  }
+
+  if (shiftedCount === 0) return { items, shiftedCount: 0 };
+
+  const updatedItems = items.map((it) => {
+    if (newStarts.has(it.id)) {
+      return { ...it, startTime: newStarts.get(it.id)! };
+    }
+    return it;
+  });
+
+  return { items: updatedItems, shiftedCount };
 }

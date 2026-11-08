@@ -30,7 +30,7 @@ import {
 import { parseScriptWithConfig } from './utils/scriptParser';
 import { addSnapshotKeyframe } from './render/keyframes';
 import { parseSrt } from './utils/srt';
-import { nudgeTimelineItems, rippleDeleteTimelineItems } from './utils/timelineEdit';
+import { nudgeTimelineItems, rippleDeleteTimelineItems, respaceVoiceItems } from './utils/timelineEdit';
 import {
   AudioItem,
   Character,
@@ -1708,6 +1708,16 @@ export function App() {
     [commitProject]
   );
 
+  const handleRespaceVoices = useCallback(() => {
+    const result = respaceVoiceItems(projectRef.current.items, DEFAULT_LINE_GAP);
+    if (result.shiftedCount > 0) {
+      commitProject((previous) => ({ ...previous, items: result.items }));
+      setToast(`Adjusted timing: added ${DEFAULT_LINE_GAP}s breathing room across ${result.shiftedCount} voice lines`);
+    } else {
+      setToast(`Voice line timings are already well-spaced (≥${DEFAULT_LINE_GAP}s)`);
+    }
+  }, [commitProject]);
+
   const handleDuplicateItems = useCallback(
     (ids: string[]) => {
       const originals = projectRef.current.items.filter((item) => ids.includes(item.id));
@@ -3121,6 +3131,7 @@ export function App() {
             onDeleteMarker={handleDeleteMarker}
             onOpenJumpCut={() => setIsJumpCutOpen(true)}
             onOpenSePalette={() => setIsSePaletteOpen(true)}
+            onRespaceVoices={handleRespaceVoices}
           />
         </div>
       ) : (

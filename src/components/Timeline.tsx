@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ArrowLeftToLine,
   Bell,
+  Clock,
 } from 'lucide-react';
 import { Character, ItemType, Marker, TimelineItem, TrackKind, TrackState } from '../types';
 import { getSubtitleDisplayText } from '../utils/pronunciation';
@@ -63,6 +64,7 @@ interface TimelineProps {
   onDeleteMarker?: (id: string) => void;
   onOpenJumpCut?: () => void;
   onOpenSePalette?: () => void;
+  onRespaceVoices?: () => void;
   onToggleCollapse?: () => void;
 }
 
@@ -187,6 +189,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onDeleteMarker,
   onOpenJumpCut,
   onOpenSePalette,
+  onRespaceVoices,
   onToggleCollapse,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -715,6 +718,17 @@ export const Timeline: React.FC<TimelineProps> = ({
             >
               <Bell className="w-3 h-3 text-amber-300" />
               SE Palette
+            </button>
+          )}
+          {onRespaceVoices && (
+            <button
+              type="button"
+              onClick={onRespaceVoices}
+              className="px-2 py-0.5 rounded text-[10px] bg-[#1a2d24] hover:bg-[#223d31] text-emerald-300 hover:text-emerald-200 border border-[#2b5440] flex items-center gap-1 font-semibold transition"
+              title="Ensure at least 0.5s breathing gap between all dialogue lines"
+            >
+              <Clock className="w-3 h-3 text-emerald-300" />
+              Spacing (0.5s)
             </button>
           )}
         </div>

@@ -15,6 +15,7 @@ import { SafeAvatarImg } from './SafeAvatarImg';
 import { formatSpeechWithPersona, processAiAction } from '../services/aiService';
 import { autoAnnotatePronunciations } from '../utils/pronunciation';
 import { tuneVoiceWithAI } from '../utils/voiceTonePresets';
+import { DEFAULT_LINE_GAP } from '../utils/scriptParser';
 
 interface QuickDialogueBarProps {
   characters: Character[];
@@ -118,10 +119,10 @@ export const QuickDialogueBar: React.FC<QuickDialogueBarProps> = ({
       if (expression !== 'default') setExpression('default');
       if (se) setSe('');
 
-      // Auto advance playhead to the end of the voice item + gap (0.15s)
+      // Auto advance playhead to the end of the voice item + gap (DEFAULT_LINE_GAP = 0.5s)
       if (autoAdvance) {
         const addedDuration = typeof estimatedDuration === 'number' && estimatedDuration > 0.1 ? estimatedDuration : 1.5;
-        onSeek(Number((currentTime + addedDuration + 0.15).toFixed(2)));
+        onSeek(Number((currentTime + addedDuration + DEFAULT_LINE_GAP).toFixed(2)));
       }
 
       // Keep focus in input for non-stop writing

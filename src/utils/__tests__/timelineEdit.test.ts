@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { nudgeTimelineItems, rippleDeleteTimelineItems } from '../timelineEdit';
-import { TextItem } from '../../types';
+import { nudgeTimelineItems, rippleDeleteTimelineItems, respaceVoiceItems } from '../timelineEdit';
+import { TextItem, VoiceItem } from '../../types';
+
+function voice(id: string, startTime: number, duration: number): VoiceItem {
+  return {
+    id,
+    type: 'voice',
+    layer: 2,
+    characterId: 'c1',
+    name: id,
+    text: id,
+    startTime,
+    duration,
+  };
+}
 
 function item(id: string, startTime: number, duration: number): TextItem {
   return {
@@ -83,5 +96,30 @@ describe('rippleDeleteTimelineItems', () => {
     const result = rippleDeleteTimelineItems(items, ['missing']);
     expect(result.removed).toBe(0);
     expect(result.items).toBe(items);
+  });
+});
+
+describe('respaceVoiceItems', () => {
+  it('respaces cramped voice lines with minGap = 0.5s', () => {
+    // line 1: 0..2.0, line 2: 2.15..3.15 (gap 0.15s), line 3: 3.3..4.3 (gap 0.15s)
+    const items = [
+      voice('v1', 0, 2.0),
+      voice('v2', 2.15, 1.0),
+      voice('v3', 3.3, 1.0),
+    ];
+    const { items: result, shiftedCount } = respaceVoiceItems(items, 0.5);
+    expect(shiftedCount).toBe(2);
+    expect(result.map((v) => [v.id, v.startTime])).toEqual([
+      ['v1', 0],
+      ['v2', 2.5],
+      ['v3', 4.0],
+    ]);
+  });
+
+  it('leaves already well-spaced lines untouched', () => {
+    const items = [voice('v1', 0, 1.0), voice('v2', 2.0, 1.0)];
+    const { items: result, shiftedCount } = respaceVoiceItems(items, 0.5);
+    expect(shiftedCount).toBe(0);
+    expect(result).toBe(items);
   });
 });
