@@ -320,6 +320,7 @@ export const TECH_GIRL_CHARACTER: Character = {
   avatar: {
     idle: '/characters/tech_girl/idle.png?v=v6',
     speaking: '/characters/tech_girl/explain_right.png?v=v6',
+    lipFlap: false,
     expressions: {
       idle: '/characters/tech_girl/idle.png?v=v6',
       explain_left: '/characters/tech_girl/explain_left.png?v=v6',
@@ -373,6 +374,7 @@ export const DEV_GIRL_CHARACTER: Character = {
   avatar: {
     idle: '/characters/dev_girl/wave.png?v=v6',
     speaking: '/characters/dev_girl/point_up.png?v=v6',
+    lipFlap: false,
     expressions: {
       idle: '/characters/dev_girl/wave.png?v=v6',
       wave: '/characters/dev_girl/wave.png?v=v6',
@@ -431,6 +433,7 @@ export const defaultCharacters: Character[] = [
       idle: '/characters/zundamon.png?v=3',
       speaking: '/characters/zundamon_talking.png?v=3',
       blinking: '/characters/zundamon_blinking.png?v=3',
+      lipFlap: true,
       expressions: {
         smile: '/characters/zundamon_smile.png?v=3',
         shock: '/characters/zundamon_shock.png?v=3',

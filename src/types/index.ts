@@ -178,6 +178,8 @@ export interface CharacterAvatar {
   speaking?: string;
   blinking?: string;
   expressions?: Record<string, string>; // e.g. smile, shock, trouble, angry
+  /** When true, flap between idle and speaking mouth while talking. Keep false for pose-based tachie. */
+  lipFlap?: boolean;
 }
 
 export interface Character {

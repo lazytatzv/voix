@@ -779,12 +779,17 @@ function resolveCharacterSprites(
     const blinkCycle = (time + seed) % 3.8;
     const isBlinking = !isSpeaking && blinkCycle < 0.16;
 
+    const allowLipFlap = Boolean(
+      char.avatar.lipFlap ??
+        (char.id === 'zundamon' || char.id === 'reimu' || char.id === 'marisa')
+    );
+
     let activeImg: HTMLImageElement | null = null;
     if (isSpeaking) {
       if (expression !== 'default' && exprImg) {
         activeImg = exprImg;
       } else if (speakingImg) {
-        if (isPlaying) {
+        if (isPlaying && allowLipFlap) {
           const isMouthOpen = isMouthOpenAt(charVoice, time - charVoice.startTime);
           activeImg = isMouthOpen ? speakingImg : idleImg || speakingImg;
         } else {
@@ -822,15 +827,15 @@ function computeCharacterLayout(
     const progress = time - charVoice.startTime;
     const anim = charVoice.anim || 'bounce';
     if (anim === 'bounce' && progress < 0.26) {
-      animOffsetY = -Math.sin((progress / 0.26) * Math.PI) * 24;
+      animOffsetY = -Math.sin((progress / 0.26) * Math.PI) * 12;
     } else if ((anim === 'pop' || anim === 'punch' || anim === 'zoom') && progress < 0.24) {
       animScale = 1 + Math.sin((progress / 0.24) * Math.PI) * 0.12;
     } else if ((anim === 'shake' || anim === 'screen-shake' || anim === 'impact') && progress < 0.35) {
       animOffsetX = Math.sin(progress * 50) * 10 * (1 - progress / 0.35);
     } else if (anim === 'flash' && progress < 0.25) {
-      animOffsetY = -Math.sin((progress / 0.25) * Math.PI) * 18;
+      animOffsetY = -Math.sin((progress / 0.25) * Math.PI) * 12;
     } else if (anim === 'nod' && progress < 0.24) {
-      animOffsetY = Math.sin((progress / 0.24) * Math.PI) * 16;
+      animOffsetY = Math.sin((progress / 0.24) * Math.PI) * 12;
     } else if (anim === 'slide' && progress < 0.3) {
       animOffsetX = -(1 - progress / 0.3) * 60;
     } else if (anim === 'fade' && progress < 0.3) {
@@ -935,7 +940,10 @@ function drawCharacters(
     const { activeImg, isSpeaking } = sprite;
 
     ctx.save();
-    ctx.filter = isSpeaking ? 'none' : 'brightness(0.88)';
+    // Only dim non-speaking characters when multiple characters are present to indicate who is speaking.
+    // Solo characters are kept at full brightness so they do not flicker/flash between sentences.
+    const shouldDim = sprites.length > 1 && !isSpeaking;
+    ctx.filter = shouldDim ? 'brightness(0.88)' : 'none';
     ctx.globalAlpha = layout.alpha;
 
     const activeW = activeImg.naturalWidth;

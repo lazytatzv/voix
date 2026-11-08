@@ -284,6 +284,7 @@ export function createCharacterFromSprites(params: {
     avatar: {
       idle,
       speaking,
+      lipFlap: false,
       expressions,
     },
     subtitleStyle: {

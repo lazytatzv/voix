@@ -1281,6 +1281,27 @@ export const CharacterModal: React.FC<CharacterModalProps> = ({
                         </button>
                       )}
                     </div>
+                    <div className="pt-2.5 border-t border-[#222426]">
+                      <label className="flex items-center gap-2 text-xs text-[#c4c7c5] cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={char.avatar.lipFlap === true}
+                          onChange={(e) =>
+                            onUpdateCharacter(char.id, {
+                              avatar: {
+                                ...char.avatar,
+                                lipFlap: e.target.checked,
+                              },
+                            })
+                          }
+                          className="rounded border-[#3e4249] bg-[#1e2024] text-[#8ab4f8] focus:ring-0 cursor-pointer"
+                        />
+                        <span>Lip flap (mouth open/close animation)</span>
+                      </label>
+                      <p className="text-[10px] text-[#6f7276] mt-0.5 pl-5">
+                        Only enable if speaking avatar is an open-mouth frame of the same pose (keep off for pose-based tachie).
+                      </p>
+                    </div>
                   </div>
                 </div>
 
