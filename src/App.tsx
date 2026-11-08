@@ -23,14 +23,26 @@ import { JumpCutModal } from './components/JumpCutModal';
 import { GitHistoryModal } from './components/GitHistoryModal';
 import { CodeGeneratorModal } from './components/CodeGeneratorModal';
 import {
+  VideoChangeModal,
+  VideoChangeAction,
+  CompanionSrtInfo,
+} from './components/VideoChangeModal';
+import {
   startWatchingFile,
   stopWatchingFile,
   evaluateJavaScriptScript,
 } from './services/codeGenService';
 import { parseScriptWithConfig } from './utils/scriptParser';
 import { addSnapshotKeyframe } from './render/keyframes';
-import { parseSrt } from './utils/srt';
-import { nudgeTimelineItems, rippleDeleteTimelineItems, respaceVoiceItems } from './utils/timelineEdit';
+import { parseSrt, SrtCue } from './utils/srt';
+import {
+  nudgeTimelineItems,
+  rippleDeleteTimelineItems,
+  respaceVoiceItems,
+  filterSubtitlesAndDialogue,
+  countSubtitlesAndDialogue,
+  companionSrtPathForVideo,
+} from './utils/timelineEdit';
 import {
   AudioItem,
   Character,
@@ -286,6 +298,14 @@ export function App() {
   const [isJumpCutOpen, setIsJumpCutOpen] = useState(false);
   const [isGitModalOpen, setIsGitModalOpen] = useState(false);
   const [isCodeGenOpen, setIsCodeGenOpen] = useState(false);
+  const [isVideoChangeModalOpen, setIsVideoChangeModalOpen] = useState(false);
+  const [pendingVideoChange, setPendingVideoChange] = useState<{
+    path: string;
+    companionSrt: CompanionSrtInfo | null;
+    voiceCount: number;
+    textCount: number;
+    totalItemsCount: number;
+  } | null>(null);
   const [isWatchingCode, setIsWatchingCode] = useState(false);
   const [activeWatchPath, setActiveWatchPath] = useState<string | null>(null);
   const unlistenWatcherRef = useRef<(() => void) | null>(null);
@@ -1166,68 +1186,197 @@ export function App() {
   /* Video                                                               */
   /* ------------------------------------------------------------------ */
 
-  const applyVideoPath = useCallback(
-    (path: string | null) => {
-      syncVideoSource(path);
-      commitProject(
-        (previousProject) => ({
+  const applyVideoPathWithAction = useCallback(
+    (path: string, action: VideoChangeAction, cues?: SrtCue[]) => {
+      syncVideoSource(path, true);
+      commitProject((previousProject) => {
+        let nextItems = previousProject.items;
+        if (action === 'clear_subtitles') {
+          nextItems = filterSubtitlesAndDialogue(previousProject.items);
+        } else if (action === 'clear_all') {
+          nextItems = [];
+        } else if (action === 'import_srt' && cues && cues.length > 0) {
+          const withoutSubtitles = filterSubtitlesAndDialogue(previousProject.items);
+          const importedItems: TextItem[] = cues.map((cue) => ({
+            id: newId('text'),
+            type: 'text',
+            layer: 5,
+            startTime: Number(cue.start.toFixed(2)),
+            duration: Math.max(0.1, Number((cue.end - cue.start).toFixed(2))),
+            name: `Subtitle: ${cue.text.split('\n')[0].slice(0, 28)}`,
+            text: cue.text,
+            style: { ...DEFAULT_SUBTITLE_STYLE },
+            xPercent: 50,
+            yPercent: 88,
+            widthPercent: 90,
+            align: 'center',
+            rotation: 0,
+            opacity: 1,
+          }));
+          nextItems = [...withoutSubtitles, ...importedItems];
+        }
+
+        const nextTimeline = {
+          ...previousProject.timeline,
+          videoPath: path,
+        };
+
+        return {
           ...previousProject,
-          timeline: { ...previousProject.timeline, videoPath: path || undefined },
-        }),
-        false
-      );
-      if (path) {
-        const name = path.split('/').pop() || path;
+          timeline: nextTimeline,
+          items: nextItems,
+        };
+      });
+
+      if (action !== 'keep') {
+        setSelectedItemId(null);
+        setSelectedItemIds([]);
+        setInspectedItemId(null);
+        setCurrentTime(0);
+        currentTimeRef.current = 0;
+      }
+
+      const name = path.split(/[\\/]/).pop() || path;
+      if (action === 'clear_subtitles') {
+        setToast(`Video loaded: ${name} (cleared previous subtitles & dialogue)`);
+      } else if (action === 'import_srt') {
+        setToast(`Video loaded: ${name} (imported ${cues?.length || 0} subtitles)`);
+      } else if (action === 'clear_all') {
+        setToast(`Video loaded: ${name} (cleared timeline)`);
+      } else {
         setToast(`Video loaded: ${name}`);
       }
     },
     [commitProject, syncVideoSource]
   );
 
-  const handleVideoSelect = useCallback(
+  const requestVideoPathChange = useCallback(
     async (fileOrPath: File | string) => {
+      let path: string | null = null;
       if (typeof fileOrPath === 'string') {
-        applyVideoPath(fileOrPath);
-        return;
-      }
-      const path = (fileOrPath as unknown as { path?: string }).path;
-      if (path && typeof path === 'string') {
-        applyVideoPath(path);
-        return;
+        path = fileOrPath;
+      } else {
+        const p = (fileOrPath as unknown as { path?: string }).path;
+        if (p && typeof p === 'string') {
+          path = p;
+        }
       }
 
-      // WebKitGTK cannot stream blob URLs for video. If running in Tauri,
-      // prompt with native file picker to get a real filesystem path.
-      if (isTauriRuntime()) {
-        try {
-          const picked = await openDialog({
-            title: 'Select background video',
-            multiple: false,
-            filters: [{ name: 'Video Files', extensions: VIDEO_EXTENSIONS }],
-          });
-          if (picked && typeof picked === 'string') {
-            applyVideoPath(picked);
+      if (!path) {
+        if (isTauriRuntime()) {
+          try {
+            const picked = await openDialog({
+              title: 'Select background video',
+              multiple: false,
+              filters: [{ name: 'Video Files', extensions: VIDEO_EXTENSIONS }],
+            });
+            if (picked && typeof picked === 'string') {
+              path = picked;
+            } else {
+              return;
+            }
+          } catch (err) {
+            console.warn('[App] native video pick failed:', err);
             return;
           }
-        } catch (err) {
-          console.warn('[App] native video pick failed:', err);
+        } else {
+          // Browser fallback (only works for small clips in pure browser mode)
+          const url = URL.createObjectURL(fileOrPath as File);
+          setRawVideoPath(null);
+          rawVideoPathRef.current = null;
+          setVideoSrc((previous) => {
+            if (previous?.startsWith('blob:')) {
+              try {
+                URL.revokeObjectURL(previous);
+              } catch {}
+            }
+            return url;
+          });
+          return;
         }
       }
 
-      // Browser fallback (only works for small clips in pure browser mode)
-      const url = URL.createObjectURL(fileOrPath);
-      setRawVideoPath(null);
-      rawVideoPathRef.current = null;
-      setVideoSrc((previous) => {
-        if (previous?.startsWith('blob:')) {
-          try {
-            URL.revokeObjectURL(previous);
-          } catch {}
+      if (!path) return;
+
+      const current = projectRef.current;
+      const isSameVideo = (current.timeline.videoPath || '') === path;
+      if (isSameVideo) {
+        syncVideoSource(path, true);
+        return;
+      }
+
+      const { voiceCount, textCount, totalCount } = countSubtitlesAndDialogue(current.items);
+      if (totalCount === 0) {
+        // No dialogue or subtitles exist, apply directly
+        applyVideoPathWithAction(path, 'keep');
+        return;
+      }
+
+      // Check stored preference
+      const behavior = (localStorage.getItem('voix_video_change_behavior') as VideoChangeAction) || 'ask';
+      if (behavior === 'clear_subtitles' || behavior === 'keep' || behavior === 'clear_all') {
+        applyVideoPathWithAction(path, behavior);
+        return;
+      }
+
+      // 'ask' behavior: probe for companion .srt
+      let companionSrt: CompanionSrtInfo | null = null;
+      if (isTauriRuntime() && path) {
+        try {
+          const srtPath = companionSrtPathForVideo(path);
+          if (srtPath) {
+            const content = await invoke<string>('read_text_file', { path: srtPath });
+            if (content && content.trim().length > 0) {
+              const cues = parseSrt(content);
+              if (cues.length > 0) {
+                companionSrt = {
+                  path: srtPath,
+                  fileName: srtPath.split(/[\\/]/).pop() || 'subtitles.srt',
+                  cues,
+                };
+              }
+            }
+          }
+        } catch {
+          // companion srt not found or unreadable, ignore
         }
-        return url;
+      }
+
+      setPendingVideoChange({
+        path,
+        companionSrt,
+        voiceCount,
+        textCount,
+        totalItemsCount: current.items.length,
       });
+      setIsVideoChangeModalOpen(true);
     },
-    [applyVideoPath]
+    [applyVideoPathWithAction, syncVideoSource]
+  );
+
+  const applyVideoPath = useCallback(
+    (path: string | null) => {
+      if (path) {
+        void requestVideoPathChange(path);
+      } else {
+        syncVideoSource(null);
+        commitProject(
+          (previousProject) => ({
+            ...previousProject,
+            timeline: { ...previousProject.timeline, videoPath: undefined },
+          }),
+          false
+        );
+      }
+    },
+    [commitProject, requestVideoPathChange, syncVideoSource]
+  );
+
+  const handleVideoSelect = useCallback(
+    async (fileOrPath: File | string) => {
+      await requestVideoPathChange(fileOrPath);
+    },
+    [requestVideoPathChange]
   );
 
   const handlePickVideoNative = useCallback(async () => {
@@ -1238,12 +1387,12 @@ export function App() {
         filters: [{ name: 'Video Files', extensions: VIDEO_EXTENSIONS }],
       });
       if (picked && typeof picked === 'string') {
-        applyVideoPath(picked);
+        await requestVideoPathChange(picked);
       }
     } catch (err) {
       console.warn('[App] native video pick failed:', err);
     }
-  }, [applyVideoPath]);
+  }, [requestVideoPathChange]);
 
   const handleVideoMetadataLoaded = useCallback(
     (loadedDuration: number, width?: number, height?: number) => {
@@ -1260,11 +1409,16 @@ export function App() {
       commitProject((prev) => {
         let changed = false;
         const nextTimeline = { ...prev.timeline };
-        if (usableDuration > 0.01 && nextTimeline.duration < usableDuration - 0.05) {
-          nextTimeline.duration = Number(
-            Math.max(nextTimeline.duration || 0, usableDuration).toFixed(2)
+        if (usableDuration > 0.01) {
+          const maxEnd = prev.items.reduce(
+            (m, it) => Math.max(m, it.startTime + (it.duration || 0)),
+            0
           );
-          changed = true;
+          const targetDuration = Number(Math.max(usableDuration, maxEnd, 5).toFixed(2));
+          if (Math.abs(nextTimeline.duration - targetDuration) > 0.05) {
+            nextTimeline.duration = targetDuration;
+            changed = true;
+          }
         }
         const usableWidth = width && width >= 320 ? width : probed?.width;
         const usableHeight = height && height >= 200 ? height : probed?.height;
@@ -1716,6 +1870,42 @@ export function App() {
     } else {
       setToast(`Voice line timings are already well-spaced (≥${DEFAULT_LINE_GAP}s)`);
     }
+  }, [commitProject]);
+
+  const handleClearSubtitles = useCallback(() => {
+    const current = projectRef.current;
+    const { totalCount } = countSubtitlesAndDialogue(current.items);
+    if (totalCount === 0) {
+      setToast('No subtitles or dialogue items to clear.');
+      return;
+    }
+    if (
+      !window.confirm(
+        `Are you sure you want to clear all ${totalCount} subtitles and dialogue items from the timeline? (Can be undone with Ctrl+Z)`
+      )
+    ) {
+      return;
+    }
+    commitProject((prev) => {
+      const remainingItems = filterSubtitlesAndDialogue(prev.items);
+      const nextTimeline = { ...prev.timeline };
+      if (videoDurationRef.current > 0.01) {
+        const maxEnd = remainingItems.reduce(
+          (m, it) => Math.max(m, it.startTime + (it.duration || 0)),
+          0
+        );
+        nextTimeline.duration = Number(Math.max(videoDurationRef.current, maxEnd, 5).toFixed(2));
+      }
+      return {
+        ...prev,
+        timeline: nextTimeline,
+        items: remainingItems,
+      };
+    });
+    setSelectedItemId(null);
+    setSelectedItemIds([]);
+    setInspectedItemId(null);
+    setToast(`Cleared ${totalCount} subtitle and dialogue items (Ctrl+Z to Undo)`);
   }, [commitProject]);
 
   const handleDuplicateItems = useCallback(
@@ -2929,6 +3119,7 @@ export function App() {
         onImportSubtitles={() => void handleImportSubtitles()}
         onImportYmmp={() => void handleImportYmmp()}
         onExportSubtitles={() => void handleExportSubtitles()}
+        onClearSubtitles={handleClearSubtitles}
         onOpenCharacterSettings={() => setIsCharModalOpen(true)}
         onOpenSettings={() => setIsSettingsModalOpen(true)}
         onOpenProjectSettings={() => setIsProjectSettingsOpen(true)}
@@ -3132,6 +3323,7 @@ export function App() {
             onOpenJumpCut={() => setIsJumpCutOpen(true)}
             onOpenSePalette={() => setIsSePaletteOpen(true)}
             onRespaceVoices={handleRespaceVoices}
+            onClearSubtitles={handleClearSubtitles}
           />
         </div>
       ) : (
@@ -3282,6 +3474,37 @@ export function App() {
         activeWatchPath={activeWatchPath}
         onToggleWatcher={handleToggleWatcher}
         onShowToast={(msg) => setToast(msg)}
+      />
+
+      <VideoChangeModal
+        isOpen={isVideoChangeModalOpen}
+        onClose={() => {
+          setIsVideoChangeModalOpen(false);
+          setPendingVideoChange(null);
+        }}
+        newVideoPath={pendingVideoChange?.path || ''}
+        currentVideoPath={project.timeline.videoPath || null}
+        voiceCount={pendingVideoChange?.voiceCount || 0}
+        textCount={pendingVideoChange?.textCount || 0}
+        totalItemsCount={pendingVideoChange?.totalItemsCount || 0}
+        companionSrt={pendingVideoChange?.companionSrt || null}
+        onConfirm={(action, remember) => {
+          if (remember) {
+            localStorage.setItem(
+              'voix_video_change_behavior',
+              action === 'import_srt' ? 'clear_subtitles' : action
+            );
+          }
+          if (pendingVideoChange) {
+            applyVideoPathWithAction(
+              pendingVideoChange.path,
+              action,
+              pendingVideoChange.companionSrt?.cues
+            );
+          }
+          setIsVideoChangeModalOpen(false);
+          setPendingVideoChange(null);
+        }}
       />
 
       {toast && (

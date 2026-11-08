@@ -22,6 +22,7 @@ import {
   RefreshCw,
   FolderGit2,
   Code2,
+  Trash2,
 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 
@@ -39,6 +40,7 @@ interface HeaderProps {
   onImportSubtitles: () => void;
   onImportYmmp?: () => void;
   onExportSubtitles?: () => void;
+  onClearSubtitles?: () => void;
   onOpenAssets?: () => void;
   onOpenCharacterSettings: () => void;
   onOpenSettings?: () => void;
@@ -74,6 +76,7 @@ export const Header: React.FC<HeaderProps> = ({
   onImportSubtitles,
   onImportYmmp,
   onExportSubtitles,
+  onClearSubtitles,
   onOpenAssets,
   onOpenCharacterSettings,
   onOpenSettings,
@@ -440,6 +443,18 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         )}
 
+        {onClearSubtitles && (
+          <button
+            type="button"
+            onClick={onClearSubtitles}
+            className="px-2.5 py-1 bg-[#151619] hover:bg-[#281a1d] text-[#c4c7c5] hover:text-rose-300 text-xs font-mono rounded-sm border border-[#282a2e] hover:border-rose-900/50 flex items-center gap-1.5 transition active:scale-95"
+            title="Clear all subtitles and dialogue from the timeline"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+            <span className="hidden xl:inline">Clear Subtitles</span>
+          </button>
+        )}
+
         <button
           type="button"
           onClick={onOpenAiVideoGenerator}
@@ -508,6 +523,26 @@ export const Header: React.FC<HeaderProps> = ({
                     </span>
                     <span className="block mt-0.5 pl-[20px] text-[10px] font-mono text-[#6f7276]">
                       JavaScript & TypeScript live sync
+                    </span>
+                  </button>
+                )}
+                {onClearSubtitles && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setIsMoreOpen(false);
+                      onClearSubtitles();
+                    }}
+                    className="w-full text-left px-3 py-2 hover:bg-[#281a1d] transition border-b border-[#242629] group"
+                    title="Clear subtitles and voice dialogue items from the timeline"
+                  >
+                    <span className="flex items-center gap-2 text-[11px] text-rose-300">
+                      <Trash2 className="w-3 h-3 text-rose-400 flex-shrink-0" />
+                      Clear Subtitles & Dialogue
+                    </span>
+                    <span className="block mt-0.5 pl-[20px] text-[10px] font-mono text-[#8e918f]">
+                      Remove voice lines & subtitle cues
                     </span>
                   </button>
                 )}

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { nudgeTimelineItems, rippleDeleteTimelineItems, respaceVoiceItems } from '../timelineEdit';
+import {
+  nudgeTimelineItems,
+  rippleDeleteTimelineItems,
+  respaceVoiceItems,
+  filterSubtitlesAndDialogue,
+  countSubtitlesAndDialogue,
+  companionSrtPathForVideo,
+  calculateSyncedDuration,
+} from '../timelineEdit';
 import { TextItem, VoiceItem } from '../../types';
 
 function voice(id: string, startTime: number, duration: number): VoiceItem {
@@ -121,5 +129,91 @@ describe('respaceVoiceItems', () => {
     const { items: result, shiftedCount } = respaceVoiceItems(items, 0.5);
     expect(shiftedCount).toBe(0);
     expect(result).toBe(items);
+  });
+});
+
+describe('filterSubtitlesAndDialogue', () => {
+  it('removes voice items and text items but keeps other timeline items', () => {
+    const v = voice('v1', 0, 1.0);
+    const t = item('t1', 1.0, 2.0);
+    const audio = {
+      id: 'bgm1',
+      type: 'audio' as const,
+      layer: 1,
+      startTime: 0,
+      duration: 10,
+      name: 'bgm',
+      src: 'music.mp3',
+      volume: 1,
+    };
+    const img = {
+      id: 'img1',
+      type: 'image' as const,
+      layer: 3,
+      startTime: 0,
+      duration: 5,
+      name: 'logo',
+      src: 'logo.png',
+      x: 100,
+      y: 100,
+      width: 200,
+      height: 200,
+      opacity: 1,
+    };
+
+    const items = [v, audio, t, img];
+    const filtered = filterSubtitlesAndDialogue(items);
+    expect(filtered).toEqual([audio, img]);
+  });
+});
+
+describe('countSubtitlesAndDialogue', () => {
+  it('counts voice items and text items accurately', () => {
+    const items = [
+      voice('v1', 0, 1),
+      voice('v2', 2, 1),
+      item('t1', 4, 1),
+      {
+        id: 'bgm1',
+        type: 'audio' as const,
+        layer: 1,
+        startTime: 0,
+        duration: 10,
+        name: 'bgm',
+        src: 'music.mp3',
+        volume: 1,
+      },
+    ];
+    const counts = countSubtitlesAndDialogue(items);
+    expect(counts).toEqual({
+      voiceCount: 2,
+      textCount: 1,
+      totalCount: 3,
+    });
+  });
+});
+
+describe('companionSrtPathForVideo', () => {
+  it('converts common video paths to companion .srt path', () => {
+    expect(companionSrtPathForVideo('/home/user/video.mp4')).toBe('/home/user/video.srt');
+    expect(companionSrtPathForVideo('C:\\videos\\sample.clip.mkv')).toBe('C:\\videos\\sample.clip.srt');
+    expect(companionSrtPathForVideo('justvideo.webm')).toBe('justvideo.srt');
+    expect(companionSrtPathForVideo('')).toBe('');
+  });
+});
+
+describe('calculateSyncedDuration', () => {
+  it('matches video duration when items fit within it', () => {
+    const items = [voice('v1', 0, 2)];
+    expect(calculateSyncedDuration(12.5, items)).toBe(12.5);
+  });
+
+  it('extends to accommodate items if they exceed video duration', () => {
+    const items = [voice('v1', 10, 5)]; // ends at 15
+    expect(calculateSyncedDuration(10, items)).toBe(15);
+  });
+
+  it('respects minimum duration when video duration is short or zero', () => {
+    expect(calculateSyncedDuration(0, [], 5)).toBe(5);
   });
 });

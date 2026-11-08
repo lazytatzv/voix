@@ -65,6 +65,7 @@ interface TimelineProps {
   onOpenJumpCut?: () => void;
   onOpenSePalette?: () => void;
   onRespaceVoices?: () => void;
+  onClearSubtitles?: () => void;
   onToggleCollapse?: () => void;
 }
 
@@ -190,6 +191,7 @@ export const Timeline: React.FC<TimelineProps> = ({
   onOpenJumpCut,
   onOpenSePalette,
   onRespaceVoices,
+  onClearSubtitles,
   onToggleCollapse,
 }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -729,6 +731,17 @@ export const Timeline: React.FC<TimelineProps> = ({
             >
               <Clock className="w-3 h-3 text-emerald-300" />
               Spacing (0.5s)
+            </button>
+          )}
+          {onClearSubtitles && (
+            <button
+              type="button"
+              onClick={onClearSubtitles}
+              className="px-2 py-0.5 rounded text-[10px] bg-[#29171b] hover:bg-[#381c22] text-rose-300 hover:text-rose-200 border border-[#4d242c] flex items-center gap-1 font-semibold transition"
+              title="Clear all voice dialogue and subtitle items from timeline"
+            >
+              <Trash2 className="w-3 h-3 text-rose-400" />
+              Clear Subtitles
             </button>
           )}
         </div>

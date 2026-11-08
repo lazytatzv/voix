@@ -151,3 +151,66 @@ export function respaceVoiceItems(
 
   return { items: updatedItems, shiftedCount };
 }
+
+/**
+ * Removes all voice lines and text subtitles from the timeline, preserving
+ * background audio, images, and shapes.
+ */
+export function filterSubtitlesAndDialogue(items: TimelineItem[]): TimelineItem[] {
+  return items.filter((it) => it.type !== 'voice' && it.type !== 'text');
+}
+
+/**
+ * Counts existing voice dialogue lines and text subtitle items.
+ */
+export function countSubtitlesAndDialogue(items: TimelineItem[]): {
+  voiceCount: number;
+  textCount: number;
+  totalCount: number;
+} {
+  let voiceCount = 0;
+  let textCount = 0;
+  for (const item of items) {
+    if (item.type === 'voice') voiceCount++;
+    else if (item.type === 'text') textCount++;
+  }
+  return {
+    voiceCount,
+    textCount,
+    totalCount: voiceCount + textCount,
+  };
+}
+
+/**
+ * Derives the companion `.srt` subtitle file path next to a video file.
+ * E.g., `/videos/demo.mp4` -> `/videos/demo.srt`.
+ */
+export function companionSrtPathForVideo(videoPath: string): string {
+  if (!videoPath) return '';
+  const lastDot = videoPath.lastIndexOf('.');
+  const lastSlash = Math.max(videoPath.lastIndexOf('/'), videoPath.lastIndexOf('\\'));
+  if (lastDot > lastSlash) {
+    return videoPath.slice(0, lastDot) + '.srt';
+  }
+  return videoPath + '.srt';
+}
+
+/**
+ * Calculates the appropriate timeline duration taking into account the video duration
+ * and the latest item end on the timeline, ensuring the duration never cuts off content
+ * or leaves excessive dead space when video changes.
+ */
+export function calculateSyncedDuration(
+  videoDuration: number,
+  items: TimelineItem[],
+  minDuration = 5
+): number {
+  const maxItemEnd = items.reduce(
+    (max, it) => Math.max(max, it.startTime + (it.duration || 0)),
+    0
+  );
+  const validVideoDuration =
+    Number.isFinite(videoDuration) && videoDuration > 0.01 ? videoDuration : 0;
+  return Number(Math.max(validVideoDuration, maxItemEnd, minDuration).toFixed(2));
+}
+

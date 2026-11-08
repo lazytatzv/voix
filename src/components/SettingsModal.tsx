@@ -116,6 +116,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [newTtsName, setNewTtsName] = useState('');
   const [newTtsEndpoint, setNewTtsEndpoint] = useState('http://localhost:50031');
 
+  // Video change behavior
+  const [videoChangeBehavior, setVideoChangeBehavior] = useState<
+    'ask' | 'clear_subtitles' | 'keep' | 'clear_all'
+  >(() => {
+    return (
+      (localStorage.getItem('voix_video_change_behavior') as
+        | 'ask'
+        | 'clear_subtitles'
+        | 'keep'
+        | 'clear_all') || 'ask'
+    );
+  });
+
   // ロード処理
   useEffect(() => {
     if (isOpen) {
@@ -244,6 +257,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setStatusMessage('Saving configuration to ~/.config/voix/config.yaml...');
     try {
       await saveSettingsToConfig(settings);
+      localStorage.setItem('voix_video_change_behavior', videoChangeBehavior);
       onSettingsSaved?.(settings);
       const needsRestart = runtimeSignature(settings) !== loadedRuntimeSignature;
       setLoadedRuntimeSignature(runtimeSignature(settings));
@@ -949,6 +963,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </button>
                         ))}
                       </div>
+                    </div>
+                  </div>
+
+                  <div className="border-t border-[#242628] pt-4">
+                    <label className="text-xs font-medium text-[#c4c7c5] block mb-1.5">
+                      When Background Video Changes
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        {
+                          id: 'ask' as const,
+                          label: 'Ask Each Time (Recommended)',
+                          desc: 'Prompt to clear, keep, or import companion .srt',
+                        },
+                        {
+                          id: 'clear_subtitles' as const,
+                          label: 'Always Clear Subtitles',
+                          desc: 'Automatically remove previous subtitles & dialogue',
+                        },
+                        {
+                          id: 'keep' as const,
+                          label: 'Always Keep Subtitles',
+                          desc: 'Preserve existing dialogue timing and items',
+                        },
+                        {
+                          id: 'clear_all' as const,
+                          label: 'Always Clear Entire Timeline',
+                          desc: 'Reset all tracks on new video load',
+                        },
+                      ].map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => {
+                            setVideoChangeBehavior(opt.id);
+                            localStorage.setItem('voix_video_change_behavior', opt.id);
+                          }}
+                          className={`p-2.5 rounded-xl text-left border transition ${
+                            videoChangeBehavior === opt.id
+                              ? 'bg-[#303236] text-white border-[#5f6368]'
+                              : 'bg-[#18191b] text-[#8e918f] border-[#2e3135] hover:text-white'
+                          }`}
+                        >
+                          <div className="text-xs font-semibold text-[#e3e3e3]">{opt.label}</div>
+                          <div className="text-[10px] text-[#6f7276] mt-0.5">{opt.desc}</div>
+                        </button>
+                      ))}
                     </div>
                   </div>
 
