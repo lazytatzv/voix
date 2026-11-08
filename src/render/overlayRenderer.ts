@@ -937,12 +937,29 @@ function drawCharacters(
     ctx.save();
     ctx.filter = isSpeaking ? 'none' : 'brightness(0.88)';
     ctx.globalAlpha = layout.alpha;
+
+    const activeW = activeImg.naturalWidth;
+    const activeH = activeImg.naturalHeight;
+    const activeRatio = activeW && activeH ? activeW / activeH : layout.imageWidth / Math.max(1, layout.imageHeight);
+    const baseRatio = layout.imageWidth / Math.max(1, layout.imageHeight);
+
+    let drawWidth = layout.imageWidth;
+    let drawHeight = layout.imageHeight;
+    let drawX = layout.imageX;
+    const drawY = layout.imageY;
+
+    // Preserve natural aspect ratio if active image dimensions differ from base layout
+    if (Math.abs(activeRatio - baseRatio) > 0.01) {
+      drawWidth = drawHeight * activeRatio;
+      drawX = layout.imageX + (layout.imageWidth - drawWidth) / 2;
+    }
+
     if (layout.flipped) {
-      ctx.translate(layout.imageX + layout.imageWidth, 0);
+      ctx.translate(drawX + drawWidth, 0);
       ctx.scale(-1, 1);
-      ctx.drawImage(activeImg, 0, layout.imageY, layout.imageWidth, layout.imageHeight);
+      ctx.drawImage(activeImg, 0, drawY, drawWidth, drawHeight);
     } else {
-      ctx.drawImage(activeImg, layout.imageX, layout.imageY, layout.imageWidth, layout.imageHeight);
+      ctx.drawImage(activeImg, drawX, drawY, drawWidth, drawHeight);
     }
     ctx.restore();
   });
