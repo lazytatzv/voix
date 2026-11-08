@@ -218,10 +218,10 @@ export const Timeline: React.FC<TimelineProps> = ({
   }, []);
 
   const totalDuration = Math.max(duration, 10);
-  // Cap max timeline width to 32,000px to prevent Cairo 16-bit integer overflow (32,767px limit)
-  // which causes WebKitGTK ThreadedCompositor to allocate 80GB+ virtual memory and lock up.
-  const MAX_TIMELINE_WIDTH = 32000;
-  const maxZoom = Math.min(8, Math.max(0.01, (MAX_TIMELINE_WIDTH - 100) / (totalDuration * 50)));
+  // Support zoom up to 400% (200px/s) even on 90+ min recordings for precise cut and audio editing.
+  // Virtualized ruler ticks, dialogue items, and video track ensure DOM node counts and paint bounds remain small.
+  const MAX_TIMELINE_WIDTH = 2000000;
+  const maxZoom = 4;
   const minZoom = Math.max(0.0001, (viewportWidth - HEADER_WIDTH - 40) / (totalDuration * 50 * 5));
   const pxPerSecond = 50 * zoom;
   const timelineWidth = Math.min(
@@ -909,30 +909,37 @@ export const Timeline: React.FC<TimelineProps> = ({
                 style={{ height: row.height }}
                 onMouseDown={beginScrub}
               >
-                {row.kind === 'video' && (
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onPickVideo?.();
-                    }}
-                    className={`absolute top-1 bottom-1 rounded-[2px] flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap cursor-pointer transition-colors ${
-                      hasVideo ? 'hover:brightness-125' : 'hover:bg-[#26282c]'
-                    }`}
-                    style={{
-                      left: 0,
-                      width: `${Math.min(totalDuration, totalDuration) * pxPerSecond}px`,
-                      backgroundColor: '#1b1d20',
-                      color: hasVideo ? '#e3e3e3' : '#8e918f',
-                      border: '1px solid #33363a',
-                    }}
-                    title={hasVideo ? `${videoName || 'Video'} (Click to change video)` : 'Click to select video file'}
-                  >
-                    <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#8e918f]" />
-                    <span className="text-[11px]">
-                      {hasVideo ? videoName || 'Background video' : 'Click to add video'}
-                    </span>
-                  </div>
-                )}
+                {row.kind === 'video' && (() => {
+                  const barStart = Math.max(0, minVisibleTime - 2);
+                  const barEnd = Math.min(totalDuration, maxVisibleTime + 2);
+                  if (barStart >= barEnd && totalDuration > 0) return null;
+                  const barLeft = barStart * pxPerSecond;
+                  const barWidth = Math.max(0, (barEnd - barStart) * pxPerSecond);
+                  return (
+                    <div
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onPickVideo?.();
+                      }}
+                      className={`absolute top-1 bottom-1 rounded-[2px] flex items-center px-2 text-xs font-mono overflow-hidden whitespace-nowrap cursor-pointer transition-colors ${
+                        hasVideo ? 'hover:brightness-125' : 'hover:bg-[#26282c]'
+                      }`}
+                      style={{
+                        left: barLeft,
+                        width: `${barWidth}px`,
+                        backgroundColor: '#1b1d20',
+                        color: hasVideo ? '#e3e3e3' : '#8e918f',
+                        border: '1px solid #33363a',
+                      }}
+                      title={hasVideo ? `${videoName || 'Video'} (Click to change video)` : 'Click to select video file'}
+                    >
+                      <Film className="w-3 h-3 mr-1.5 flex-shrink-0 text-[#8e918f]" />
+                      <span className="text-[11px]">
+                        {hasVideo ? videoName || 'Background video' : 'Click to add video'}
+                      </span>
+                    </div>
+                  );
+                })()}
                 {visibleItemsForRow(row.kind)
                   .filter((item) => {
                     const itemEnd = item.startTime + item.duration;
