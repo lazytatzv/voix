@@ -175,6 +175,13 @@ function sanitizeCharacterList(list: Character[]): Character[] {
     seen.add(merged.id);
     result.push(merged);
   });
+  // Ensure default characters (Maker Girl, Tech Girl, etc.) are present
+  defaultCharacters.forEach((def) => {
+    if (!seen.has(def.id)) {
+      seen.add(def.id);
+      result.push(def);
+    }
+  });
   return result;
 }
 
@@ -218,6 +225,19 @@ function newId(prefix: string): string {
 export function App() {
   const [project, setProject] = useState<VoixProject>(loadInitialProject);
   const projectRef = useRef<VoixProject>(project);
+
+  // Ensure all default characters (Maker Girl, Tech Girl) are available in the active project state
+  useEffect(() => {
+    setProject((prev) => {
+      const existingIds = new Set(prev.characters.map((c) => c.id));
+      const missing = defaultCharacters.filter((d) => !existingIds.has(d.id));
+      if (missing.length === 0) return prev;
+      return {
+        ...prev,
+        characters: [...missing, ...prev.characters],
+      };
+    });
+  }, []);
 
   const [projectPath, setProjectPath] = useState<string | null>(null);
   const projectPathRef = useRef<string | null>(null);
